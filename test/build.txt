@@ -1,6 +1,6 @@
 1: mkdir build; cd build
 2: cmake ../
-    -DCMAKE_PREFIX_PATH="~/workstation/home/build/pytorch/build" \
+    -DCMAKE_PREFIX_PATH="/home/magi-00-wsl/workstation/home/build/pytorch/build" \
     -DCMAKE_BUILD_TYPE=Release \
     -GNinja
 3: ninja

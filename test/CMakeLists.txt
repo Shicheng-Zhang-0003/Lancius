@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 3.18)
 project (init_test)
 set (CMAKE_CXX_STANDARD 17)
-list (APPEND CMAKE_PREFIX_PATH "~/workstation/home/build/pytorch/build")
+list (APPEND CMAKE_PREFIX_PATH "home/magi-00-wsl/workstation/home/build/pytorch/build")
 find_package (Torch REQUIRED)
 add_executable (init_test_app main.cpp)
 target_link_libraries (init_test_app PRIVATE ${TORCH_LIBRARIES})

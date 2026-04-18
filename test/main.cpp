@@ -24,8 +24,8 @@ void tensor_function () {
     torch::Device device = torch::cuda::is_available () ? torch::kCUDA : torch::kCPU;
     torch::Tensor t = torch::rand ({3, 3}).to (device);
 } void define_neural_net_function () {
-    struct net : torch::nn::module {
-        torch::nn::linear fc1 {nullptr}, fc1 {nullptr};
+    struct Net : torch::nn::Module {
+        torch::nn::linear fc1 {nullptr}, fc2 {nullptr};
         net () {
             fc1 = register_module ("fc1", torch::nn::Linear (784, 128));
             fc2 = register_module ("fc2", torch::nn::Linear (128, 10));
@@ -34,21 +34,22 @@ void tensor_function () {
             x = fc2->forward (x);
             return torch::log_softmax (x, /*dim=*/1);
         }
-    }
+    };
 } void training_loop_function () {
-    auto net_n std::make_shared<net> ();
+    auto net_n = std::make_shared<net> ();
     torch::optim::SGD optimizer (net_n->parameters (), /*lr=*/0.01);
     for (int epoch = 0; epoch < 10; epoch++) {
         optimizer.zero_grad ();
         torch::Tensor input = torch::rand ({32, 784}); //Fake Buffer Input
         torch::Tensor target = torch::randint (0, 10, {32}); //Target amount of training and data processed with response
-        torch::Tensor output = net->forward (input); //Actual Output of training results
+        torch::Tensor output = net_n->forward (input); //Actual Output of training results
         torch::Tensor loss = torch::nll_loss (output, target); //Difference betweenm experimental and theoretical (loss in projected training)
         loss.backward ();
         optimizer.step ();
         std::cout << "Epoch: " << epoch << "Loss: " << loss.item<float> () << "\n";
     }
 } void save_and_load_function () {
+    auto net_n = std::make_shared<net> ();
     torch::save (net_n, "model_test.pt");
     auto net_n2 = std::make_shared<net> ();
     torch::load (net_n2, "model_test.pt");
@@ -59,6 +60,6 @@ void tensor_function () {
     inputs.push_back (torch::rand ({1, 3, 224, 224}).to (torch::kCUDA));
     torch::Tensor output = module.forward (inputs).toTensor ();
 } int main () {
-    main_algorithm ();
+    //call functions when required
     return 0;
 }
