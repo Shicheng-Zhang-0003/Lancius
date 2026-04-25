@@ -1,9 +1,12 @@
 cmake_minimum_required (VERSION 3.18)
 project (init_test)
 set (CMAKE_CXX_STANDARD 17)
-list (APPEND CMAKE_PREFIX_PATH "home/magi-00-wsl/workstation/home/build/pytorch/build")
+list (APPEND CMAKE_PREFIX_PATH "/home/magi-00-wsl/workstation/home/build/pytorch/install")
 find_package (Torch REQUIRED)
+set(CUPTI_LIBRARY "/usr/local/cuda/targets/x86_64-linux/lib/libcupti.so")
+
 add_executable (init_test_app main.cpp)
 target_link_libraries (init_test_app PRIVATE ${TORCH_LIBRARIES})
+target_link_libraries (init_test_app PRIVATE -Wl,--no-as-needed ${CUPTI_LIBRARY})
 target_compile_options (init_test_app PRIVATE ${TORCH_CXX_FLAGS})
 target_include_directories (init_test_app PRIVATE ${TORCH_INCLUDE_DIRS})

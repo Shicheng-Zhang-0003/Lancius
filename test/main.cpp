@@ -1,5 +1,21 @@
 #include <torch/torch.h>
+#include <torch/script.h>
 #include <iostream>
+#include <memory>
+#include <vector>
+
+struct Net : torch::nn::Module {
+    torch::nn::Linear fc1 {nullptr}, fc2 {nullptr};
+    Net () {
+        fc1 = register_module ("fc1", torch::nn::Linear (784, 128));
+        fc2 = register_module ("fc2", torch::nn::Linear (128, 10));
+    } torch::Tensor forward (torch::Tensor x) {
+        x = torch::relu (fc1->forward (x));
+        x = fc2->forward (x);
+        return torch::log_softmax (x, /*dim=*/1);
+    }
+};
+
 void tensor_function () {
     torch::Tensor a = torch::ones ({3, 4}); //3x4 Matrix of 1
     torch::Tensor b = torch::rand ({3, 4}); //3x4 Matrix of random values from [0, 1]
@@ -22,21 +38,12 @@ void tensor_function () {
     std::cout << x.grad (); //dx / dy standard derivatives, resulting in 6x = 12
 } void device_probe_function () {
     torch::Device device = torch::cuda::is_available () ? torch::kCUDA : torch::kCPU;
+    std::cout << "Using device: " << device << std::endl;
     torch::Tensor t = torch::rand ({3, 3}).to (device);
 } void define_neural_net_function () {
-    struct Net : torch::nn::Module {
-        torch::nn::linear fc1 {nullptr}, fc2 {nullptr};
-        net () {
-            fc1 = register_module ("fc1", torch::nn::Linear (784, 128));
-            fc2 = register_module ("fc2", torch::nn::Linear (128, 10));
-        } torch::Tensor forward (torch::Tensor x) {
-            x = torch::relu (fc1->forward (x));
-            x = fc2->forward (x);
-            return torch::log_softmax (x, /*dim=*/1);
-        }
-    };
+    // Net is now global
 } void training_loop_function () {
-    auto net_n = std::make_shared<net> ();
+    auto net_n = std::make_shared<Net> ();
     torch::optim::SGD optimizer (net_n->parameters (), /*lr=*/0.01);
     for (int epoch = 0; epoch < 10; epoch++) {
         optimizer.zero_grad ();
@@ -49,17 +56,30 @@ void tensor_function () {
         std::cout << "Epoch: " << epoch << "Loss: " << loss.item<float> () << "\n";
     }
 } void save_and_load_function () {
-    auto net_n = std::make_shared<net> ();
+    auto net_n = std::make_shared<Net> ();
     torch::save (net_n, "model_test.pt");
-    auto net_n2 = std::make_shared<net> ();
+    auto net_n2 = std::make_shared<Net> ();
     torch::load (net_n2, "model_test.pt");
 } void load_torch_predefined_model () {
-    torch::jit::script::Module module = torch::jit::load ("model_test_2.pt");
-    module.to (torch::kCUDA);
-    std::vector<torch::jit::IValue> inputs;
-    inputs.push_back (torch::rand ({1, 3, 224, 224}).to (torch::kCUDA));
-    torch::Tensor output = module.forward (inputs).toTensor ();
+    try {
+        torch::jit::Module module = torch::jit::load ("model_test_2.pt");
+        if (torch::cuda::is_available()) {
+            module.to (torch::kCUDA);
+        }
+        std::vector<torch::jit::IValue> inputs;
+        inputs.push_back (torch::rand ({1, 3, 224, 224}));
+        torch::Tensor output = module.forward (inputs).toTensor ();
+    } catch (const c10::Error& e) {
+        std::cerr << "Error loading model\n";
+    }
 } int main () {
-    //call functions when required
+    std::cout << "--- Device Probe ---" << std::endl;
+    device_probe_function();
+    std::cout << "\n--- Tensor Function ---" << std::endl;
+    tensor_function();
+    std::cout << "\n--- Autograd Function ---" << std::endl;
+    autograd_function();
+    std::cout << "\n--- Training Loop ---" << std::endl;
+    training_loop_function();
     return 0;
 }
