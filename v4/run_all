@@ -1,0 +1,7 @@
+./test_attention
+./test_compiler
+./test_frontier
+./test_grand_unified
+./test_scalar
+./test_symbolic
+./test_tensor
