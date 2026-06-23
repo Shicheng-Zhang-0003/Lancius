@@ -1,13 +1,3 @@
-#!/bin/bash
-
-# ==============================================================================
-#  README Generator for llm_maths V4
-#  Generates a modern, beautifully formatted Markdown file.
-# ==============================================================================
-
-echo "Generating modern README.md..."
-
-cat << 'EOF' > README.md
 # 🧠 llm_maths: A Bare-Metal Autograd & Transformer Engine in C
 
 **llm_maths** is a from-scratch, pure-C implementation of a reverse-mode automatic differentiation engine, tensor mathematics, and Transformer architecture components.
@@ -19,7 +9,7 @@ Think of it as a miniature, bare-metal PyTorch or JAX, written entirely in C wit
 ## 🤝 A Note on Human-AI Collaboration
 
 > **This project is not an "anti-AI" purist exercise.**
-> While the foundational architecture, mathematical derivations, and core design philosophy were deeply human-driven, **AI pair-programming was leveraged extensively in the latter stages (V3 $\to$ V4)** of this project.
+> While the foundational architecture, mathematical derivations, and core design philosophy were deeply human-driven, **AI pair-programming was leveraged extensively in the latter stages (V3 → V4)** of this project.
 >
 > As the codebase scaled to include symbolic compilers and Transformer attention mechanisms, AI was utilized to dramatically raise efficiency, execute complex multi-file refactors, and identify deep architectural bottlenecks (such as replacing recursive graph traversals with iterative stacks to prevent C-stack overflows, and decoupling optimizer states from the autograd graph). This project represents a modern synthesis: human mathematical intuition guided by AI-assisted systems engineering.
 
