@@ -256,6 +256,53 @@ void basis_tensor_matmul_backward_cblas(basis_tensor* grad_output, basis_tensor*
 #endif
 }
 
+
+basis_tensor* basis_tensor_tanh(basis_tensor* target_tensor) {
+    BASIS_CHECK_NULL(target_tensor);
+    basis_tensor* output_tensor = basis_tensor_new(target_tensor->row_count, target_tensor->column_count);
+    for (size_t i = 0; i < target_tensor->row_count; i++)
+        for (size_t j = 0; j < target_tensor->column_count; j++) {
+            basis_value_free(output_tensor->data[i * output_tensor->column_count + j]);
+            output_tensor->data[i * output_tensor->column_count + j] = basis_value_tanh(BASIS_TENSOR_AT(target_tensor, i, j));
+        }
+    return output_tensor;
+}
+
+
+void basis_tensor_save_binary(basis_tensor* target_tensor, const char* filename) {
+    if (!target_tensor || !filename) return;
+    FILE* f = fopen(filename, "wb");
+    if (!f) return;
+    fwrite(&target_tensor->row_count, sizeof(size_t), 1, f);
+    fwrite(&target_tensor->column_count, sizeof(size_t), 1, f);
+    for (size_t i = 0; i < target_tensor->row_count; i++) {
+        for (size_t j = 0; j < target_tensor->column_count; j++) {
+            double val = BASIS_TENSOR_AT(target_tensor, i, j)->data;
+            fwrite(&val, sizeof(double), 1, f);
+        }
+    }
+    fclose(f);
+}
+
+basis_tensor* basis_tensor_load_binary(const char* filename) {
+    if (!filename) return NULL;
+    FILE* f = fopen(filename, "rb");
+    if (!f) return NULL;
+    size_t r, c;
+    size_t dummy_r = fread(&r, sizeof(size_t), 1, f); (void)dummy_r;
+    size_t dummy_c = fread(&c, sizeof(size_t), 1, f); (void)dummy_c;
+    basis_tensor* t = basis_tensor_new(r, c);
+    for (size_t i = 0; i < r; i++) {
+        for (size_t j = 0; j < c; j++) {
+            double val;
+            size_t dummy_val = fread(&val, sizeof(double), 1, f); (void)dummy_val;
+            BASIS_TENSOR_AT(t, i, j)->data = val;
+        }
+    }
+    fclose(f);
+    return t;
+}
+
 void basis_tensor_print(basis_tensor* target_tensor, const char* name) {
     if (!target_tensor) return;
     printf("Tensor %s (%zu x %zu):\n", name, target_tensor->row_count, target_tensor->column_count);
