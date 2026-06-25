@@ -262,14 +262,34 @@ void basis_value_backward_propagation(basis_value* root_value) {
 
 void basis_value_free(basis_value* target_value) {
     if (!target_value) return;
-    target_value->reference_count--;
-    if (target_value->reference_count > 0) return;
-    if (target_value->previous_nodes) {
-        for (size_t i = 0; i < target_value->previous_node_count; i++) {
-            basis_value_free(target_value->previous_nodes[i]);
+
+    // Phase L: Iterative DAG Teardown to prevent stack overflow on deep graphs
+    size_t stack_cap = 256;
+    basis_value** stack = (basis_value**)malloc(sizeof(basis_value*) * stack_cap);
+    size_t stack_ptr = 0;
+
+    stack[stack_ptr++] = target_value;
+
+    while (stack_ptr > 0) {
+        basis_value* current = stack[--stack_ptr];
+        current->reference_count--;
+
+        if (current->reference_count > 0) continue;
+
+        if (current->previous_nodes) {
+            for (size_t i = 0; i < current->previous_node_count; i++) {
+                if (current->previous_nodes[i]) {
+                    if (stack_ptr >= stack_cap) {
+                        stack_cap *= 2;
+                        stack = (basis_value**)realloc(stack, sizeof(basis_value*) * stack_cap);
+                    }
+                    stack[stack_ptr++] = current->previous_nodes[i];
+                }
+            }
+            free(current->previous_nodes);
         }
-        free(target_value->previous_nodes);
+        if (current->operation) free(current->operation);
+        free(current);
     }
-    if (target_value->operation) free(target_value->operation);
-    free(target_value);
+    free(stack);
 }

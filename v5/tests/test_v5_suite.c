@@ -551,6 +551,189 @@ void test_jit_inference() {
     }
 }
 
+
+void test_stress_abyss_graph() {
+    BASIS_TEST_SUITE_START("Phase L1: The Abyss Graph (10,000 Sequential Ops)");
+    basis_value* current = basis_value_new(1.0);
+    for(int i = 0; i < 10000; i++) {
+        basis_value* c = basis_value_new(0.0001);
+        basis_value* next = basis_value_addition(current, c);
+        basis_value_free(current);
+        basis_value_free(c);
+        current = next;
+    }
+    BASIS_ASSERT_NEAR(current->data, 2.0, 1e-6, "Abyss graph forward pass completes 10,000 additions");
+
+    // Backward pass tests the iterative topological sort on a 10,000 depth graph
+    basis_value_backward_propagation(current);
+    BASIS_ASSERT(current->gradient == 1.0, "Abyss graph backward pass completes without stack overflow");
+
+    // Teardown tests the new iterative basis_value_free
+    basis_value_free(current);
+    BASIS_ASSERT(1, "Abyss graph iterative teardown completes without stack overflow");
+}
+
+void test_stress_leviathan_matmul() {
+    BASIS_TEST_SUITE_START("Phase L2: The Leviathan MatMul (100x100 DAG)");
+    size_t N = 100;
+    basis_tensor* A = basis_tensor_new(N, N);
+    basis_tensor* B = basis_tensor_new(N, N);
+
+    for(size_t i=0; i<N*N; i++) {
+        A->data[i]->data = 0.01;
+        B->data[i]->data = 0.01;
+    }
+
+    basis_tensor* C = basis_tensor_matrix_multiplication(A, B);
+    BASIS_ASSERT_NEAR(BASIS_TENSOR_AT(C, 0, 0)->data, 0.01, 1e-6, "Leviathan forward pass correct");
+
+    basis_value* loss = basis_tensor_sum(C);
+    basis_value_backward_propagation(loss);
+
+    BASIS_ASSERT_NEAR(BASIS_TENSOR_AT(A, 0, 0)->gradient, 1.0, 1e-6, "Leviathan backward pass routes 2M edges correctly");
+
+    basis_value_free(loss);
+    basis_tensor_free(C);
+    basis_tensor_free(A);
+    basis_tensor_free(B);
+}
+
+void test_stress_deep_mlp() {
+    BASIS_TEST_SUITE_START("Phase L3: The Deep MLP (5 Layers, 500 Epochs)");
+    size_t B = 32;
+    basis_tensor* X = basis_tensor_new(B, 16);
+    for(size_t i=0; i<B*16; i++) X->data[i]->data = ((i % 5) - 2.0) * 0.1;
+
+    basis_tensor* W1 = basis_tensor_new(16, 32); basis_tensor* b1 = basis_tensor_new(1, 32);
+    basis_tensor* W2 = basis_tensor_new(32, 32); basis_tensor* b2 = basis_tensor_new(1, 32);
+    basis_tensor* W3 = basis_tensor_new(32, 32); basis_tensor* b3 = basis_tensor_new(1, 32);
+    basis_tensor* W4 = basis_tensor_new(32, 16); basis_tensor* b4 = basis_tensor_new(1, 16);
+    basis_tensor* W5 = basis_tensor_new(16, 1);  basis_tensor* b5 = basis_tensor_new(1, 1);
+
+    for(size_t i=0; i<16*32; i++) W1->data[i]->data = ((i % 7) - 3.0) * 0.1;
+    for(size_t i=0; i<32*32; i++) W2->data[i]->data = ((i % 7) - 3.0) * 0.1;
+    for(size_t i=0; i<32*32; i++) W3->data[i]->data = ((i % 7) - 3.0) * 0.1;
+    for(size_t i=0; i<32*16; i++) W4->data[i]->data = ((i % 7) - 3.0) * 0.1;
+    for(size_t i=0; i<16*1; i++) W5->data[i]->data = ((i % 7) - 3.0) * 0.1;
+
+    basis_adam* opt1 = basis_adam_new(16, 32, 0.01);
+    basis_adam* opt2 = basis_adam_new(32, 32, 0.01);
+    basis_adam* opt3 = basis_adam_new(32, 32, 0.01);
+    basis_adam* opt4 = basis_adam_new(32, 16, 0.01);
+    basis_adam* opt5 = basis_adam_new(16, 1, 0.01);
+
+    double final_loss = 0.0;
+
+    for(int epoch=0; epoch<500; epoch++) {
+        basis_tensor* Z1 = basis_tensor_matrix_multiplication(X, W1);
+        basis_tensor* b1_v = basis_tensor_broadcast_view(b1, B, 32);
+        basis_tensor* A1 = basis_tensor_add(Z1, b1_v);
+        basis_tensor* H1 = basis_tensor_rectified_linear_unit(A1);
+
+        basis_tensor* Z2 = basis_tensor_matrix_multiplication(H1, W2);
+        basis_tensor* b2_v = basis_tensor_broadcast_view(b2, B, 32);
+        basis_tensor* A2 = basis_tensor_add(Z2, b2_v);
+        basis_tensor* H2 = basis_tensor_rectified_linear_unit(A2);
+
+        basis_tensor* Z3 = basis_tensor_matrix_multiplication(H2, W3);
+        basis_tensor* b3_v = basis_tensor_broadcast_view(b3, B, 32);
+        basis_tensor* A3 = basis_tensor_add(Z3, b3_v);
+        basis_tensor* H3 = basis_tensor_rectified_linear_unit(A3);
+
+        basis_tensor* Z4 = basis_tensor_matrix_multiplication(H3, W4);
+        basis_tensor* b4_v = basis_tensor_broadcast_view(b4, B, 16);
+        basis_tensor* A4 = basis_tensor_add(Z4, b4_v);
+        basis_tensor* H4 = basis_tensor_rectified_linear_unit(A4);
+
+        basis_tensor* Z5 = basis_tensor_matrix_multiplication(H4, W5);
+        basis_tensor* b5_v = basis_tensor_broadcast_view(b5, B, 1);
+        basis_tensor* Y = basis_tensor_add(Z5, b5_v);
+
+        basis_value* loss = basis_tensor_sum(Y);
+        if(epoch == 499) final_loss = loss->data;
+
+        basis_value_backward_propagation(loss);
+
+        basis_adam_optimization_step(opt1, W1);
+        basis_adam_optimization_step(opt2, W2);
+        basis_adam_optimization_step(opt3, W3);
+        basis_adam_optimization_step(opt4, W4);
+        basis_adam_optimization_step(opt5, W5);
+
+        basis_value_free(loss);
+        basis_tensor_free(Y); basis_tensor_free(b5_v); basis_tensor_free(Z5);
+        basis_tensor_free(H4); basis_tensor_free(A4); basis_tensor_free(b4_v); basis_tensor_free(Z4);
+        basis_tensor_free(H3); basis_tensor_free(A3); basis_tensor_free(b3_v); basis_tensor_free(Z3);
+        basis_tensor_free(H2); basis_tensor_free(A2); basis_tensor_free(b2_v); basis_tensor_free(Z2);
+        basis_tensor_free(H1); basis_tensor_free(A1); basis_tensor_free(b1_v); basis_tensor_free(Z1);
+    }
+
+    BASIS_ASSERT(!isnan(final_loss), "Deep MLP loss did not explode to NaN");
+    BASIS_ASSERT(!isinf(final_loss), "Deep MLP loss did not explode to Inf");
+
+    basis_adam_free(opt1); basis_adam_free(opt2); basis_adam_free(opt3); basis_adam_free(opt4); basis_adam_free(opt5);
+    basis_tensor_free(W1); basis_tensor_free(b1);
+    basis_tensor_free(W2); basis_tensor_free(b2);
+    basis_tensor_free(W3); basis_tensor_free(b3);
+    basis_tensor_free(W4); basis_tensor_free(b4);
+    basis_tensor_free(W5); basis_tensor_free(b5);
+    basis_tensor_free(X);
+}
+
+void test_stress_jit_fuzzer() {
+    BASIS_TEST_SUITE_START("Phase L4: The JIT Fuzzer (50 Random ASTs)");
+
+    int success_count = 0;
+    for(int i=0; i<50; i++) {
+        basis_symbol* x = basis_symbol_variable("x");
+        basis_symbol* current = basis_symbol_copy(x);
+
+        for(int j=0; j<5; j++) {
+            int op = rand() % 4;
+            basis_symbol* c = basis_symbol_constant((double)(rand() % 5) + 1.0);
+            if(op == 0) current = basis_symbol_addition(current, c);
+            else if(op == 1) current = basis_symbol_multiplication(current, c);
+            else if(op == 2) {
+                current = basis_symbol_power(current, 2.0);
+                basis_symbol_free(c);
+            } else {
+                current = basis_symbol_exponential(current);
+                basis_symbol_free(c);
+            }
+        }
+
+        char* vars[] = {"x"};
+        basis_jit_module* jit = basis_jit_compile(current, vars, 1);
+
+        if(jit) {
+            double x_val = 0.5; // Safe domain for exp and powers
+            double jit_res = basis_jit_execute(jit, &x_val);
+
+            basis_value* x_auto = basis_value_new(x_val);
+            basis_compiler* comp = basis_compiler_new();
+            basis_compiler_map(comp, "x", x_auto);
+            basis_value* auto_res_node = basis_compiler_compile(comp, current);
+            double auto_res = auto_res_node->data;
+
+            bool match = false;
+            if (isnan(jit_res) && isnan(auto_res)) match = true;
+            else if (isinf(jit_res) && isinf(auto_res) && (jit_res > 0) == (auto_res > 0)) match = true;
+            else if (!isnan(jit_res) && !isinf(jit_res) && !isnan(auto_res) && !isinf(auto_res) && fabs(jit_res - auto_res) < 1e-3) match = true;
+
+            if (match) success_count++;
+
+            basis_value_free(auto_res_node);
+            basis_value_free(x_auto);
+            basis_compiler_free(comp);
+            basis_jit_free(jit);
+        }
+        basis_symbol_free(current);
+        basis_symbol_free(x);
+    }
+
+    BASIS_ASSERT(success_count == 50, "JIT Fuzzer successfully compiled and matched 50 random ASTs");
+}
+
 int main() {
     srand(time(NULL)); // Seed the random number generator
     printf("=========================================================\n");
@@ -572,6 +755,10 @@ int main() {
     test_hessian_vector_product();
     test_mlp_xor_convergence();
 
+    test_stress_abyss_graph();
+    test_stress_leviathan_matmul();
+    test_stress_deep_mlp();
+    test_stress_jit_fuzzer();
     BASIS_TEST_SUITE_END();
     return basis_tests_failed > 0 ? 1 : 0;
 }

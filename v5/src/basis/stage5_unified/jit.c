@@ -145,7 +145,7 @@ basis_jit_module* basis_jit_compile(basis_symbol* root, char** var_names, size_t
 
     // Compile with maximum optimization
     char cmd[1024];
-    snprintf(cmd, sizeof(cmd), "gcc -shared -fPIC -O3 -march=native -ffast-math -o %s %s -lm 2>/dev/null", so_file, c_file);
+    snprintf(cmd, sizeof(cmd), "gcc -shared -fPIC -O3 -march=native -o %s %s -lm 2>/dev/null", so_file, c_file);
     int status = system(cmd);
     unlink(c_file);
 

@@ -1,60 +1,66 @@
-# 🧠 llm_maths: A Bare-Metal Autograd & Transformer Engine in C
+#!/usr/bin/env python3
+import os
 
-**llm_maths** is a from-scratch, pure-C implementation of a reverse-mode automatic differentiation engine, tensor mathematics, and Transformer architecture components.
+print("=========================================================")
+print("  BASIS v5: Generating Modern README.md                ")
+print("=========================================================")
 
-Think of it as a miniature, bare-metal PyTorch or JAX, written entirely in C without any external machine learning dependencies. It bridges the gap between abstract symbolic calculus, numeric execution graphs, and information geometry.
+content = """# 🧠 BASIS v5: A Bare-Metal Mathematical Computing & Inference Engine in C
+
+**BASIS** (Bare-metal Autograd & Symbolic Inference System) is a from-scratch, pure-C implementation of a reverse-mode automatic differentiation engine, tensor mathematics, symbolic calculus, and a JIT machine-code compiler.
+
+Think of it as a miniature, bare-metal synthesis of **PyTorch**, **JAX**, and **SymPy**, written entirely in C without any external machine learning dependencies. It bridges the gap between abstract symbolic calculus, dynamic numeric execution graphs, information geometry, and native hardware inference.
 
 ---
 
 ## 🤝 A Note on Human-AI Collaboration
 
 > **This project is not an "anti-AI" purist exercise.**
-> While the foundational architecture, mathematical derivations, and core design philosophy were deeply human-driven, **AI pair-programming was leveraged extensively in the latter stages (V3 → V4)** of this project.
+> While the foundational architecture, mathematical derivations, and core design philosophy were deeply human-driven, **AI pair-programming was leveraged extensively in the latter stages (V4 → V5)** of this project.
 >
-> As the codebase scaled to include symbolic compilers and Transformer attention mechanisms, AI was utilized to dramatically raise efficiency, execute complex multi-file refactors, and identify deep architectural bottlenecks (such as replacing recursive graph traversals with iterative stacks to prevent C-stack overflows, and decoupling optimizer states from the autograd graph). This project represents a modern synthesis: human mathematical intuition guided by AI-assisted systems engineering.
+> As the codebase scaled to include JIT compilers, information geometry, and dynamic property-based fuzzing, AI was utilized to execute complex multi-file refactors, enforce strict memory ownership models, and identify deep architectural bottlenecks (such as replacing recursive graph teardowns with iterative stacks to prevent C-stack overflows on 10,000-deep graphs). This project represents a modern synthesis: human mathematical intuition guided by AI-assisted systems engineering.
 
 ---
 
-## 🏗️ Architecture: The 5 Stages
+## 🏗️ The 10 Pillars of BASIS v5
 
-The library is organized into 5 progressive stages. Understanding these stages is the key to understanding how the framework operates under the hood.
+The framework has evolved through rigorous stabilization and expansion phases. Here is what powers the engine under the hood:
 
-| Stage | Domain | Core Concept |
+| Pillar | Domain | Core Concept |
 | :--- | :--- | :--- |
-| **Stage 1** | **Atomic** | **The Autograd Tape.** Every number is a `value` node. Operations create new nodes, store pointers to their "parents", and attach a C-function pointer for the chain rule. |
-| **Stage 2** | **Linear** | **Tensors as Graphs.** A `tensor` is a 2D grid of `value*` pointers. Matrix multiplication isn't a hardcoded kernel; it's built by chaining scalar operations, meaning gradients flow perfectly through every element. |
-| **Stage 3** | **Sequence** | **Transformer Mechanics.** Implements Scaled Dot-Product Attention, Softmax, and RoPE (Rotary Positional Embeddings) natively on the autograd graph. |
-| **Stage 4** | **Learning** | **Optimization.** Features Layer Normalization and a highly optimized Adam optimizer. |
-| **Stage 5** | **Unified** | **Symbolic Math & Geometry.** A symbolic algebra engine that can differentiate ASTs, compile them into numeric C-graphs, and calculate the Fisher Information Metric. |
+| **1. Autograd Tape** | *Atomic* | Iterative, stack-safe reverse-mode autodiff. Every number is a `basis_value` node with reference counting and strict memory ownership. |
+| **2. Tensor Algebra** | *Linear* | 2D grids of autograd nodes. Features **Fused MatMul** (Expression DAG compression) to eliminate intermediate node bloat. |
+| **3. Strided Views** | *Memory* | **Zero-copy slicing and transposing** using stride/offset math. Transposing a matrix requires zero memory allocations. |
+| **4. Broadcasting** | *Math* | NumPy/PyTorch-style broadcasting via the **Stride=0 trick**. Adding a bias vector to a batch matrix routes gradients perfectly without copying data. |
+| **5. Sequence Mechanics** | *Transformers* | Native Scaled Dot-Product Attention, RoPE, and Layer Normalization built directly on the autograd graph. |
+| **6. Numerical Stability** | *Robustness* | **Log-Sum-Exp trick** for `basis_tensor_log_softmax`, preventing `NaN` overflows on extreme logits. |
+| **7. Optimization** | *Learning* | Decoupled Adam optimizer (raw `double` arrays) and **Natural Gradient Descent** utilizing the Fisher Information Metric. |
+| **8. Symbolic Calculus** | *Unified* | A full AST algebraic engine capable of exact symbolic differentiation, constant folding, and Common Subexpression Elimination (CSE). |
+| **9. Higher-Order Math** | *Research* | Exact **Hessian-Vector Products (HVP)** computed via the symbolic engine without instantiating the massive Hessian matrix. |
+| **10. JIT Compiler** | *Inference* | Translates symbolic ASTs into raw C code, invokes `gcc` at runtime, and loads the AVX-optimized machine code via `dlopen` for zero-overhead inference. |
 
 ---
 
-## ⚡ V4 Architectural Upgrades
+## ⚡ V5 Architectural Upgrades (The Stabilization Mandate)
 
-If you are comparing this to earlier iterations, V4 includes critical production-ready systems engineering fixes:
+Transitioning from a mathematical prototype to a production-grade framework required strict systems engineering:
 
-1. **Iterative Backpropagation (Stack-Safe):** Replaced recursive topological sorting with an explicit-stack iterative Depth-First Search (DFS). This prevents C-stack overflows on very deep networks (like long unrolled RNNs or deep ResNets).
-2. **Decoupled Optimizer State:** In deep learning, optimizer states (like Adam's moving averages) do *not* need gradients. V4 stores Adam moments as raw `double*` arrays, completely decoupled from the autograd graph. This prevents massive memory bloat and keeps training loops lightning fast.
-3. **Sanitized Codebase:** Eradicated hidden syntax artifacts ("ghost spaces" in strings and keywords) that caused silent failures in string-matching operations within the symbolic compiler.
-4. **Expanded Calculus:** Added native `subtraction` and `tanh` operations, which are mandatory for modern LLM gating mechanisms and LSTMs.
+1. **Unified Error Handling:** A global `basis_error_t` state with quiet modes for testing. No function fails silently; shape mismatches and domain errors are explicitly caught.
+2. **Iterative Graph Teardown:** `basis_value_free` and topological sorting are 100% iterative. The engine can safely dismantle a **10,000-node deep computation graph** without triggering a C-stack overflow.
+3. **Collision-Free API:** The entire public API is strictly prefixed with `basis_` (e.g., `basis_tensor`, `basis_value_addition`) and accessible via a single `#include <basis.h>` umbrella header.
+4. **Dynamic Property-Based Fuzzing:** The test suite uses `<time.h>` to generate random tensor shapes, extreme logits, and arbitrary ASTs on every run, proving mathematical invariants across the continuous domain.
 
 ---
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-You just need a standard C compiler (GCC or Clang) and `make`.
+You just need a standard C compiler (GCC or Clang), `make`, and a POSIX environment (for the JIT `dlopen`/`mkstemp` features).
 
-### Build and Run
+### Build and Run the Fuzzing Suite
 ```bash
-# 1. Compile the library and test suite
-make
+# 1. Compile the library and the dynamic test suite
+make clean && make
 
-# 2. Run the test suite to verify the math
-./test_scalar           # Basic calculus & chain rule
-./test_tensor           # Matrix math & autograd
-./test_attention        # Transformer Q, K, V mechanics
-./test_symbolic         # Algebraic differentiation (ASTs)
-./test_compiler         # Symbolic-to-Numeric bridging
-./test_frontier         # Training loop (Adam optimizer convergence)
-./test_grand_unified    # The final boss: Math + Code + Geometry
+# 2. Run the suite (Generates random matrices, ASTs, and weights on every run)
+./test_v5_suite
