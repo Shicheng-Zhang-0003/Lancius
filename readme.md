@@ -1,11 +1,4 @@
-#!/usr/bin/env python3
-import os
-
-print("=========================================================")
-print("  BASIS v5: Generating Modern README.md                ")
-print("=========================================================")
-
-content = """# 🧠 BASIS v5: A Bare-Metal Mathematical Computing & Inference Engine in C
+# 🧠 BASIS v5: A Bare-Metal Mathematical Computing & Inference Engine in C
 
 **BASIS** (Bare-metal Autograd & Symbolic Inference System) is a from-scratch, pure-C implementation of a reverse-mode automatic differentiation engine, tensor mathematics, symbolic calculus, and a JIT machine-code compiler.
 
