@@ -1,6 +1,6 @@
 # PROJECT BUNDLE: v7
 Root Directory: /home/magi-01/Desktop/work/programming/llm_maths/v7
-Generated: Sat Jun 27 09:22:22 PM MDT 2026
+Generated: Sat Jun 27 10:17:45 PM MDT 2026
 
 ## 1. DIRECTORY HIERARCHY
 ```text
@@ -103,6 +103,7 @@ v7/
 │   └── test_v5_suite.c
 ├── .gitignore
 ├── makefile
+├── test_basis_cinebench
 ├── test_deep_crucible
 └── test_traditional_fuzz
 ```
@@ -2066,6 +2067,7 @@ void basis_ir_graph_destroy(basis_ir_graph* g) {
 basis_ir_node* basis_ir_input(basis_ir_graph* g, size_t r, size_t c) {
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
     if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++;
     n->op = BASIS_IR_OP_INPUT;
     n->rows = r; n->cols = c;
@@ -2078,6 +2080,7 @@ basis_ir_node* basis_ir_input(basis_ir_graph* g, size_t r, size_t c) {
 basis_ir_node* basis_ir_const(basis_ir_graph* g, double val, size_t r, size_t c) {
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
     if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++;
     n->op = BASIS_IR_OP_CONST;
     n->rows = r; n->cols = c;
@@ -2091,6 +2094,7 @@ basis_ir_node* basis_ir_add(basis_ir_graph* g, const basis_ir_node* a, const bas
     if (!a || !b || a->rows != b->rows || a->cols != b->cols) return NULL; // Shape Inference
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
     if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++;
     n->op = BASIS_IR_OP_ADD;
     n->rows = a->rows; n->cols = a->cols;
@@ -2107,6 +2111,7 @@ basis_ir_node* basis_ir_matmul(basis_ir_graph* g, const basis_ir_node* a, const 
     if (!a || !b || a->cols != b->rows) return NULL; // Shape Inference
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
     if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++;
     n->op = BASIS_IR_OP_MATMUL;
     n->rows = a->rows; n->cols = b->cols;
@@ -2123,6 +2128,7 @@ basis_ir_node* basis_ir_relu(basis_ir_graph* g, const basis_ir_node* a) {
     if (!a) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
     if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++;
     n->op = BASIS_IR_OP_RELU;
     n->rows = a->rows; n->cols = a->cols;
@@ -2140,6 +2146,7 @@ basis_ir_node* basis_ir_mul(basis_ir_graph* g, const basis_ir_node* a, const bas
     if (!a || !b || a->rows != b->rows || a->cols != b->cols) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
     if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++; n->op = BASIS_IR_OP_MUL;
     n->rows = a->rows; n->cols = a->cols;
     n->input_count = 2;
@@ -2154,6 +2161,7 @@ basis_ir_node* basis_ir_sub(basis_ir_graph* g, const basis_ir_node* a, const bas
     if (!a || !b || a->rows != b->rows || a->cols != b->cols) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
     if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++; n->op = BASIS_IR_OP_SUB;
     n->rows = a->rows; n->cols = a->cols;
     n->input_count = 2;
@@ -2168,6 +2176,7 @@ basis_ir_node* basis_ir_transpose(basis_ir_graph* g, const basis_ir_node* a) {
     if (!a) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
     if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++; n->op = BASIS_IR_OP_TRANSPOSE;
     n->rows = a->cols; n->cols = a->rows;
     n->input_count = 1;
@@ -2182,6 +2191,7 @@ basis_ir_node* basis_ir_softmax(basis_ir_graph* g, const basis_ir_node* a) {
     if (!a) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
     if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++; n->op = BASIS_IR_OP_SOFTMAX;
     n->rows = a->rows; n->cols = a->cols;
     n->input_count = 1;
@@ -2197,6 +2207,7 @@ basis_ir_node* basis_ir_sum(basis_ir_graph* g, const basis_ir_node* a) {
     if (!a) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
     if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++; n->op = BASIS_IR_OP_SUM;
     n->rows = 1; n->cols = 1;
     n->input_count = 1; n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*), 8);
@@ -2207,6 +2218,7 @@ basis_ir_node* basis_ir_broadcast(basis_ir_graph* g, const basis_ir_node* a, siz
     if (!a) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
     if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++; n->op = BASIS_IR_OP_BROADCAST;
     n->rows = r; n->cols = c;
     n->input_count = 1; n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*), 8);
@@ -2217,6 +2229,7 @@ basis_ir_node* basis_ir_relu_bwd(basis_ir_graph* g, const basis_ir_node* grad, c
     if (!grad || !fwd_a) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
     if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++; n->op = BASIS_IR_OP_RELU_BWD;
     n->rows = grad->rows; n->cols = grad->cols;
     n->input_count = 2; n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*) * 2, 8);
@@ -2793,12 +2806,6 @@ Location: `src/basis/l5_runtime/scheduler.c`
 
 #include <stdint.h>
 
-// The Iron Dome: Validates that a pointer is within safe user-space bounds
-static inline int is_valid_ptr(const void* p) {
-    uintptr_t addr = (uintptr_t)p;
-    // Reject NULL, first page (garbage offsets), and kernel space
-    return (addr > 4096 && addr < 0x00007FFFFFFFFFFF);
-}
 
 
 basis_schedule* basis_ir_schedule(basis_ir_graph* g) {
@@ -2910,13 +2917,13 @@ void basis_schedule_execute(basis_schedule* schedule, basis_arena* scratch) {
             if (n->op == BASIS_IR_OP_ADD) {
                 double* a = n->inputs[0]->runtime_data;
                 double* b = n->inputs[1]->runtime_data;
-                if (!is_valid_ptr(a) || !is_valid_ptr(b) || !is_valid_ptr(n->runtime_data)) continue; // UPSTREAM GUARD
+                if (!a || !b || !n->runtime_data) continue; // UPSTREAM GUARD
                 for(size_t k=0; k<elements; k++) n->runtime_data[k] = a[k] + b[k];
             }
             else if (n->op == BASIS_IR_OP_MATMUL) {
                 double* a = n->inputs[0]->runtime_data;
                 double* b = n->inputs[1]->runtime_data;
-                if (!is_valid_ptr(a) || !is_valid_ptr(b) || !is_valid_ptr(n->runtime_data)) continue; // UPSTREAM GUARD
+                if (!a || !b || !n->runtime_data) continue; // UPSTREAM GUARD
                 size_t M = n->inputs[0]->rows;
                 size_t K = n->inputs[0]->cols;
                 size_t N = n->inputs[1]->cols;
@@ -2931,25 +2938,25 @@ void basis_schedule_execute(basis_schedule* schedule, basis_arena* scratch) {
             else if (n->op == BASIS_IR_OP_MUL) {
                 double* a = n->inputs[0]->runtime_data;
                 double* b = n->inputs[1]->runtime_data;
-                if (!is_valid_ptr(a) || !is_valid_ptr(b) || !is_valid_ptr(n->runtime_data)) continue; // UPSTREAM GUARD
+                if (!a || !b || !n->runtime_data) continue; // UPSTREAM GUARD
                 for(size_t k=0; k<elements; k++) n->runtime_data[k] = a[k] * b[k];
             }
             else if (n->op == BASIS_IR_OP_SUB) {
                 double* a = n->inputs[0]->runtime_data;
                 double* b = n->inputs[1]->runtime_data;
-                if (!is_valid_ptr(a) || !is_valid_ptr(b) || !is_valid_ptr(n->runtime_data)) continue; // UPSTREAM GUARD
+                if (!a || !b || !n->runtime_data) continue; // UPSTREAM GUARD
                 for(size_t k=0; k<elements; k++) n->runtime_data[k] = a[k] - b[k];
             }
             else if (n->op == BASIS_IR_OP_TRANSPOSE) {
                 double* a = n->inputs[0]->runtime_data;
-                if (!is_valid_ptr(a) || !is_valid_ptr(n->runtime_data)) continue;
+                if (!a || !n->runtime_data) continue;
                 size_t R = n->inputs[0]->rows;
                 size_t C = n->inputs[0]->cols;
                 for(size_t r=0; r<R; r++) for(size_t c=0; c<C; c++) n->runtime_data[c*R + r] = a[r*C + c];
             }
             else if (n->op == BASIS_IR_OP_SUM) {
                 double* a = n->inputs[0]->runtime_data;
-                if (!is_valid_ptr(a) || !is_valid_ptr(n->runtime_data)) continue;
+                if (!a || !n->runtime_data) continue;
                 size_t elems = n->inputs[0]->rows * n->inputs[0]->cols;
                 double sum = 0.0;
                 for(size_t k=0; k<elems; k++) sum += a[k];
@@ -2957,32 +2964,32 @@ void basis_schedule_execute(basis_schedule* schedule, basis_arena* scratch) {
             }
             else if (n->op == BASIS_IR_OP_SUM_AXIS0) {
                 double* a = n->inputs[0]->runtime_data;
-                if (!is_valid_ptr(a) || !is_valid_ptr(n->runtime_data)) continue;
+                if (!a || !n->runtime_data) continue;
                 size_t R = n->inputs[0]->rows; size_t C = n->inputs[0]->cols;
                 memset(n->runtime_data, 0, C * sizeof(double));
                 for(size_t r=0; r<R; r++) for(size_t c=0; c<C; c++) n->runtime_data[c] += a[r*C + c];
             }
             else if (n->op == BASIS_IR_OP_SUM_AXIS1) {
                 double* a = n->inputs[0]->runtime_data;
-                if (!is_valid_ptr(a) || !is_valid_ptr(n->runtime_data)) continue;
+                if (!a || !n->runtime_data) continue;
                 size_t R = n->inputs[0]->rows; size_t C = n->inputs[0]->cols;
                 for(size_t r=0; r<R; r++) { double s=0; for(size_t c=0; c<C; c++) s += a[r*C + c]; n->runtime_data[r] = s; }
             }
             else if (n->op == BASIS_IR_OP_BROADCAST) {
                 double* a = n->inputs[0]->runtime_data;
-                if (!is_valid_ptr(a) || !is_valid_ptr(n->runtime_data)) continue;
+                if (!a || !n->runtime_data) continue;
                 double val = a[0];
                 for(size_t k=0; k<elements; k++) n->runtime_data[k] = val;
             }
             else if (n->op == BASIS_IR_OP_RELU_BWD) {
                 double* grad = n->inputs[0]->runtime_data;
                 double* fwd_a = n->inputs[1]->runtime_data;
-                if (!is_valid_ptr(grad) || !is_valid_ptr(fwd_a) || !is_valid_ptr(n->runtime_data)) continue;
+                if (!grad || !fwd_a || !n->runtime_data) continue;
                 for(size_t k=0; k<elements; k++) n->runtime_data[k] = fwd_a[k] > 0.0 ? grad[k] : 0.0;
             }
             else if (n->op == BASIS_IR_OP_SOFTMAX) {
                 double* a = n->inputs[0]->runtime_data;
-                if (!is_valid_ptr(a) || !is_valid_ptr(n->runtime_data)) continue;
+                if (!a || !n->runtime_data) continue;
                 size_t R = n->rows;
                 size_t C = n->cols;
                 for(size_t r=0; r<R; r++) {
@@ -2996,7 +3003,7 @@ void basis_schedule_execute(basis_schedule* schedule, basis_arena* scratch) {
             else if (n->op == BASIS_IR_OP_SOFTMAX_BWD) {
                 double* dy = n->inputs[0]->runtime_data;
                 double* y = n->inputs[1]->runtime_data;
-                if (!is_valid_ptr(dy) || !is_valid_ptr(y) || !is_valid_ptr(n->runtime_data)) continue;
+                if (!dy || !y || !n->runtime_data) continue;
                 size_t R = n->rows; size_t C = n->cols;
                 for(size_t r=0; r<R; r++) {
                     double dot = 0.0;
@@ -3006,7 +3013,7 @@ void basis_schedule_execute(basis_schedule* schedule, basis_arena* scratch) {
             }
             else if (n->op == BASIS_IR_OP_RELU) {
                 double* a = n->inputs[0]->runtime_data;
-                if (!is_valid_ptr(a) || !is_valid_ptr(n->runtime_data)) continue;
+                if (!a || !n->runtime_data) continue;
                 for(size_t k=0; k<elements; k++) n->runtime_data[k] = a[k] > 0.0 ? a[k] : 0.0;
             }
         }
