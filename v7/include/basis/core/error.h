@@ -14,9 +14,9 @@ typedef enum {
     BASIS_UNKNOWN_ERROR
 } basis_error_t;
 
-extern basis_error_t _basis_last_error;
-extern const char* _basis_last_error_msg;
-extern bool _basis_error_quiet;
+extern __thread basis_error_t _basis_last_error;
+extern __thread const char* _basis_last_error_msg;
+extern __thread bool _basis_error_quiet;
 
 #define BASIS_SET_ERROR(err, msg) do { \
     _basis_last_error = err; \

@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -O3 -march=native -std=c11 -I./include -fPIC
+CFLAGS = -Wall -Wextra -O3 -g -march=native -std=c11 -I./include -fPIC
 LDFLAGS = -lm -ldl
 
 SRCS = src/basis/core/error.c \
@@ -68,6 +68,22 @@ test_v7_autodiff: tests/test_v7_autodiff.c $(OBJS)
 
 
 test_v7_swarm: tests/test_v7_swarm.c $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $< $(OBJS) $(LDFLAGS)
+
+
+test_basis_cinebench: tests/test_basis_cinebench.c $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $< $(OBJS) $(LDFLAGS) -lpthread
+
+
+test_basis_ultimate_crunch: tests/test_basis_ultimate_crunch.c $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $< $(OBJS) $(LDFLAGS) -lpthread
+
+
+test_traditional_fuzz: tests/test_traditional_fuzz.c $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $< $(OBJS) $(LDFLAGS)
+
+
+test_deep_crucible: tests/test_deep_crucible.c $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $< $(OBJS) $(LDFLAGS)
 
 PREFIX ?= /usr/local
