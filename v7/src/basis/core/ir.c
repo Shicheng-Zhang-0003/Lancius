@@ -29,6 +29,8 @@ void basis_ir_graph_destroy(basis_ir_graph* g) {
 
 basis_ir_node* basis_ir_input(basis_ir_graph* g, size_t r, size_t c) {
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++;
     n->op = BASIS_IR_OP_INPUT;
     n->rows = r; n->cols = c;
@@ -40,6 +42,8 @@ basis_ir_node* basis_ir_input(basis_ir_graph* g, size_t r, size_t c) {
 
 basis_ir_node* basis_ir_const(basis_ir_graph* g, double val, size_t r, size_t c) {
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++;
     n->op = BASIS_IR_OP_CONST;
     n->rows = r; n->cols = c;
@@ -52,11 +56,14 @@ basis_ir_node* basis_ir_const(basis_ir_graph* g, double val, size_t r, size_t c)
 basis_ir_node* basis_ir_add(basis_ir_graph* g, const basis_ir_node* a, const basis_ir_node* b) {
     if (!a || !b || a->rows != b->rows || a->cols != b->cols) return NULL; // Shape Inference
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++;
     n->op = BASIS_IR_OP_ADD;
     n->rows = a->rows; n->cols = a->cols;
     n->input_count = 2;
     n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*) * 2, 8);
+    if (!n->inputs) return NULL;
     n->inputs[0] = a; n->inputs[1] = b;
     n->attr_val = 0.0;
     graph_track_node(g, n);
@@ -66,11 +73,14 @@ basis_ir_node* basis_ir_add(basis_ir_graph* g, const basis_ir_node* a, const bas
 basis_ir_node* basis_ir_matmul(basis_ir_graph* g, const basis_ir_node* a, const basis_ir_node* b) {
     if (!a || !b || a->cols != b->rows) return NULL; // Shape Inference
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++;
     n->op = BASIS_IR_OP_MATMUL;
     n->rows = a->rows; n->cols = b->cols;
     n->input_count = 2;
     n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*) * 2, 8);
+    if (!n->inputs) return NULL;
     n->inputs[0] = a; n->inputs[1] = b;
     n->attr_val = 0.0;
     graph_track_node(g, n);
@@ -80,11 +90,14 @@ basis_ir_node* basis_ir_matmul(basis_ir_graph* g, const basis_ir_node* a, const 
 basis_ir_node* basis_ir_relu(basis_ir_graph* g, const basis_ir_node* a) {
     if (!a) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++;
     n->op = BASIS_IR_OP_RELU;
     n->rows = a->rows; n->cols = a->cols;
     n->input_count = 1;
     n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*), 8);
+    if (!n->inputs) return NULL;
     n->inputs[0] = a;
     n->attr_val = 0.0;
     graph_track_node(g, n);
@@ -95,10 +108,13 @@ basis_ir_node* basis_ir_relu(basis_ir_graph* g, const basis_ir_node* a) {
 basis_ir_node* basis_ir_mul(basis_ir_graph* g, const basis_ir_node* a, const basis_ir_node* b) {
     if (!a || !b || a->rows != b->rows || a->cols != b->cols) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++; n->op = BASIS_IR_OP_MUL;
     n->rows = a->rows; n->cols = a->cols;
     n->input_count = 2;
     n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*) * 2, 8);
+    if (!n->inputs) return NULL;
     n->inputs[0] = a; n->inputs[1] = b;
     n->attr_val = 0.0;
     graph_track_node(g, n); return n;
@@ -107,10 +123,13 @@ basis_ir_node* basis_ir_mul(basis_ir_graph* g, const basis_ir_node* a, const bas
 basis_ir_node* basis_ir_sub(basis_ir_graph* g, const basis_ir_node* a, const basis_ir_node* b) {
     if (!a || !b || a->rows != b->rows || a->cols != b->cols) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++; n->op = BASIS_IR_OP_SUB;
     n->rows = a->rows; n->cols = a->cols;
     n->input_count = 2;
     n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*) * 2, 8);
+    if (!n->inputs) return NULL;
     n->inputs[0] = a; n->inputs[1] = b;
     n->attr_val = 0.0;
     graph_track_node(g, n); return n;
@@ -119,10 +138,13 @@ basis_ir_node* basis_ir_sub(basis_ir_graph* g, const basis_ir_node* a, const bas
 basis_ir_node* basis_ir_transpose(basis_ir_graph* g, const basis_ir_node* a) {
     if (!a) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++; n->op = BASIS_IR_OP_TRANSPOSE;
     n->rows = a->cols; n->cols = a->rows;
     n->input_count = 1;
     n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*), 8);
+    if (!n->inputs) return NULL;
     n->inputs[0] = a;
     n->attr_val = 0.0;
     graph_track_node(g, n); return n;
@@ -131,10 +153,13 @@ basis_ir_node* basis_ir_transpose(basis_ir_graph* g, const basis_ir_node* a) {
 basis_ir_node* basis_ir_softmax(basis_ir_graph* g, const basis_ir_node* a) {
     if (!a) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++; n->op = BASIS_IR_OP_SOFTMAX;
     n->rows = a->rows; n->cols = a->cols;
     n->input_count = 1;
     n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*), 8);
+    if (!n->inputs) return NULL;
     n->inputs[0] = a;
     n->attr_val = 0.0;
     graph_track_node(g, n); return n;
@@ -144,26 +169,61 @@ basis_ir_node* basis_ir_softmax(basis_ir_graph* g, const basis_ir_node* a) {
 basis_ir_node* basis_ir_sum(basis_ir_graph* g, const basis_ir_node* a) {
     if (!a) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++; n->op = BASIS_IR_OP_SUM;
     n->rows = 1; n->cols = 1;
     n->input_count = 1; n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*), 8);
+    if (!n->inputs) return NULL;
     n->inputs[0] = a; n->attr_val = 0.0; graph_track_node(g, n); return n;
 }
 basis_ir_node* basis_ir_broadcast(basis_ir_graph* g, const basis_ir_node* a, size_t r, size_t c) {
     if (!a) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++; n->op = BASIS_IR_OP_BROADCAST;
     n->rows = r; n->cols = c;
     n->input_count = 1; n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*), 8);
+    if (!n->inputs) return NULL;
     n->inputs[0] = a; n->attr_val = 0.0; graph_track_node(g, n); return n;
 }
 basis_ir_node* basis_ir_relu_bwd(basis_ir_graph* g, const basis_ir_node* grad, const basis_ir_node* fwd_a) {
     if (!grad || !fwd_a) return NULL;
     basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    if (!n) return NULL;
+    memset(n, 0, sizeof(basis_ir_node));
     n->id = g->next_id++; n->op = BASIS_IR_OP_RELU_BWD;
     n->rows = grad->rows; n->cols = grad->cols;
     n->input_count = 2; n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*) * 2, 8);
+    if (!n->inputs) return NULL;
     n->inputs[0] = grad; n->inputs[1] = fwd_a; n->attr_val = 0.0; graph_track_node(g, n); return n;
+}
+
+
+basis_ir_node* basis_ir_sum_axis0(basis_ir_graph* g, const basis_ir_node* a) {
+    if (!a) return NULL;
+    basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    n->id = g->next_id++; n->op = BASIS_IR_OP_SUM_AXIS0;
+    n->rows = 1; n->cols = a->cols; // Reduces MxN to 1xN
+    n->input_count = 1; n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*), 8);
+    n->inputs[0] = a; n->attr_val = 0.0; graph_track_node(g, n); return n;
+}
+basis_ir_node* basis_ir_sum_axis1(basis_ir_graph* g, const basis_ir_node* a) {
+    if (!a) return NULL;
+    basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    n->id = g->next_id++; n->op = BASIS_IR_OP_SUM_AXIS1;
+    n->rows = a->rows; n->cols = 1; // Reduces MxN to Mx1
+    n->input_count = 1; n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*), 8);
+    n->inputs[0] = a; n->attr_val = 0.0; graph_track_node(g, n); return n;
+}
+basis_ir_node* basis_ir_softmax_bwd(basis_ir_graph* g, const basis_ir_node* grad, const basis_ir_node* fwd_y) {
+    if (!grad || !fwd_y) return NULL;
+    basis_ir_node* n = (basis_ir_node*)basis_arena_alloc(g->arena, sizeof(basis_ir_node), 8);
+    n->id = g->next_id++; n->op = BASIS_IR_OP_SOFTMAX_BWD;
+    n->rows = grad->rows; n->cols = grad->cols;
+    n->input_count = 2; n->inputs = (const basis_ir_node**)basis_arena_alloc(g->arena, sizeof(basis_ir_node*) * 2, 8);
+    n->inputs[0] = grad; n->inputs[1] = fwd_y; n->attr_val = 0.0; graph_track_node(g, n); return n;
 }
 
 static const char* ir_op_str(basis_ir_opcode op) {
@@ -180,6 +240,9 @@ static const char* ir_op_str(basis_ir_opcode op) {
         case BASIS_IR_OP_SUM: return "SUM";
         case BASIS_IR_OP_BROADCAST: return "BROADCAST";
         case BASIS_IR_OP_RELU_BWD: return "RELU_BWD";
+        case BASIS_IR_OP_SUM_AXIS0: return "SUM_AXIS0";
+        case BASIS_IR_OP_SUM_AXIS1: return "SUM_AXIS1";
+        case BASIS_IR_OP_SOFTMAX_BWD: return "SOFTMAX_BWD";
         default: return "UNKNOWN";
     }
 }

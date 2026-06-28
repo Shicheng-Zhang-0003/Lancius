@@ -6,19 +6,32 @@ static void accum_grad(basis_ir_graph* g, basis_ir_node** grad_map, uint32_t fwd
     if (!new_grad) return;
     basis_ir_node* full_input = fwd_to_full[fwd_input_id];
 
+    // Exact shape match
+    if (new_grad->rows == full_input->rows && new_grad->cols == full_input->cols) {
+        if (grad_map[fwd_input_id] == NULL) grad_map[fwd_input_id] = new_grad;
+        else grad_map[fwd_input_id] = basis_ir_add(g, grad_map[fwd_input_id], new_grad);
+        return;
+    }
+
     // Forward Broadcast: 1x1 grad -> MxN input
     if (new_grad->rows == 1 && new_grad->cols == 1 && (full_input->rows > 1 || full_input->cols > 1)) {
         new_grad = basis_ir_broadcast(g, new_grad, full_input->rows, full_input->cols);
     }
-    // CRITICAL FIX: Reverse Reduction: MxN grad -> 1x1 input (e.g. from broadcasting a scalar bias)
+    // Reverse Reduction: MxN grad -> 1x1 input
     else if ((new_grad->rows > 1 || new_grad->cols > 1) && full_input->rows == 1 && full_input->cols == 1) {
         new_grad = basis_ir_sum(g, new_grad);
     }
-    if (grad_map[fwd_input_id] == NULL) {
-        grad_map[fwd_input_id] = new_grad;
-    } else {
-        grad_map[fwd_input_id] = basis_ir_add(g, grad_map[fwd_input_id], new_grad);
+    // CRITICAL FIX: Bias Gradient Collapse (MxN grad -> 1xN input)
+    else if (new_grad->rows > 1 && new_grad->cols == full_input->cols && full_input->rows == 1) {
+        new_grad = basis_ir_sum_axis0(g, new_grad);
     }
+    // CRITICAL FIX: Bias Gradient Collapse (MxN grad -> Mx1 input)
+    else if (new_grad->cols > 1 && new_grad->rows == full_input->rows && full_input->cols == 1) {
+        new_grad = basis_ir_sum_axis1(g, new_grad);
+    }
+
+    if (grad_map[fwd_input_id] == NULL) grad_map[fwd_input_id] = new_grad;
+    else grad_map[fwd_input_id] = basis_ir_add(g, grad_map[fwd_input_id], new_grad);
 }
 
 basis_training_graph* basis_ir_autodiff(basis_ir_graph* fwd_g, basis_ir_node* loss_node) {
@@ -34,8 +47,14 @@ basis_training_graph* basis_ir_autodiff(basis_ir_graph* fwd_g, basis_ir_node* lo
         const basis_ir_node* in0 = old->input_count > 0 ? fwd_to_full[old->inputs[0]->id] : NULL;
         const basis_ir_node* in1 = old->input_count > 1 ? fwd_to_full[old->inputs[1]->id] : NULL;
         switch(old->op) {
-            case BASIS_IR_OP_INPUT: n = basis_ir_input(tg->graph, old->rows, old->cols); break;
-            case BASIS_IR_OP_CONST: n = basis_ir_const(tg->graph, old->attr_val, old->rows, old->cols); break;
+            case BASIS_IR_OP_INPUT:
+                n = basis_ir_input(tg->graph, old->rows, old->cols);
+                n->runtime_data = old->runtime_data; // CRITICAL: Share persistent weight/data buffers
+                break;
+            case BASIS_IR_OP_CONST:
+                n = basis_ir_const(tg->graph, old->attr_val, old->rows, old->cols);
+                if (old->runtime_data) n->runtime_data = old->runtime_data; // Share if available
+                break;
             case BASIS_IR_OP_ADD: n = basis_ir_add(tg->graph, in0, in1); break;
             case BASIS_IR_OP_SUB: n = basis_ir_sub(tg->graph, in0, in1); break;
             case BASIS_IR_OP_MUL: n = basis_ir_mul(tg->graph, in0, in1); break;
@@ -44,6 +63,7 @@ basis_training_graph* basis_ir_autodiff(basis_ir_graph* fwd_g, basis_ir_node* lo
             case BASIS_IR_OP_TRANSPOSE: n = basis_ir_transpose(tg->graph, in0); break;
             case BASIS_IR_OP_SUM: n = basis_ir_sum(tg->graph, in0); break;
             case BASIS_IR_OP_BROADCAST: n = basis_ir_broadcast(tg->graph, in0, old->rows, old->cols); break;
+            case BASIS_IR_OP_SOFTMAX: n = basis_ir_softmax(tg->graph, in0); break;
             default: break;
         }
         fwd_to_full[old->id] = n;
@@ -84,7 +104,14 @@ basis_training_graph* basis_ir_autodiff(basis_ir_graph* fwd_g, basis_ir_node* lo
         } else if (fwd_n->op == BASIS_IR_OP_SUM) {
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, grad_out, fwd_to_full);
         } else if (fwd_n->op == BASIS_IR_OP_BROADCAST) {
-            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, basis_ir_sum(tg->graph, grad_out), fwd_to_full);
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, grad_out, fwd_to_full);
+        } else if (fwd_n->op == BASIS_IR_OP_TRANSPOSE) {
+            // dA = transpose(dC)
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, basis_ir_transpose(tg->graph, grad_out), fwd_to_full);
+        } else if (fwd_n->op == BASIS_IR_OP_SOFTMAX) {
+            // dx = softmax_bwd(dy, y)
+            basis_ir_node* Y = fwd_to_full[fwd_n->id];
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, basis_ir_softmax_bwd(tg->graph, grad_out, Y), fwd_to_full);
         }
     }
 

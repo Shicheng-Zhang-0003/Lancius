@@ -18,10 +18,9 @@ basis_v7_tensor* basis_v7_input(basis_ir_graph* g, size_t r, size_t c, const dou
     size_t elements = r * c;
     // Allocate data buffer on the arena!
     n->runtime_data = (double*)basis_arena_alloc(g->arena, elements * sizeof(double), 32);
-    if (initial_data) {
-        memcpy(n->runtime_data, initial_data, elements * sizeof(double));
-    } else {
-        memset(n->runtime_data, 0, elements * sizeof(double));
+    if (n->runtime_data) {
+        if (initial_data) memcpy(n->runtime_data, initial_data, elements * sizeof(double));
+        else memset(n->runtime_data, 0, elements * sizeof(double));
     }
     return create_v7_tensor(g, n);
 }

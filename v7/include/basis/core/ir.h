@@ -18,7 +18,11 @@ typedef enum {
     BASIS_IR_OP_SOFTMAX,
     BASIS_IR_OP_SUM,
     BASIS_IR_OP_BROADCAST,
-    BASIS_IR_OP_RELU_BWD
+    BASIS_IR_OP_RELU_BWD,
+    BASIS_IR_OP_SUM_AXIS0,
+    BASIS_IR_OP_SUM_AXIS1,
+    BASIS_IR_OP_TRANSPOSE_BWD,
+    BASIS_IR_OP_SOFTMAX_BWD
 } basis_ir_opcode;
 
 // Immutable Node: Inputs are const pointers. Once created, a node cannot be mutated.
@@ -61,6 +65,9 @@ basis_ir_node* basis_ir_sub(basis_ir_graph* g, const basis_ir_node* a, const bas
 basis_ir_node* basis_ir_transpose(basis_ir_graph* g, const basis_ir_node* a);
 basis_ir_node* basis_ir_sum(basis_ir_graph* g, const basis_ir_node* a);
 basis_ir_node* basis_ir_broadcast(basis_ir_graph* g, const basis_ir_node* a, size_t r, size_t c);
+basis_ir_node* basis_ir_sum_axis0(basis_ir_graph* g, const basis_ir_node* a);
+basis_ir_node* basis_ir_sum_axis1(basis_ir_graph* g, const basis_ir_node* a);
+basis_ir_node* basis_ir_softmax_bwd(basis_ir_graph* g, const basis_ir_node* grad, const basis_ir_node* fwd_y);
 basis_ir_node* basis_ir_relu_bwd(basis_ir_graph* g, const basis_ir_node* grad, const basis_ir_node* fwd_a);
 basis_ir_node* basis_ir_softmax(basis_ir_graph* g, const basis_ir_node* a);
 

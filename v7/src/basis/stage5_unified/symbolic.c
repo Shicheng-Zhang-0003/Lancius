@@ -13,6 +13,7 @@ static char* basis_symbol_string_duplicate(const char* source_string) {
 
 static basis_symbol* basis_symbol_new(basis_symbol_type type) {
     basis_symbol* new_symbol = (basis_symbol*)malloc(sizeof(basis_symbol));
+    if (!new_symbol) return NULL;
     new_symbol->type = type; new_symbol->name = NULL; new_symbol->operation = NULL;
     new_symbol->basis_value = 0.0; new_symbol->arguments = NULL; new_symbol->argument_count = 0;
     return new_symbol;
@@ -92,6 +93,7 @@ basis_symbol* basis_symbol_copy(basis_symbol* source_symbol) {
 }
 
 basis_symbol* basis_symbol_differentiation(basis_symbol* source_symbol, char* variable_name) {
+    if (!source_symbol) return NULL;
     if (source_symbol->type == basis_symbol_type_constant) return basis_symbol_constant(0.0);
     if (source_symbol->type == basis_symbol_type_variable) return (strcmp(source_symbol->name, variable_name) == 0) ? basis_symbol_constant(1.0) : basis_symbol_constant(0.0);
     if (source_symbol->type == basis_symbol_type_operation) {

@@ -1,0 +1,43 @@
+# ==========================================
+# BASIS V7 .gitignore
+# ==========================================
+
+# Build Artifacts
+*.o
+*.so
+*.a
+*.out
+*.dSYM/
+
+# Compiled Test Binaries
+test_v5_suite
+test_v7_*
+
+# Compiled Example Binaries
+bundle_model
+compile_mlp
+deploy_xor
+trace_mlp
+train_mlp_aot
+train_burgers
+train_pinn
+test_swarm
+test_global
+standalone_model
+
+# Generated C code, Weights, and Scratch files
+*.basis
+ghost_model.c
+ghost_model.so
+v7_kernel.c
+v7_kernel.so
+standalone_model.c
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
