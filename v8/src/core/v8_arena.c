@@ -49,7 +49,7 @@ void* v8_arena_alloc(v8_arena* a, size_t size, size_t alignment) {
     if (b->used + pad + size > b->size) {
         size_t new_size = size + alignment > a->default_block_size ? size + alignment : a->default_block_size;
         v8_block* nb = block_create(new_size);
-        if (!nb) return NULL;
+        if (!nb) { fprintf(stderr, "[ARENA FATAL] Failed to allocate block of size %zu!\n", new_size); return NULL; }
         b->next = nb;
         a->current = nb;
         b = nb;

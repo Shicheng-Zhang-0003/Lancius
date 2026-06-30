@@ -24,8 +24,8 @@ v8_program* v8_compile_graph(v8_graph* g) {
     for (uint32_t i = 0; i < g->node_count; i++) {
         v8_node* n = g->nodes[i];
         reg_map[n->id] = i;
-        prog->rows[i] = n->rows;
-        prog->cols[i] = n->cols;
+        prog->rows[i] = n->shape[0];
+        prog->cols[i] = n->shape[1];
         if (n->op == V8_OP_INPUT) prog->input_regs[prog->input_count++] = i;
     }
 
