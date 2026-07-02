@@ -1,0 +1,57 @@
+============================================================
+================================================================
+  BASIS V10: CIFAR-10 Notepad (Same Padding + He Init)
+================================================================
+
+[2/5] Loaded 50000 training images, 10000 test images.
+[3/5] Compiling Backward Pass & Scheduling Waves...
+[V9] Running Graph Optimizations...
+[V9 OPTIMIZER] Fused 2 Conv2D+ReLU patterns. Arena memory saved.
+[4/5] Training for 30 Epochs (Batch Size: 32)...
+
+  Epoch 1 | Loss: 1.6399 | lr: 0.000300
+  Epoch 2 | Loss: 1.3083 | lr: 0.000300
+  Epoch 3 | Loss: 1.1709 | lr: 0.000300
+  Epoch 4 | Loss: 1.0875 | lr: 0.000300
+  Epoch 5 | Loss: 1.0251 | lr: 0.000300
+  Epoch 6 | Loss: 0.9821 | lr: 0.000300
+  Epoch 7 | Loss: 0.9372 | lr: 0.000300
+  Epoch 8 | Loss: 0.9050 | lr: 0.000300
+  Epoch 9 | Loss: 0.8672 | lr: 0.000300
+  Epoch 10 | Loss: 0.8412 | lr: 0.000300
+  Epoch 11 | Loss: 0.8184 | lr: 0.000300
+  Epoch 12 | Loss: 0.7923 | lr: 0.000300
+  Epoch 13 | Loss: 0.7641 | lr: 0.000300
+  Epoch 14 | Loss: 0.7452 | lr: 0.000300
+  Epoch 15 | Loss: 0.7171 | lr: 0.000300
+  [SCHEDULER] Learning rate decayed to 0.000150
+  Epoch 16 | Loss: 0.6619 | lr: 0.000150
+  Epoch 17 | Loss: 0.6478 | lr: 0.000150
+  Epoch 18 | Loss: 0.6316 | lr: 0.000150
+  Epoch 19 | Loss: 0.6205 | lr: 0.000150
+  Epoch 20 | Loss: 0.6102 | lr: 0.000150
+  Epoch 21 | Loss: 0.5972 | lr: 0.000150
+  Epoch 22 | Loss: 0.5845 | lr: 0.000150
+  Epoch 23 | Loss: 0.5706 | lr: 0.000150
+  Epoch 24 | Loss: 0.5647 | lr: 0.000150
+  Epoch 25 | Loss: 0.5553 | lr: 0.000150
+  [SCHEDULER] Learning rate decayed to 0.000075
+  Epoch 26 | Loss: 0.5242 | lr: 0.000075
+  Epoch 27 | Loss: 0.5139 | lr: 0.000075
+  Epoch 28 | Loss: 0.5065 | lr: 0.000075
+  Epoch 29 | Loss: 0.5023 | lr: 0.000075
+  Epoch 30 | Loss: 0.4981 | lr: 0.000075
+
+[5/5] Evaluating on 10,000 Test Images...
+
+================================================================
+  FINAL TEST ACCURACY: 72.97% (7297 / 10000)
+================================================================
+
+[PATH B] Freezing trained inference model to 'cifar10_lenet.v8b'...
+[V8 SERIAL] Saved 23 nodes to cifar10_lenet.v8b
+
+================================================================
+  V10 CIFAR-10 NOTEPAD COMPLETE. EDGE DEPLOYMENT READY.
+================================================================
+
