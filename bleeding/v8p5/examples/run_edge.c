@@ -1,4 +1,4 @@
-#include <basis.h>
+#include <lancius.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,12 +7,12 @@
 // We load the model from disk. No training code here.
 int main(int argc, char** argv) {
     printf("================================================================\n");
-    printf("  BASIS V8: EDGE DEPLOYMENT RUNNER (Standalone)              \n");
+    printf("  Lancius: EDGE DEPLOYMENT RUNNER (Standalone)              \n");
     printf("================================================================\n\n");
 
-    const char* model_path = argc > 1 ? argv[1] : "cifar10_lenet.v8b";
+    const char* model_path = argc > 1 ? argv[1] : "cifar10_lenet.lancius";
     printf("[1/3] Loading model from '%s'...\n", model_path);
-    v8_graph* g = v8_graph_load(model_path);
+    lancius_graph* g = lancius_graph_load(model_path);
     if (!g) {
         printf("FATAL: Failed to load model. Did you run training first?\n");
         return 1;
@@ -21,19 +21,22 @@ int main(int argc, char** argv) {
 
     printf("[2/3] Compiling Inference Schedule...\n");
     printf("[V9] Running Graph Optimizations...\n");
-    v8_optimize_fusion(g);
-    v8_schedule* sched = v8_ir_schedule(g);
-    v8_arena* scratch = v8_arena_create(64 * 1024 * 1024);
+    lancius_optimize_fusion(g);
+    lancius_schedule* sched = lancius_ir_schedule(g);
+    size_t peak_mem = lancius_schedule_peak_memory(sched);
+    size_t arena_size = (peak_mem * 2) + (1024 * 1024); // 2x safety margin + 1MB base
+    printf("  🧠 Liveness Analyzer: Peak Memory = %zu bytes (%.2f KB)\n", peak_mem, peak_mem / 1024.0);
+    lancius_arena* scratch = lancius_arena_create(arena_size);
 
     // Find the Input Node (X) and Output Node (Logits)
-    v8_node* input_node = NULL;
-    v8_node* output_node = NULL;
+    lancius_node* input_node = NULL;
+    lancius_node* output_node = NULL;
     for(uint32_t i=0; i<g->node_count; i++) {
-        v8_node* n = g->nodes[i];
-        if (n->op == V8_OP_INPUT && n->ndim == 4 && n->shape[1] == 3 && n->shape[2] == 32) input_node = n;
-        if (n->op == V8_OP_CROSS_ENTROPY) {
-                output_node = (v8_node*)n->inputs[0]; // Native V8: Logits are input to CE
-            } else if (n->ndim == 2 && n->shape[1] == 10 && n->op != V8_OP_INPUT) {
+        lancius_node* n = g->nodes[i];
+        if (n->op == LANCIUS_OP_INPUT && n->ndim == 4 && n->shape[1] == 3 && n->shape[2] == 32) input_node = n;
+        if (n->op == LANCIUS_OP_CROSS_ENTROPY) {
+                output_node = (lancius_node*)n->inputs[0]; // Native LANCIUS: Logits are input to CE
+            } else if (n->ndim == 2 && n->shape[1] == 10 && n->op != LANCIUS_OP_INPUT) {
                 output_node = n; // V12 ONNX FIX: Final node with 10 classes is the output
             }
     }
@@ -47,7 +50,7 @@ int main(int argc, char** argv) {
     printf("[3/3] Running Inference on Random Noise (Batch Size: %zu)...\n", batch_size);
 
     // Allocate input buffer matching the loaded model's EXACT expected shape
-    size_t in_size = v8_node_elements(input_node);
+    size_t in_size = lancius_node_elements(input_node);
     input_node->runtime_data = (double*)calloc(in_size, sizeof(double));
 
     // Fill with random noise to simulate a batch of images
@@ -58,10 +61,10 @@ int main(int argc, char** argv) {
     input_node->scale = max_in / 127.0;
     input_node->runtime_data_int8 = (int8_t*)malloc(in_size);
     for(size_t i=0; i<in_size; i++) input_node->runtime_data_int8[i] = (int8_t)round(input_node->runtime_data[i] / input_node->scale);
-    input_node->dtype = V8_DTYPE_INT8;
+    input_node->dtype = LANCIUS_DTYPE_INT8;
 
     // Execute
-    v8_schedule_execute(sched, scratch);
+    lancius_schedule_execute(sched, scratch);
 
     // Read Output
     if (output_node->runtime_data) {
@@ -90,9 +93,9 @@ int main(int argc, char** argv) {
     // Cleanup
     free(input_node->runtime_data);
     if(input_node->runtime_data_int8) free(input_node->runtime_data_int8);
-    v8_schedule_destroy(sched);
-    v8_graph_destroy(g);
-    v8_arena_destroy(scratch);
+    lancius_schedule_destroy(sched);
+    lancius_graph_destroy(g);
+    lancius_arena_destroy(scratch);
 
     printf("\n================================================================\n");
     printf("  EDGE DEPLOYMENT VERIFIED. MODEL IS PORTABLE.\n");
