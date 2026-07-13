@@ -1,0 +1,43 @@
+# ==========================================
+# DATASETS (Never push binary data)
+# ==========================================
+*.tar.gz
+*.bin
+*.ubyte
+data/
+cifar-10-batches-bin/
+
+# ==========================================
+# BUILD ARTIFACTS & MODELS
+# ==========================================
+*.o
+*.a
+*.so
+*.out
+*.lancius
+*.onnx
+*.gguf
+parity_input.bin
+baseline_out.bin
+lancius_out.bin
+
+# ==========================================
+# COMPILED EXECUTABLES
+# ==========================================
+train_mnist
+train_cifar10
+run_edge
+run_llm
+generate_text
+audit_*
+stress_test
+test_*
+fuzz_lancius
+parity_runner
+
+# ==========================================
+# PYTHON & MISC
+# ==========================================
+__pycache__/
+*.pyc
+.DS_Store
