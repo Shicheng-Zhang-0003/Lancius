@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Compiler Flags
-add_compile_options(-Wall -Wextra -O3 -march=native -mavx2 -mfma)
+add_compile_options(-Wall -Wextra -O3 -mavx2 -mfma)
 
 # Find OpenMP
 find_package(OpenMP REQUIRED)

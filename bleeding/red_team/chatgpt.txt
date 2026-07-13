@@ -1,0 +1,351 @@
+Alright. **CES scenario.**
+
+I walk past the booth.
+
+A few days ago I saw the old v9A1 prototype. At that point, the impression would have been:
+
+> "Interesting. A solo developer has built a custom C ML runtime with its own IR, scheduler, allocator, autodiff, and kernels. The architecture is ambitious, but the question is whether it can survive outside its own environment."
+
+Then I come back and I see **this**.
+
+![Image](https://images.openai.com/static-rsc-4/3qnXMfFgbodivAoj6B6X1SDGdmXWssW6sd38RmakLtBPZk4i2xFuKewD1tTo1Lr7mr8YY8T6ywJSgtr4JgGHWz8aZk250VX2EMHsNLqgjfreceg4VeIHBIYHDD0BxZ2S_v06bAbW_GgD4KUENAtAwGpaa4JgbC0Dgu6Wn8jqQRlvN7KN21OllYkdSr0eXE_C?purpose=fullsize)
+
+![Image](https://images.openai.com/static-rsc-4/mjyyhXoRVJQihSFIvqSohp9O29I19KGQ2yhb8EkzvvnNQYp5iSaXfhOiKZSY32auT1IDFWH0u8C_Jll2H3tcmjvflulusIj5A111XEZ3pCb5wSRkqFvTy2_DIxT2cPujNoJ7LEXZolQ1HuPG3G8u0u51jXgXnY9vty-CWm4C8yWjqZoUH7s4BaDFa32O7GDW?purpose=fullsize)
+
+![Image](https://images.openai.com/static-rsc-4/Hl_zKlxtWM90x2bF__mDcKmS-16VP0qwT-uI7P-cUwHwc-35hFr7Fqkgjq-9hXogweWL7rw0RwlzkK2xH9VLHRugfZnXBeeuubNuzviZxhqxsn-PACjzVgy3bXsb00o3YH6PYR6JDCkO5UDvZD1t7qCXgarIUvuopRz7DQujTbNuoT6brSu9bxc8uyIacr9P?purpose=fullsize)
+
+![Image](https://images.openai.com/static-rsc-4/t6YbT4uLuomz2V13wyDoAaxvcGN11YAr7hYEPbb_W2bYov-wueRFhtwrdXbgjaGAQeWY_LaF07iAWfXZbz9zbPx_GFO7TubY0bNpQueUseIiTpETRNx-kfah1ekBdgdZKq85LR_QmPaWWzV5gMSLSq4GKaqoHjhGOO7X1GfboPM3POgMEb0_vlnO9ozGyyBd?purpose=fullsize)
+
+![Image](https://images.openai.com/static-rsc-4/Qtma-uXbmS8RfCyimV7CXZ2uEDmvxLqQFPfuMNSrllOc1SRegcOfu61KcYlsra0IEb4tIcl_NfOf8a2t7SR3_5Ck9Fq_Ei8DxLldTWqZXEZjnPlXKRs8jRdJRxe40L4NsffE51wjNtI_yE5dsK9sqtCDrR-KNzL2Cfl6jPbkT5KD85QWSIyQScDpPLaYfHLu?purpose=fullsize)
+
+![Image](https://images.openai.com/static-rsc-4/1_LXhrNu83YCfWCFY77K71cdb5ZSqZ4Q62rJrV-A4rMaFXmRGM-q5tvSyMKeA-p2Zslsc9RRjrlGjkkXiyEVO1kbGGKQpCZJyI0gxPCt0zoUDmjUyUpXt0empeG0j4ShabanMTF2IaGqd5p_vi7CDrDivRo7LzYaYqF5agRvba8ecEoq8wgE63Bgj9aSCkGh?purpose=fullsize)
+
+The reaction changes.
+
+The first thing I would notice is not even the number of files. It is the **shift in intent**.
+
+This is no longer just:
+
+> "I wrote a neural network runtime."
+
+This is now:
+
+> "I built an entire ML execution stack."
+
+---
+
+# The biggest CES difference from v9A1
+
+The old question was:
+
+> "Can this work?"
+
+The v10A1 question becomes:
+
+> "What part of the ML ecosystem are you trying to replace?"
+
+Because now the stack has boundaries.
+
+I see:
+
+```
+Framework
+   |
+   v
+ONNX
+   |
+   v
+Lancius Compiler
+   |
+   v
+SSA IR
+   |
+   v
+Scheduler
+   |
+   v
+Runtime
+   |
+   v
+Hardware
+```
+
+That is a very different conversation.
+
+---
+
+# The thing that would catch my eye first
+
+Honestly?
+
+Not the transformer kernels.
+
+Not the INT8.
+
+Not even the arena allocator.
+
+It is this:
+
+```
+lancius_stable_api.h
+```
+
+That file tells me you started thinking like a platform engineer.
+
+Because every research project has:
+
+```
+cool internals
+```
+
+but every successful software platform needs:
+
+```
+stable boundary
+```
+
+The moment you have:
+
+```
+stable API
+       |
+       |
+changing internals
+```
+
+you can actually ship.
+
+---
+
+# The second thing
+
+I would ask:
+
+> "How much of this is real execution and how much is a demo?"
+
+Then you show:
+
+```
+audit_pytorch_parity.py
+
+ONNX Runtime baseline:
+0.01673414 ...
+
+Lancius:
+0.01673416 ...
+
+Error:
+5.22e-08
+```
+
+At that point the conversation changes.
+
+Because this is not:
+
+"Look, I made a graph executor."
+
+It is:
+
+"I recreated the execution behavior of a PyTorch-exported model in a custom C runtime."
+
+That is a serious systems milestone.
+
+---
+
+# The architecture I would be impressed by
+
+## 1. Immutable SSA IR
+
+This is the right direction.
+
+You are basically saying:
+
+"The graph is a compiled artifact, not a mutable Python object."
+
+That is the philosophy behind serious compiler systems.
+
+The benefit:
+
+```
+graph
+ |
+optimization
+ |
+schedule
+ |
+execute
+```
+
+instead of:
+
+```
+layer1.run()
+layer2.run()
+layer3.run()
+```
+
+---
+
+## 2. Wave Scheduler
+
+This is where I would start asking technical questions.
+
+Because this is the point where a toy runtime becomes a systems runtime.
+
+The interesting question:
+
+Can the scheduler exploit:
+
+```
+      Conv1
+      /   \
+   Relu   Add
+      \   /
+      MatMul
+```
+
+and execute independent branches simultaneously?
+
+If yes, now you are competing in compiler/runtime territory.
+
+---
+
+## 3. INT8 path
+
+This is probably the most commercially relevant part.
+
+Because nobody is desperately looking for:
+
+"another FP32 inference runtime."
+
+They are looking for:
+
+"how do I run this model faster and cheaper?"
+
+The pitch becomes:
+
+```
+same model
+less memory
+less bandwidth
+edge deployment
+```
+
+That is much stronger.
+
+---
+
+# But the CES reviewer in me would immediately challenge you
+
+I would not ask:
+
+"Can you add more features?"
+
+I would ask:
+
+## "Where is the contract?"
+
+Meaning:
+
+### Model format
+
+If I give you:
+
+```
+model.lancius
+```
+
+what guarantees exist?
+
+Can:
+
+```
+v10A1 runtime
+load v9S model?
+```
+
+Can:
+
+```
+v11 runtime
+load v10S model?
+```
+
+This is where the next versions matter.
+
+---
+
+# My biggest v10A1 critique
+
+The system is starting to look like a real compiler/runtime, but the documentation still sounds slightly like a research paper.
+
+The README says:
+
+> "immutable SSA IR graph"
+> "symbolic vector-Jacobian products"
+> "dependency-aware wave scheduling"
+
+Those are impressive.
+
+But a developer walking by asks:
+
+> "How do I run my model?"
+
+The first page needs:
+
+```
+5 minute example:
+
+pip install converter
+
+convert model.onnx
+
+./lancius_run model.lancius input.bin
+```
+
+The technology is ahead of the product presentation.
+
+---
+
+# The funny thing
+
+The old v9A1 booth would probably attract:
+
+* compiler people
+* C programmers
+* ML researchers
+
+The v10A1 booth attracts a different question:
+
+> "Could this replace a dependency stack?"
+
+That is a much more dangerous question.
+
+Because now people stop judging it as a project.
+
+They start judging it as infrastructure.
+
+---
+
+My CES verdict after seeing v10A1:
+
+**v9A1:**
+
+> "This developer built a surprisingly sophisticated ML engine."
+
+**v10A1:**
+
+> "This developer is attempting to build an alternative ML deployment stack."
+
+The remaining path to V1.0 is no longer about proving intelligence.
+
+It is about proving trust:
+
+* compatibility
+* stability
+* documentation
+* reproducibility
+* long-term maintenance
+
+And that is exactly why the A1 → A2 → A3 progression makes sense. You are past the "can it exist?" phase. You are entering the "can anyone rely on it?" phase.
+

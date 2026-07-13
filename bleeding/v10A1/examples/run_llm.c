@@ -42,7 +42,12 @@ int main() {
     gamma->runtime_data = (double*)calloc(heads * dim, sizeof(double));
     beta->runtime_data = (double*)calloc(heads * dim, sizeof(double));
 
-    for(size_t i=0; i<qkv_sz; i++) { Q_in->runtime_data[i] = 0.5; K_in->runtime_data[i] = 0.5; V_in->runtime_data[i] = 1.0; }
+    // V10A1 FIX: Inject variance so LayerNorm doesn't collapse to 0.0
+for(size_t i=0; i<qkv_sz; i++) {
+    Q_in->runtime_data[i] = 0.5 + 0.1 * i;
+    K_in->runtime_data[i] = 0.5 - 0.05 * i;
+    V_in->runtime_data[i] = 1.0 + 0.2 * i;
+}
     for(size_t i=0; i<heads*dim; i++) { gamma->runtime_data[i] = 1.0; beta->runtime_data[i] = 0.0; }
 
     printf("[1/2] Compiling Transformer Schedule...\n");

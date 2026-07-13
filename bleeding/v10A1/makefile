@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -g -Werror -O3 -march=native -mavx2 -mfma -fopenmp -std=c11 -I./include -fPIC
+CFLAGS = -Wall -Wextra -g -Werror -O3 -mavx2 -mfma -fopenmp -std=c11 -I./include -fPIC
 LDFLAGS = -lm
 
 SRCS = src/core/lancius_arena.c \

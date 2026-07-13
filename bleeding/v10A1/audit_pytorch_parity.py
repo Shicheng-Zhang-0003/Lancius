@@ -37,15 +37,15 @@ def main():
 
     # 3. Convert ONNX to Lancius
     print("[3/5] Converting ONNX to Lancius Binary...")
-    if not os.path.exists("pytorch_lenet.lancius"):
-        subprocess.run(["python3", "onnx_to_lancius.py"], check=True)
-    else:
-        print("      (Using existing pytorch_lenet.lancius)")
+    # V10A1 FIX: Always regenerate to prevent stale artifact divergence
+    if os.path.exists("pytorch_lenet.lancius"):
+        os.remove("pytorch_lenet.lancius")
+    subprocess.run(["python3", "onnx_to_lancius.py"], check=True)
 
     # 4. Compile and run C Parity Runner
     print("[4/5] Compiling and running Lancius C Engine...")
     compile_cmd = [
-        "gcc", "-O3", "-march=native", "-fopenmp", "-std=c11",
+        "gcc", "-O3", "-fopenmp", "-std=c11",
         "-I./include", "-o", "parity_runner",
         "examples/parity_runner.c", "liblancius.a", "-lm", "-lpthread"
     ]

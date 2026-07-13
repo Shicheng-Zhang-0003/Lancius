@@ -1,0 +1,69 @@
+*Setting: A high-end, high-stakes tech evaluation panel at CES. The floor is noisy, but inside this booth, the focus is pure, cold systems architecture. You are a solo developer presenting **Lancius**. We—the Red Team—are staring at your architectural schematics and implementation dumps. We aren't here to give you participation trophies; we are here to tell you where your engine will lock up, drop accuracy, or crash under real production scale, so that your Blue Team (Qwen) can fix it during this `v10A2` feature expansion wave.*
+
+---
+
+### 🚨 CES Red Team Evaluation Report: Lancius (`v10A2` Architecture Review)
+
+Look, what you’ve built as a solo developer with AI orchestrations is genuinely impressive. You successfully compiled an entire SSA graph engine, an offline memory planner, and crossed the bridge into GGUF. But let’s cut through the marketing slides. If you try to pitch this framework right now on the CES floor as a viable, bare-metal deployment engine for edge devices or modern LLMs, real systems engineers are going to tear it apart for three critical architectural flaws.
+
+Here is our ruthless critique of what is broken, sub-optimal, or hypocritical in the codebase at its current `v10A1` state, and exactly what the Blue Team needs to write next.
+
+---
+
+### Part 1: The Ruthless Critique
+
+#### 1. The Core Memory Hypocrisy: Runtime `malloc` in the KV-Cache Kernel
+
+Your README boasts an "$O(1)$ Block-Arena Allocator" designed to "completely eliminate execution-loop allocation overhead". That looks beautiful on paper. But when we look into your actual execution kernels—specifically `kernel_attention_kv_cache` inside your math subsystem—we see this:
+
+```c
+double* scores = (double*)malloc(seq_len * sizeof(double));
+
+```
+
+This is a critical failure of framework discipline. You are calling standard heap allocation *inside* an active, tight autoregressive generation loop step. If a model runs a context window of 4096 tokens, you are invoking system-level `malloc` and subsequent `free` operations thousands of times sequentially. This completely invalidates your static memory liveness planner and introduces runtime non-determinism, heap fragmentation, and kernel slowdowns.
+
+#### 2. The Per-Tensor Quantization Trap
+
+Your quantizer (`lancius_quantize.c`) and your ecosystem bridge (`lancius_bridge.py`) are trying to feed tensors to GGUF using an integer 8-bit (`GGML_TYPE_Q8_0`) target format. However, your quantization pre-pass calculates a single, uniform floating-point scale factor across an *entire multi-dimensional tensor* based on its global absolute maximum value.
+While this works fine for a tiny convolutional toy like LeNet processing MNIST, modern Large Language Models display massive activation and weight distribution "outliers" (specific hidden dimensions that spike dramatically in value). By using a single global scale factor per tensor, you will completely squish and destroy the numerical resolution of the remaining 99% of your weights. Your model's accuracy will tank, and your outputs will degrade into random noise or NaN loops.
+
+#### 3. "Passive" SIMD Optimization on Transcendental Functions
+
+Your build script activates `-mavx2` and `-mfma`, and your matrix multiplication functions feature hand-crafted vector steps. But look closely at your SwiGLU activation kernel (`kernel_swiglu`):
+
+```c
+for(size_t i = 0; i < elements; i++) {
+    double g = gate[i];
+    double silu = g / (1.0 + exp(-g));
+    out[i] = silu * up[i];
+}
+
+```
+
+You are relying purely on passive compiler auto-vectorization to handle a sequential loop containing a transcendental `exp(-g)` call. Standard compilers (like GCC or Clang) rarely vectorize loops containing `<math.h>` exponential functions efficiently without aggressive fast-math flags that break safety boundaries. This loop will run as sequential scalar operations, creating a massive bottleneck directly inside the Feed-Forward Network (FFN) blocks of your architecture—the exact blocks where models spend a massive chunk of their non-attention compute cycles.
+
+---
+
+### Part 2: The Blue Team Blueprint (What Qwen Must Build in `v10A2`)
+
+Since `v10A2` is your designated feature expansion milestone where you add structural capabilities, you must task the Blue Team (Qwen) with executing these exact upgrades. Do not let Qwen move the codebase to `v10A3` until these fixes are committed.
+
+#### Task 1: Eradicate Runtime Heap Calls from Attention Kernels
+
+* **The Mandate:** Modify `kernel_attention_kv_cache` to enforce zero internal dynamic memory management.
+* **Implementation Plan:** Rewrite the function signature to accept a pre-allocated scratch memory pointer passed directly from your `lancius_arena` context. Alternatively, have your static liveness analyzer (`lancius_memory_planner.c`) calculate the peak `seq_len * sizeof(double)` requirements ahead of time and map it directly into the graph's execution wave lifecycle.
+
+#### Task 2: Implement Block-Wise Quantization Granularity
+
+* **The Mandate:** Upgrade your quantization pipeline to align with standard industry practices for model compression.
+* **Implementation Plan:** Change the engine from per-tensor scaling to **Block-Wise Quantization** (e.g., dividing your weight rows into blocks of 32 or 256 elements). Calculate an independent scaling factor for each block. This keeps outliers isolated and preserves fine-grained weight distributions, preventing your model's accuracy from collapsing.
+
+#### Task 3: Write Hand-Rolled AVX2 Intrinsics for Vector Math Activation Layers
+
+* **The Mandate:** Remove reliance on compiler guesswork for transcendental activation functions.
+* **Implementation Plan:** Have Qwen rewrite `kernel_swiglu` using explicit AVX2 vector intrinsics (`_mm256_load_pd`, `_mm256_mul_pd`). Because `exp` doesn't have a direct hardware intrinsic in AVX2, use a vectorized Taylor series expansion or a Padé approximation to calculate the Sigmoid/SiLU values 4 double-precision elements (or 8 single-precision elements) at a time in parallel.
+
+---
+
+*Red Team Verdict: The base skeleton of Lancius is incredibly solid. But if you want to hold your head high at a tech showcase, your codebase must stick to its own rules. Hand this report to the Blue Team (Qwen), tell them to clean up the runtime memory leaks in the kernels, harden the quantization resolution, and optimize the vector pipelines. Let us see what `v10A2` looks like when it's actually finished.*
