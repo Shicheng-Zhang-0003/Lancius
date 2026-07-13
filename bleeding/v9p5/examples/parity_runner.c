@@ -40,7 +40,7 @@ if(!in_node || !out_node) {
     float* temp_in = (float*)malloc(in_elems * sizeof(float));
     FILE* f_in = fopen("parity_input.bin", "rb");
     if(!f_in) { printf("  [C] FATAL: Missing parity_input.bin\n"); return 1; }
-    fread(temp_in, sizeof(float), in_elems, f_in);
+    size_t _r = fread(temp_in, sizeof(float), in_elems, f_in); (void)_r;
     fclose(f_in);
 
     // V1.0 FIX: Explicitly allocate memory for the input node before writing
@@ -65,6 +65,14 @@ if(!in_node || !out_node) {
     free(temp_out);
 
     // Cleanup
+    // V1.0 ASAN FIX: Free heap-allocated INPUT data (Weights + Input Image)
+    for(uint32_t i=0; i<g->node_count; i++) {
+        if (g->nodes[i]->op == LANCIUS_OP_INPUT) {
+            if (g->nodes[i]->runtime_data) free(g->nodes[i]->runtime_data);
+            if (g->nodes[i]->runtime_data_int8) free(g->nodes[i]->runtime_data_int8);
+        }
+    }
+
     lancius_schedule_destroy(sched);
     lancius_arena_destroy(scratch);
     lancius_graph_destroy(g);
