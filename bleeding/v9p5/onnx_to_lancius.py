@@ -47,11 +47,18 @@ def convert(onnx_path, lancius_path):
     for init in graph.initializer:
         data = numpy_helper.to_array(init).astype(np.float64)
         shape = list(data.shape)
+
+        # V15 FIX: Force 1D biases to be [1, N] so they match MatMul output [1, N]
+        calc_ndim = len(data.shape)
+        if len(shape) == 1 and 'bias' in init.name:
+            shape = [1, shape[0]]
+            calc_ndim = 2
+
         while len(shape) < 4:
             shape.append(1)
         shape = shape[:4]
         nodes.append({
-            'id': next_id, 'op': 1, 'ndim': len(data.shape), 'shape': shape,
+            'id': next_id, 'op': 1, 'ndim': calc_ndim, 'shape': shape,
             'inputs': [], 'attr': 0.0, 'meta': [0,0,0,0], 'axes': [0,0,0,0],
             'weights': data.tobytes(), 'dtype': 0, 'scale': 1.0
         })
@@ -184,7 +191,7 @@ def convert(onnx_path, lancius_path):
             if len(node.input) == 3 and node.input[2] in name_to_id:
                 bias_id = name_to_id[node.input[2]]
                 nodes.append({
-                    'id': next_id, 'op': 3, 'ndim': len([s for s in out_shape if s > 0]), 'shape': out_shape,
+                    'id': next_id, 'op': 3, 'ndim': 2, 'shape': out_shape,
                     'inputs': [matmul_id, bias_id], 'attr': 0.0, 'meta': [0,0,0,0], 'axes': [0,0,0,0],
                     'weights': None, 'dtype': 0, 'scale': 1.0
                 })
@@ -207,8 +214,13 @@ def convert(onnx_path, lancius_path):
                 name_to_id[node.output[0]] = next_id
                 next_id += 1
         else:
+            # V15 FIX: Force ndim=2 for Reshape to match C MatMul expectations
+            calc_ndim = len([s for s in out_shape if s > 0])
+            if node.op_type == 'Reshape':
+                calc_ndim = 2
+
             nodes.append({
-                'id': next_id, 'op': op, 'ndim': len([s for s in out_shape if s > 0]), 'shape': out_shape,
+                'id': next_id, 'op': op, 'ndim': calc_ndim, 'shape': out_shape,
                 'inputs': inputs, 'attr': 0.0, 'meta': meta, 'axes': [0,0,0,0],
                 'weights': None, 'dtype': 0, 'scale': 1.0
             })

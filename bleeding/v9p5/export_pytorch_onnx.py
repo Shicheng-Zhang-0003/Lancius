@@ -5,9 +5,9 @@ import torch.onnx
 class LeNet(nn.Module):
     def __init__(self):
         super(LeNet, self).__init__()
-        self.conv1 = nn.Conv2d(3, 16, 5, padding=2)
+        self.conv1 = nn.Conv2d(3, 16, 5, padding=2, bias=False)
         self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(16, 32, 5, padding=2)
+        self.conv2 = nn.Conv2d(16, 32, 5, padding=2, bias=False)
         self.fc1 = nn.Linear(32 * 8 * 8, 120)
         self.fc2 = nn.Linear(120, 10)
 
