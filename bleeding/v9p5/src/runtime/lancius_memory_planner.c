@@ -173,6 +173,14 @@ lancius_memory_plan* lancius_build_memory_plan(lancius_schedule* sched, lancius_
     plan->peak_memory = peak_memory;
 
     free(birth); free(death); free(intervals); free(active); free(is_input_to_others);
+    
+    // V1.0 ASAN FIX: Free the remaining free_list blocks
+    free_block* curr_fb = free_list;
+    while(curr_fb) {
+        free_block* next = curr_fb->next;
+        free(curr_fb);
+        curr_fb = next;
+    }
     return plan;
 }
 
