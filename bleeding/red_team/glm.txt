@@ -1,0 +1,60 @@
+Understood. The nomenclature shift caught us both, but looking at the roadmap you literally just wrote in `readme_new.md`, the path forward is crystal clear.
+
+You just finished **v10A1 (Ecosystem & Developer Alpha)**.
+You are now entering **v10A2 (Adversarial Alpha)**.
+
+Your own documentation says the goal of v10A2 is: *"Attempt to break the system before release."*
+
+You have proven the math is perfect and the memory is safe on the *happy path*. v10A2 is about proving it doesn't collapse on the *unhappy paths*. Zero new features. Just a magnifying glass on the existing architecture.
+
+Here is your strict, 5-point v10A2 checklist.
+
+---
+
+### 1. The Diamond Graph Memory Corruptor (The ResNet Test)
+You proved the memory planner works on a 20-node *sequential* chain. That's easy. Memory planners die on "skip connections" (ResNets).
+*   **The Task:** Write `test_diamond_memory.c` that builds this graph:
+    `Input -> Conv1 -> ReLU -> Add -> Output`
+    `Input ----------------------^`
+*   **The Threat:** The memory planner might decide to overwrite `Input`'s buffer to allocate memory for `ReLU`, but `Add` still needs to read `Input`.
+*   **The Proof:** Attach the memory pool, execute the graph, and verify the output is mathematically correct. If it segfaults or outputs garbage, your memory planner has a liveness bug.
+
+### 2. The Trained Model Reality Check
+Your `audit_pytorch_parity.py` used `np.random.randn` weights. That proves your *kernels* match. It does not prove your *deployment pipeline* works.
+*   **The Task:**
+    1. Write a 10-line PyTorch script to train `export_pytorch_onnx.py`'s LeNet on CIFAR-10 for **exactly 1 epoch**.
+    2. Save the state dict.
+    3. Export to ONNX.
+    4. Run it through `onnx_to_lancius.py`.
+    5. Run it in `run_edge`.
+*   **The Proof:** Feed the exact same image into PyTorch and into Lancius. Do they predict the *exact same class*? (Don't worry about logit magnitude, just Argmax class match). Real weights have very different distributions than random weights.
+
+### 3. Kill the MNIST Negative Loss Bug (Once and For All)
+This has been hiding in the background since v8p5. You cannot ship V1.0 with a training tutorial that prints `Loss: -21.0407`. It destroys trust instantly.
+*   **The Task:** Open `examples/train_mnist.c` and `src/math/lancius_autodiff.c`. Trace the Cross-Entropy (or MSE) implementation.
+*   **The Proof:** `./train_mnist` must print a positive, decreasing loss. If it's a signed error in the loss calculation, fix it. If it's just a negative scaling factor in the print statement, fix the print statement.
+
+### 4. Show Me the NaN Injection Output
+You added `audit_nan_injection.c` in v9S, but I have never seen it execute. Injecting NaN into a forward pass is easy; injecting it into a *backward pass* is where autodiff engines explode.
+*   **The Task:** Ensure `audit_nan_injection.c` runs the full autodiff backward pass over the NaN-injected weights.
+*   **The Proof:** Run it. I want to see the terminal output proving it didn't hang, didn't segfault, and correctly propagated the NaN to the gradient without corrupting the arena.
+
+### 5. FFI Error Boundary Validation
+You built a beautiful opaque-pointer API (`lancius_stable_api.h`). But what happens when a user makes a mistake?
+*   **The Task:** Modify or write a tiny test that intentionally calls `lancius_add_matmul(g, A, A)` where `A` is shape `[2, 3]`.
+*   **The Proof:** Call `lancius_get_last_error()`. Does it return `NULL` (and segfault when you print it)? Or does it return a clean, readable C-string like `"Error: MatMul shape mismatch. Expected [2, 3] x [3, X], got [2, 3] x [2, 3]"`? If it crashes, your FFI is not safe for external binding.
+
+---
+
+### The Exit Criteria for v10A2
+
+You are not allowed to start v10A3 until:
+1. The diamond graph executes without memory corruption.
+2. A PyTorch-trained model predicts the same classes in Lancius as it does in PyTorch.
+3. `train_mnist` prints `Loss: 0.XXXX`.
+4. `audit_nan_injection` completes without hanging.
+5. The FFI returns a string on shape mismatch, not a segfault.
+
+Take a breath. You just finished a massive v10A1. This next phase is shorter, but it requires you to put on the black hat and try to destroy your own engine.
+
+Go break it.
