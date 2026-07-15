@@ -1,351 +1,376 @@
-Alright. **CES scenario.**
+**CES. Day 3.**
 
-I walk past the booth.
+I stop by your booth again.
 
-A few days ago I saw the old v9A1 prototype. At that point, the impression would have been:
+Three days ago I saw **v10A1**. Today you're showing me **v10A2**.
 
-> "Interesting. A solo developer has built a custom C ML runtime with its own IR, scheduler, allocator, autodiff, and kernels. The architecture is ambitious, but the question is whether it can survive outside its own environment."
+I spend about twenty minutes looking through the architecture, the test suite, and asking questions.
 
-Then I come back and I see **this**.
-
-![Image](https://images.openai.com/static-rsc-4/3qnXMfFgbodivAoj6B6X1SDGdmXWssW6sd38RmakLtBPZk4i2xFuKewD1tTo1Lr7mr8YY8T6ywJSgtr4JgGHWz8aZk250VX2EMHsNLqgjfreceg4VeIHBIYHDD0BxZ2S_v06bAbW_GgD4KUENAtAwGpaa4JgbC0Dgu6Wn8jqQRlvN7KN21OllYkdSr0eXE_C?purpose=fullsize)
-
-![Image](https://images.openai.com/static-rsc-4/mjyyhXoRVJQihSFIvqSohp9O29I19KGQ2yhb8EkzvvnNQYp5iSaXfhOiKZSY32auT1IDFWH0u8C_Jll2H3tcmjvflulusIj5A111XEZ3pCb5wSRkqFvTy2_DIxT2cPujNoJ7LEXZolQ1HuPG3G8u0u51jXgXnY9vty-CWm4C8yWjqZoUH7s4BaDFa32O7GDW?purpose=fullsize)
-
-![Image](https://images.openai.com/static-rsc-4/Hl_zKlxtWM90x2bF__mDcKmS-16VP0qwT-uI7P-cUwHwc-35hFr7Fqkgjq-9hXogweWL7rw0RwlzkK2xH9VLHRugfZnXBeeuubNuzviZxhqxsn-PACjzVgy3bXsb00o3YH6PYR6JDCkO5UDvZD1t7qCXgarIUvuopRz7DQujTbNuoT6brSu9bxc8uyIacr9P?purpose=fullsize)
-
-![Image](https://images.openai.com/static-rsc-4/t6YbT4uLuomz2V13wyDoAaxvcGN11YAr7hYEPbb_W2bYov-wueRFhtwrdXbgjaGAQeWY_LaF07iAWfXZbz9zbPx_GFO7TubY0bNpQueUseIiTpETRNx-kfah1ekBdgdZKq85LR_QmPaWWzV5gMSLSq4GKaqoHjhGOO7X1GfboPM3POgMEb0_vlnO9ozGyyBd?purpose=fullsize)
-
-![Image](https://images.openai.com/static-rsc-4/Qtma-uXbmS8RfCyimV7CXZ2uEDmvxLqQFPfuMNSrllOc1SRegcOfu61KcYlsra0IEb4tIcl_NfOf8a2t7SR3_5Ck9Fq_Ei8DxLldTWqZXEZjnPlXKRs8jRdJRxe40L4NsffE51wjNtI_yE5dsK9sqtCDrR-KNzL2Cfl6jPbkT5KD85QWSIyQScDpPLaYfHLu?purpose=fullsize)
-
-![Image](https://images.openai.com/static-rsc-4/1_LXhrNu83YCfWCFY77K71cdb5ZSqZ4Q62rJrV-A4rMaFXmRGM-q5tvSyMKeA-p2Zslsc9RRjrlGjkkXiyEVO1kbGGKQpCZJyI0gxPCt0zoUDmjUyUpXt0empeG0j4ShabanMTF2IaGqd5p_vi7CDrDivRo7LzYaYqF5agRvba8ecEoq8wgE63Bgj9aSCkGh?purpose=fullsize)
-
-The reaction changes.
-
-The first thing I would notice is not even the number of files. It is the **shift in intent**.
-
-This is no longer just:
-
-> "I wrote a neural network runtime."
-
-This is now:
-
-> "I built an entire ML execution stack."
+Then I turn to you and say:
 
 ---
 
-# The biggest CES difference from v9A1
+*"You're making the right mistake."*
 
-The old question was:
+Not because the code is wrong.
 
-> "Can this work?"
+Because you're still thinking like the person who built Lancius.
 
-The v10A1 question becomes:
-
-> "What part of the ML ecosystem are you trying to replace?"
-
-Because now the stack has boundaries.
-
-I see:
-
-```
-Framework
-   |
-   v
-ONNX
-   |
-   v
-Lancius Compiler
-   |
-   v
-SSA IR
-   |
-   v
-Scheduler
-   |
-   v
-Runtime
-   |
-   v
-Hardware
-```
-
-That is a very different conversation.
+v10A3 needs to start thinking like the person who **didn't** build Lancius.
 
 ---
 
-# The thing that would catch my eye first
+## The biggest shift
+
+When I first saw Lancius, I was asking:
+
+> Can this engine work?
+
+At v10A1 I was asking:
+
+> Can this become a platform?
+
+At v10A2 I'm asking something completely different:
+
+> **Can someone else trust this?**
+
+Those are very different questions.
+
+---
+
+# The architecture is no longer the problem.
 
 Honestly?
 
-Not the transformer kernels.
+I think you've crossed that bridge.
 
-Not the INT8.
+The runtime exists.
 
-Not even the arena allocator.
+The compiler exists.
 
-It is this:
+The scheduler exists.
 
-```
-lancius_stable_api.h
-```
+The memory planner exists.
 
-That file tells me you started thinking like a platform engineer.
+The API exists.
 
-Because every research project has:
+The validation infrastructure exists.
 
-```
-cool internals
-```
+The parity testing exists.
 
-but every successful software platform needs:
+The transformer work exists.
 
-```
-stable boundary
-```
+The question is no longer:
 
-The moment you have:
+> "Can Lancius execute?"
 
-```
-stable API
-       |
-       |
-changing internals
-```
+The question is:
 
-you can actually ship.
+> "Can someone build their own software on top of Lancius without talking to you?"
 
 ---
 
-# The second thing
+# That's what v10A3 needs to answer.
 
-I would ask:
+If I were defining the milestone, I wouldn't add another major subsystem.
 
-> "How much of this is real execution and how much is a demo?"
-
-Then you show:
-
-```
-audit_pytorch_parity.py
-
-ONNX Runtime baseline:
-0.01673414 ...
-
-Lancius:
-0.01673416 ...
-
-Error:
-5.22e-08
-```
-
-At that point the conversation changes.
-
-Because this is not:
-
-"Look, I made a graph executor."
-
-It is:
-
-"I recreated the execution behavior of a PyTorch-exported model in a custom C runtime."
-
-That is a serious systems milestone.
+I'd make v10A3 about **confidence**.
 
 ---
 
-# The architecture I would be impressed by
+# 1. Freeze the public surface
 
-## 1. Immutable SSA IR
+Internally you can keep changing things forever.
 
-This is the right direction.
+Externally?
 
-You are basically saying:
+No.
 
-"The graph is a compiled artifact, not a mutable Python object."
+I would identify every function that becomes public.
 
-That is the philosophy behind serious compiler systems.
+Something like:
 
-The benefit:
+```c
+lancius_load()
 
+lancius_execute()
+
+lancius_tensor_create()
+
+lancius_tensor_destroy()
+
+lancius_context_create()
 ```
-graph
- |
-optimization
- |
-schedule
- |
-execute
-```
 
-instead of:
+Then ask:
 
-```
-layer1.run()
-layer2.run()
-layer3.run()
-```
+> If someone writes code against these today...
+
+Will it still compile against v10S?
+
+If not—
+
+don't expose it yet.
 
 ---
 
-## 2. Wave Scheduler
+# 2. Make every failure boring.
 
-This is where I would start asking technical questions.
+Right now you're still finding exciting bugs.
 
-Because this is the point where a toy runtime becomes a systems runtime.
+Those need to disappear.
 
-The interesting question:
+Every bad input should become:
 
-Can the scheduler exploit:
+```text
+Error.
 
+Reason.
+
+Location.
+
+Recovery.
 ```
-      Conv1
-      /   \
-   Relu   Add
-      \   /
-      MatMul
+
+Never:
+
+```text
+Segmentation fault.
 ```
 
-and execute independent branches simultaneously?
+Never:
 
-If yes, now you are competing in compiler/runtime territory.
+```text
+Unknown op...
+```
+
+Never:
+
+```text
+Aborted.
+```
+
+Professional runtimes fail predictably.
 
 ---
 
-## 3. INT8 path
+# 3. Documentation should become executable.
 
-This is probably the most commercially relevant part.
+This is something almost nobody does.
 
-Because nobody is desperately looking for:
+Every README example...
 
-"another FP32 inference runtime."
-
-They are looking for:
-
-"how do I run this model faster and cheaper?"
-
-The pitch becomes:
-
-```
-same model
-less memory
-less bandwidth
-edge deployment
+```c
+example1.c
 ```
 
-That is much stronger.
+should actually compile in CI.
+
+Every code snippet.
+
+Every API example.
+
+Every command.
+
+If documentation lies—
+
+users lose trust immediately.
 
 ---
 
-# But the CES reviewer in me would immediately challenge you
+# 4. Destroy your assumptions.
 
-I would not ask:
+You already have fuzzers.
 
-"Can you add more features?"
+Good.
 
-I would ask:
+Now start fuzzing things that *should never happen*.
 
-## "Where is the contract?"
+Random graphs.
 
-Meaning:
+Negative dimensions.
 
-### Model format
+Broken model headers.
 
-If I give you:
+Cycles.
 
-```
-model.lancius
-```
+Corrupted tensor metadata.
 
-what guarantees exist?
+Partially written files.
 
-Can:
+Random opcode streams.
 
-```
-v10A1 runtime
-load v9S model?
-```
-
-Can:
-
-```
-v11 runtime
-load v10S model?
-```
-
-This is where the next versions matter.
+Think like someone trying to crash your runtime on purpose.
 
 ---
 
-# My biggest v10A1 critique
+# 5. Version the ecosystem.
 
-The system is starting to look like a real compiler/runtime, but the documentation still sounds slightly like a research paper.
+This is the thing I keep coming back to.
 
-The README says:
-
-> "immutable SSA IR graph"
-> "symbolic vector-Jacobian products"
-> "dependency-aware wave scheduling"
-
-Those are impressive.
-
-But a developer walking by asks:
-
-> "How do I run my model?"
-
-The first page needs:
+I want to see something like:
 
 ```
-5 minute example:
+Lancius Binary Format
 
-pip install converter
+Magic
 
-convert model.onnx
+Version
 
-./lancius_run model.lancius input.bin
+IR Version
+
+Operator Set
+
+Minimum Runtime
+
+Checksum
 ```
 
-The technology is ahead of the product presentation.
+Once you ship V1.0...
+
+this becomes sacred.
 
 ---
 
-# The funny thing
+# 6. Build a "hello world" experience.
 
-The old v9A1 booth would probably attract:
+This is where I think the project is currently weakest.
 
-* compiler people
-* C programmers
-* ML researchers
+You're demonstrating architecture.
 
-The v10A1 booth attracts a different question:
+I want you to demonstrate usability.
 
-> "Could this replace a dependency stack?"
+Imagine I'm standing here.
 
-That is a much more dangerous question.
+I say:
 
-Because now people stop judging it as a project.
+"I have an ONNX model."
 
-They start judging it as infrastructure.
+How many commands until I can execute it?
+
+If the answer is:
+
+```
+python convert.py
+make
+./run model.lancius
+```
+
+Excellent.
+
+If the answer requires understanding your compiler internals—
+
+that's work for after V1.0.
 
 ---
 
-My CES verdict after seeing v10A1:
+# 7. Benchmark honestly.
 
-**v9A1:**
+Don't chase marketing numbers.
 
-> "This developer built a surprisingly sophisticated ML engine."
+Show me:
 
-**v10A1:**
+```
+Platform
 
-> "This developer is attempting to build an alternative ML deployment stack."
+CPU
 
-The remaining path to V1.0 is no longer about proving intelligence.
+Compiler
 
-It is about proving trust:
+Flags
 
-* compatibility
-* stability
-* documentation
-* reproducibility
-* long-term maintenance
+Model
 
-And that is exactly why the A1 → A2 → A3 progression makes sense. You are past the "can it exist?" phase. You are entering the "can anyone rely on it?" phase.
+Memory
+
+Latency
+
+Throughput
+```
+
+If Lancius is slower than ONNX Runtime in some workloads—
+
+say so.
+
+If it's faster in others—
+
+show why.
+
+Trust grows from transparency.
+
+---
+
+# 8. Decide what Lancius is.
+
+This is actually the biggest strategic question.
+
+Right now it is trying to be:
+
+* runtime
+* compiler
+* framework
+* training system
+* deployment engine
+* research platform
+
+That's okay during development.
+
+Before V1.0...
+
+I would write exactly one sentence.
+
+For example:
+
+> **"Lancius is a lightweight C11 machine learning runtime and compiler for deterministic deployment of neural network models."**
+
+Everything else becomes secondary.
+
+That sentence becomes the lens through which every new feature is judged.
+
+---
+
+# What I would *not* do
+
+I would not add:
+
+* CUDA
+* Vulkan
+* distributed inference
+* another optimizer
+* another model format
+* another scheduler
+
+Not yet.
+
+Because none of those solve the remaining risk.
+
+The remaining risk is **adoption**, not capability.
+
+---
+
+# My CES verdict
+
+If I saw v10A2 on the show floor, I would tell you this:
+
+> "You've reached the point where adding another subsystem makes the project *look* bigger, but not necessarily *better*."
+
+v10A3 should be the release where nothing flashy happens.
+
+Instead, every rough edge disappears.
+
+The API stops moving.
+
+The documentation becomes trustworthy.
+
+The model format becomes versioned.
+
+Every error message becomes intentional.
+
+Every example works.
+
+Every regression test passes.
+
+That's the release that quietly turns an impressive solo project into software that other engineers are willing to depend on.
+
+And if you do that well, **v10S won't feel like "the next version." It will feel like the moment Lancius graduates from being *your* runtime to becoming a runtime that belongs in other people's projects.**
 
