@@ -1,0 +1,34 @@
+# Compiled Objects
+*.o
+*.a
+*.so
+*.dylib
+
+# Executables
+train_mnist
+train_cifar10
+fuzz_lancius
+test_path_bg
+run_edge
+test_grad_check
+run_llm
+generate_text
+test_torture
+stress_test
+audit_internals
+audit_memory_pool
+audit_flash_attention
+audit_modern_llm
+audit_ffi
+audit_threadpool_parity
+audit_nan_injection
+test_diamond_memory
+soak_fuzz
+parity_runner
+run_trained_batch
+
+# Binaries and Artifacts
+*.lancius
+*.onnx
+*.gguf
+*.bin
