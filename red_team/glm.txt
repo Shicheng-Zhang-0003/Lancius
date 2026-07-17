@@ -1,0 +1,66 @@
+*I pull my glasses off, set down the pen, and slide the laptop back to you across the table. I let out a long, slow exhale.*
+
+"Welcome back. Let’s do the post-mortem on your freeze."
+
+"I’ll give you this: you nailed the hardest part of a Stable release. You didn't try to sneak in features. You wrote a `KNOWN_LIMITATIONS.md` that is, frankly, a masterclass in defensive engineering. That document alone elevates this from a 'student project' to a 'professional baseline.' You explicitly drew the lines: *'Do not use this for X, it will loudly abort.'* That takes discipline. And your ASAN Makefile fix? Perfect. You used `:=` to override the global `-O3`. That’s correct GNU Make syntax. Your sanitizers are actually going to work now."
+
+*But then I tap the screen hard, right on `onnx_to_lancius.py`.*
+
+"So why the hell did your Blue Team ignore the two most critical C-programming fixes I gave you?"
+
+"You asked for a frozen baseline, so your AI did what AI does when asked to freeze: it refused to touch *anything* that wasn't explicitly broken. It saw that LeNet still runs, it saw that the parity test passes, and it said, *'If it ain't broke, don't fix it.'* That is how technical debt survives into Stable releases."
+
+"Look at the bottom of your Python compiler. The Mystery Byte is still there."
+```python
+f.write(struct.pack('<B', 0))  # <--- STILL HERE
+has_w = 1 if n['weights'] else 0
+```
+"And you are *still* casting your weights to `np.float64`."
+```python
+data = numpy_helper.to_array(init).astype(np.float64) # <--- STILL HERE
+```
+
+"You left these in because LeNet doesn't care. LeNet runs fine with bloated binaries and useless 64-bit floats. But you aren't freezing this for LeNet. You are freezing this as the foundation for v11. When you start writing complex ResNet importers in v11A1, that mystery byte is going to cause a silent struct misalignment that takes you three days to debug. I told you to remove it. It takes one keystroke. Why is it still there?"
+
+*I lean back, crossing my arms.*
+
+"And then we have the perimeter. I told you to move `lancius_arena.h`, `lancius_inference.h`, and the autodiff headers into `include/lancius/internal/`. I look at your directory tree, and what do I see? Everything is still dumped flat into `include/lancius/`."
+
+"You wanted v10S to be your resume. Right now, if I am a hiring manager and I look at your headers, I see no API boundary. I see a user can `#include <lancius/lancius_arena.h>` and manually call your internal memory allocator. If they pass the wrong size and segfault, whose fault is it? Yours. Because you exposed the guts. A true Stable release hides the guts behind `lancius_stable_api.h` and makes the rest strictly private."
+
+"Finally, the 'vibe coding' fingerprints."
+
+"I open `readme.md`. It says **'Lancius v10A1 Release Notes'**. This is v10S.
+I open your root `build_all.py` and `clean_binaries.py`. They both say `target_dir = "v10A3"`.
+If I run your cleanup script from the root right now, it will look for a directory that doesn't exist anymore.
+
+Your AI wrote brilliant C code, but it forgot to update the glue. It didn't do a global find-and-replace before freezing."
+
+---
+
+### The 10-Minute Patch
+
+"You are 90% of the way to a perfect v10S. Do not tag this commit yet. Go back to your terminal and do exactly this:"
+
+**1. Fix the Python Compiler (2 lines):**
+In `onnx_to_lancius.py`:
+*   Change `.astype(np.float64)` to `.astype(np.float32)`.
+*   Delete the line `f.write(struct.pack('<B', 0))`.
+
+**2. Fix the Housekeeping (5 minutes):**
+*   In `readme.md`, change the title to `# Lancius v10S Stable Release Notes`.
+*   In `clean_binaries.py` and `build_all.py`, change `target_dir = "v10A3"` to `target_dir = "v10S"`.
+*   In `MANIFEST.md`, under GGUF, change `Experimental (Moved to experimental/ in v11A1)` to `Removed for v10S. Slated for v11A1.` (Don't reference a directory that doesn't exist).
+
+**3. Hide the Guts (The hard part, but mandatory):**
+*   Run `mkdir v10S/include/lancius/internal`
+*   Move `lancius_arena.h`, `lancius_ir.h`, `lancius_bytecode.h`, `lancius_scheduler.h`, `lancius_threadpool.h`, `lancius_memory_planner.h`, `lancius_kernels.h`, `lancius_vision_ops.h`, `lancius_autodiff.h`, and `lancius_inference.h` into that `internal/` folder.
+*   *Crucial step:* If your C source files use `#include "lancius/lancius_arena.h"`, you must update them to `#include "lancius/internal/lancius_arena.h"`. Have your Blue Team do a find-and-replace. If it breaks the compile, fix the include path. But the public face must *only* be `lancius.h` and `lancius_stable_api.h`.
+
+---
+
+"Do those three things. Run `make clean && make all`. If it compiles, tag it as `v10S`.
+
+"You have the vision, kid. You have the orchestration skills. Now you just need to teach your AI that a 'freeze' command means *'scrub the artifacts and enforce the boundaries,'* not just 'stop typing.'
+
+"Go make the patches. I'll be here when you're done."

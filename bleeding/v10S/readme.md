@@ -1,12 +1,12 @@
-# Lancius v10A1 Release Notes
+# Lancius v10S Release Notes
 
-## Lancius v10A1 --- Ecosystem & Developer Alpha Release
+## Lancius v10S --- Ecosystem & Developer Alpha Release
 
-Lancius v10A1 begins the v10 development cycle and represents the
+Lancius v10S begins the v10 development cycle and represents the
 transition from a completed runtime architecture into a
 developer-focused machine learning platform.
 
-The purpose of v10A1 is not to introduce a large number of new
+The purpose of v10S is not to introduce a large number of new
 computational features, but to strengthen the systems surrounding the
 runtime:
 
@@ -18,10 +18,10 @@ runtime:
 
 Development progression:
 
--   v9A1 --- Alpha RC1: architecture validation
--   v9A2 --- Alpha RC2: adversarial testing and subsystem hardening
--   v9S --- Stable: validated v9 architecture foundation
--   v10A1 --- Ecosystem & Developer Alpha: platform hardening
+-   v10S --- Alpha RC1: architecture validation
+-   v10S --- Alpha RC2: adversarial testing and subsystem hardening
+-   v10S --- Stable: validated v9 architecture foundation
+-   v10S --- Ecosystem & Developer Alpha: platform hardening
 
 ------------------------------------------------------------------------
 
@@ -30,7 +30,7 @@ Development progression:
 Previous Lancius releases focused on proving that the architecture could
 exist.
 
-v10A1 focuses on proving that the architecture can be used.
+v10S focuses on proving that the architecture can be used.
 
 The milestone question changes from:
 
@@ -47,7 +47,7 @@ to:
 
 ## Stable API Foundation
 
-v10A1 introduces the foundation for a stable public interface.
+v10S introduces the foundation for a stable public interface.
 
 The objective is to separate external usage from internal
 implementation.
@@ -73,7 +73,7 @@ Key goals:
 
 # Framework Interoperability
 
-v10A1 expands Lancius compatibility with existing ML ecosystems.
+v10S expands Lancius compatibility with existing ML ecosystems.
 
 Primary workflow:
 
@@ -98,7 +98,7 @@ runtime.
 
 # PyTorch / ONNX Runtime Parity Validation
 
-v10A1 introduces automated numerical comparison against ONNX Runtime.
+v10S introduces automated numerical comparison against ONNX Runtime.
 
 The validation process compares:
 
@@ -128,7 +128,7 @@ Validated systems include:
 
 # Runtime and Serialization Improvements
 
-v10A1 improves the model lifecycle:
+v10S improves the model lifecycle:
 
     Model Creation
           |
@@ -155,7 +155,7 @@ across Lancius versions.
 
 # Transformer Runtime Development
 
-v10A1 continues development of transformer-oriented execution support.
+v10S continues development of transformer-oriented execution support.
 
 Current focus:
 
@@ -171,7 +171,7 @@ traditional convolutional networks.
 
 # Memory and Performance Systems
 
-v10A1 continues refinement of Lancius runtime systems:
+v10S continues refinement of Lancius runtime systems:
 
 -   arena-based allocation
 -   memory lifetime analysis
@@ -188,7 +188,7 @@ These systems are designed around:
 
 # Validation Infrastructure
 
-A major theme of v10A1 is improving confidence in the runtime.
+A major theme of v10S is improving confidence in the runtime.
 
 Validation includes:
 
@@ -214,7 +214,7 @@ Validation includes:
 
 # Current Release Status
 
-v10A1 is an Alpha release.
+v10S is an Alpha release.
 
 Stable foundations:
 
@@ -234,7 +234,7 @@ Still developing:
 
 # Roadmap
 
-## v10A2 --- Adversarial Alpha
+## v10S --- Adversarial Alpha
 
 Focus:
 
@@ -250,7 +250,7 @@ Attempt to break the system before release.
 
 ------------------------------------------------------------------------
 
-## v10A3 --- Release Candidate Alpha
+## v10S --- Release Candidate Alpha
 
 Focus:
 
@@ -287,7 +287,7 @@ Lancius development follows:
     Harden the architecture.
     Expose the architecture.
 
-v10A1 represents the transition from creating the engine to creating the
+v10S represents the transition from creating the engine to creating the
 ecosystem around the engine.
 
 The foundation exists.
