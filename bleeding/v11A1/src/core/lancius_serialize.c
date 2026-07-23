@@ -19,6 +19,7 @@ void lancius_graph_save(lancius_graph* g, const char* path) {
 
     for (uint32_t i = 0; i < g->node_count; i++) {
         lancius_node* n = g->nodes[i];
+        lancius_runtime_sync_from_legacy(n); /* A1 */
         SAFE_WRITE(&n->id, sizeof(uint32_t), 1, f);
         SAFE_WRITE(&n->op, sizeof(lancius_opcode), 1, f);
         SAFE_WRITE(&n->ndim, sizeof(uint8_t), 1, f);
@@ -46,6 +47,8 @@ void lancius_graph_save(lancius_graph* g, const char* path) {
             size_t elems = lancius_node_elements(n);
                 if (elems > 100000000) { fprintf(stderr, "[SERIAL FATAL] Tensor size exceeds sanity limit."); fclose(f); return; }
             uint8_t dtype = n->dtype;
+            /* A3: clamp unknown dtypes to FP64 for serialization safety */
+            if (!lancius_dtype_is_valid(dtype)) dtype = LANCIUS_DTYPE_FP64;
             SAFE_WRITE(&dtype, sizeof(uint8_t), 1, f);
             SAFE_WRITE(&n->scale, sizeof(double), 1, f);
             if (dtype == LANCIUS_DTYPE_INT8) {
@@ -64,9 +67,9 @@ lancius_graph* lancius_graph_load(const char* path) {
     if (!f) return NULL;
     uint32_t magic, node_count;
     if (fread(&magic, sizeof(uint32_t), 1, f) != 1) { fclose(f); return NULL; }
-    if (magic != LANCIUS_MAGIC) { fclose(f); return NULL; }
+    if (magic != LANCIUS_MAGIC) { lancius_set_error(LANCIUS_ERROR_INVALID_MODEL); /* A4 magic */ fclose(f); return NULL; }
     if (fread(&node_count, sizeof(uint32_t), 1, f) != 1) { fclose(f); return NULL; }
-    if (node_count > 1000000) { fprintf(stderr, "[SERIAL FATAL] Node count exceeds sanity limit.\n"); fclose(f); return NULL; }
+    if (node_count > 1000000) { lancius_set_error(LANCIUS_ERROR_INVALID_MODEL); /* A4 node_count */ fprintf(stderr, "[SERIAL FATAL] Node count exceeds sanity limit.\n"); fclose(f); return NULL; }
 
     lancius_graph* g = lancius_graph_create();
     if (!g) { fclose(f); return NULL; }
@@ -206,16 +209,24 @@ lancius_graph* lancius_graph_load(const char* path) {
                 }
                 uint8_t dtype;
                 if (fread(&dtype, sizeof(uint8_t), 1, f) != 1) { free(in_ids); goto fail; }
+                /* A3: validate serialized dtype */
+                if (!lancius_dtype_is_valid(dtype)) {
+                    fprintf(stderr, "[SERIAL FATAL] Invalid dtype %u in model file.\n", (unsigned)dtype);
+                    free(in_ids);
+                    goto fail;
+                }
                 n->dtype = (lancius_dtype)dtype;
                 if (fread(&n->scale, sizeof(double), 1, f) != 1) { free(in_ids); goto fail; }
                 if (n->dtype == LANCIUS_DTYPE_INT8) {
                     n->runtime_data_int8 = (int8_t*)malloc(elems);
                     if (!n->runtime_data_int8) { free(in_ids); goto fail; }
                     if (fread(n->runtime_data_int8, sizeof(int8_t), elems, f) != elems) { free(in_ids); goto fail; }
+                    lancius_node_bind_owned_heap_int8(n, n->runtime_data_int8); /* A2 */
                 } else {
                     n->runtime_data = (double*)malloc(elems * sizeof(double));
                     if (!n->runtime_data) { free(in_ids); goto fail; }
                     if (fread(n->runtime_data, sizeof(double), elems, f) != elems) { free(in_ids); goto fail; }
+                    lancius_node_bind_owned_heap(n, n->runtime_data); /* A2 */
                 }
             }
         }
@@ -223,10 +234,17 @@ lancius_graph* lancius_graph_load(const char* path) {
     }
     free(id_map);
     fclose(f);
+
+    /* A1: mirror loaded legacy buffers into runtime state */
+    for (uint32_t i = 0; i < g->node_count; i++) {
+        lancius_runtime_sync_from_legacy(g->nodes[i]);
+    }
+
     printf("[LANCIUS SERIAL] Loaded %u nodes from %s\n", node_count, path);
     return g;
 
 fail:
+    lancius_set_error(LANCIUS_ERROR_INVALID_MODEL); /* A4 fail */
     fprintf(stderr, "[SERIAL FATAL] Malformed or truncated .lancius file. Aborting load.\n");
     if (g) {
         for (uint32_t k = 0; k < g->node_count; k++) {

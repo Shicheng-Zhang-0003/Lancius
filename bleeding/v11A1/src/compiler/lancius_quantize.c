@@ -24,6 +24,8 @@ void lancius_quantize_graph(lancius_graph* g) {
                 n->runtime_data_int8[j] = (int8_t)round(n->runtime_data[j] / n->scale);
             }
             n->dtype = LANCIUS_DTYPE_INT8;
+            /* A2: quantized INT8 weights are owned heap buffers */
+            lancius_node_bind_owned_heap_int8(n, n->runtime_data_int8);
             quantized_count++;
         }
     }

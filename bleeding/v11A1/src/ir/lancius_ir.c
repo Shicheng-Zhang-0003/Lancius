@@ -11,14 +11,60 @@ static void track(lancius_graph* g, lancius_node* n) {
     g->nodes[g->node_count++] = n;
 }
 
+static void lancius_ensure_runtime_capacity(lancius_graph* g, uint32_t id) {
+    if (!g || id < g->rt_cap) return;
+
+    size_t new_cap = g->rt_cap ? g->rt_cap : 1024;
+    while (new_cap <= id) new_cap *= 2;
+
+    lancius_runtime_state* nr = (lancius_runtime_state*)realloc(
+        g->rt_states,
+        new_cap * sizeof(lancius_runtime_state)
+    );
+    if (!nr) return;
+
+    memset(nr + g->rt_cap, 0, (new_cap - g->rt_cap) * sizeof(lancius_runtime_state));
+    g->rt_states = nr;
+    g->rt_cap = new_cap;
+}
+
 static lancius_node* alloc_node(lancius_graph* g, lancius_opcode op, uint8_t ndim, uint32_t in_count);
 
 lancius_graph* lancius_graph_create(void) {
+    /* A4: graph_create error instrumentation */
     lancius_graph* g = (lancius_graph*)calloc(1, sizeof(lancius_graph));
-    if (!g) return NULL;
+    if (!g) {
+        lancius_set_error(LANCIUS_ERROR_OOM);
+        return NULL;
+    }
+
     g->arena = lancius_arena_create(16 * 1024 * 1024);
+    if (!g->arena) {
+        lancius_set_error(LANCIUS_ERROR_OOM);
+        free(g);
+        return NULL;
+    }
+
     g->node_cap = 1024;
     g->nodes = (lancius_node**)malloc(sizeof(lancius_node*) * g->node_cap);
+    if (!g->nodes) {
+        lancius_set_error(LANCIUS_ERROR_OOM);
+        lancius_arena_destroy(g->arena);
+        free(g);
+        return NULL;
+    }
+
+    /* A1: runtime state table */
+    g->rt_cap = 1024;
+    g->rt_states = (lancius_runtime_state*)calloc(g->rt_cap, sizeof(lancius_runtime_state));
+    if (!g->rt_states) {
+        lancius_set_error(LANCIUS_ERROR_OOM);
+        free(g->nodes);
+        lancius_arena_destroy(g->arena);
+        free(g);
+        return NULL;
+    }
+
     return g;
 }
 
@@ -53,21 +99,45 @@ lancius_node* lancius_broadcast_4d(lancius_graph* g, const lancius_node* a, size
 void lancius_graph_destroy(lancius_graph* g) {
     if (!g) return;
     free(g->nodes);
+    free(g->rt_states); /* A1 */
     lancius_arena_destroy(g->arena);
     free(g);
 }
 
 static lancius_node* alloc_node(lancius_graph* g, lancius_opcode op, uint8_t ndim, uint32_t in_count) {
     lancius_node* n = (lancius_node*)lancius_arena_alloc(g->arena, sizeof(lancius_node), 8);
-    if (!n) return NULL;
+    if (!n) { lancius_set_error(LANCIUS_ERROR_OOM); /* A4 alloc_node OOM */ return NULL; }
+
     memset(n, 0, sizeof(lancius_node));
     n->id = g->next_id++;
+
+    /* A1: attach separated runtime state */
+    lancius_ensure_runtime_capacity(g, n->id);
+    if (g->rt_states && n->id < g->rt_cap) {
+        n->rt = &g->rt_states[n->id];
+        n->rt->buffer = NULL;
+        n->rt->buffer_int8 = NULL;
+        n->rt->dtype = LANCIUS_DTYPE_FP64;
+        n->rt->scale = 1.0;
+        n->rt->owner = LANCIUS_MEMORY_EXTERNAL;
+        n->rt->buffer_owner = LANCIUS_MEMORY_EXTERNAL; /* A2 */
+        n->rt->int8_owner = LANCIUS_MEMORY_EXTERNAL;   /* A2 */
+        n->rt->offset = 0;
+        n->rt->flags = 0;
+    }
+
     n->op = op;
     n->ndim = ndim;
     n->input_count = in_count;
+
     if (in_count > 0) {
-        n->inputs = (const lancius_node**)lancius_arena_alloc(g->arena, sizeof(lancius_node*) * in_count, 8);
+        n->inputs = (const lancius_node**)lancius_arena_alloc(
+            g->arena,
+            sizeof(lancius_node*) * in_count,
+            8
+        );
     }
+
     track(g, n);
     return n;
 }
@@ -327,4 +397,150 @@ lancius_node* lancius_gqa(lancius_graph* g, const lancius_node* q, const lancius
         n->inputs[0] = q; n->inputs[1] = k; n->inputs[2] = v;
     }
     return n;
+}
+
+/* A1: runtime state helpers */
+
+lancius_runtime_state* lancius_graph_runtime(lancius_graph* g, uint32_t node_id) {
+    if (!g || !g->rt_states || node_id >= g->rt_cap) return NULL;
+    return &g->rt_states[node_id];
+}
+
+lancius_runtime_state* lancius_node_rt(const lancius_node* n) {
+    return n ? n->rt : NULL;
+}
+
+void lancius_runtime_sync_from_legacy(lancius_node* n) {
+    if (!n || !n->rt) return;
+
+    n->rt->buffer = n->runtime_data;
+    n->rt->buffer_int8 = n->runtime_data_int8;
+    n->rt->dtype = n->dtype;
+    n->rt->scale = n->scale;
+}
+
+void lancius_runtime_sync_to_legacy(lancius_node* n) {
+    if (!n || !n->rt) return;
+
+    n->runtime_data = (double*)n->rt->buffer;
+    n->runtime_data_int8 = n->rt->buffer_int8;
+    n->dtype = n->rt->dtype;
+    n->scale = n->rt->scale;
+}
+
+void lancius_graph_sync_runtime_to_legacy(lancius_graph* g) {
+    if (!g) return;
+
+    for (uint32_t i = 0; i < g->node_count; i++) {
+        lancius_runtime_sync_to_legacy(g->nodes[i]);
+    }
+}
+
+/* A2: tensor ownership helpers */
+
+void lancius_node_set_owner(lancius_node* n, lancius_memory_owner owner) {
+    if (!n || !n->rt) return;
+
+    n->rt->owner = owner;
+    n->rt->buffer_owner = owner;
+    n->rt->int8_owner = owner;
+}
+
+lancius_memory_owner lancius_node_get_owner(const lancius_node* n) {
+    if (!n || !n->rt) return LANCIUS_MEMORY_EXTERNAL;
+    return n->rt->buffer_owner;
+}
+
+void lancius_node_bind_external(lancius_node* n, void* data) {
+    if (!n) return;
+
+    n->runtime_data = (double*)data;
+
+    if (n->rt) {
+        n->rt->buffer = data;
+        n->rt->buffer_owner = LANCIUS_MEMORY_EXTERNAL;
+        n->rt->owner = LANCIUS_MEMORY_EXTERNAL;
+        n->rt->dtype = n->dtype; /* A3 external */
+    }
+}
+
+void lancius_node_bind_external_int8(lancius_node* n, int8_t* data) {
+    if (!n) return;
+
+    n->runtime_data_int8 = data;
+
+    if (n->rt) {
+        n->rt->buffer_int8 = data;
+        n->rt->int8_owner = LANCIUS_MEMORY_EXTERNAL;
+    }
+}
+
+void lancius_node_bind_owned_heap(lancius_node* n, void* data) {
+    if (!n) return;
+
+    if (!data) {
+        lancius_node_bind_external(n, NULL);
+        return;
+    }
+
+    n->runtime_data = (double*)data;
+
+    if (n->rt) {
+        n->rt->buffer = data;
+        n->rt->buffer_owner = LANCIUS_MEMORY_OWNED_HEAP;
+        n->rt->owner = LANCIUS_MEMORY_OWNED_HEAP;
+        n->rt->dtype = n->dtype; /* A3 owned */
+    }
+}
+
+void lancius_node_bind_owned_heap_int8(lancius_node* n, int8_t* data) {
+    if (!n) return;
+
+    if (!data) {
+        lancius_node_bind_external_int8(n, NULL);
+        return;
+    }
+
+    n->runtime_data_int8 = data;
+
+    if (n->rt) {
+        n->rt->buffer_int8 = data;
+        n->rt->int8_owner = LANCIUS_MEMORY_OWNED_HEAP;
+        if (n->dtype == LANCIUS_DTYPE_INT8) n->rt->dtype = LANCIUS_DTYPE_INT8; /* A3 int8 */
+    }
+}
+
+void lancius_node_release_owned(lancius_node* n) {
+    if (!n) return;
+
+    if (n->rt) {
+        if (n->rt->buffer_owner == LANCIUS_MEMORY_OWNED_HEAP && n->runtime_data) {
+            free(n->runtime_data);
+            n->runtime_data = NULL;
+            n->rt->buffer = NULL;
+            n->rt->buffer_owner = LANCIUS_MEMORY_EXTERNAL;
+        }
+
+        if (n->rt->int8_owner == LANCIUS_MEMORY_OWNED_HEAP && n->runtime_data_int8) {
+            free(n->runtime_data_int8);
+            n->runtime_data_int8 = NULL;
+            n->rt->buffer_int8 = NULL;
+            n->rt->int8_owner = LANCIUS_MEMORY_EXTERNAL;
+        }
+
+        if (
+            n->rt->buffer_owner == LANCIUS_MEMORY_EXTERNAL &&
+            n->rt->int8_owner == LANCIUS_MEMORY_EXTERNAL
+        ) {
+            n->rt->owner = LANCIUS_MEMORY_EXTERNAL;
+        }
+    }
+}
+
+void lancius_graph_release_owned(lancius_graph* g) {
+    if (!g) return;
+
+    for (uint32_t i = 0; i < g->node_count; i++) {
+        lancius_node_release_owned(g->nodes[i]);
+    }
 }

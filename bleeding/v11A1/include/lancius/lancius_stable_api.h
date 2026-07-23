@@ -57,4 +57,7 @@ LANCIUS_EXPORT lancius_status lancius_read_output(lancius_tensor_handle t, doubl
 }
 #endif
 
+/* A3: dtype query API */
+LANCIUS_EXPORT int lancius_tensor_get_dtype(lancius_tensor_handle t);
+
 #endif // LANCIUS_STABLE_API_H

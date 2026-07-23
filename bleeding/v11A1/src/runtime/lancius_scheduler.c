@@ -59,7 +59,9 @@ lancius_schedule* lancius_ir_schedule(lancius_graph* g) {
 }
 
 static void execute_node_math(lancius_node* n) {
-    if (!n || !n->runtime_data) return;
+    if (!n) return;
+    lancius_runtime_sync_from_legacy(n); /* A1 */
+    if (!n->runtime_data) return;
     size_t elements = lancius_node_elements(n); (void)elements;
 
     // CRITICAL FIX: Execute Cross-Entropy BEFORE the Vision Ops router hijacks it
@@ -308,6 +310,15 @@ else if (n->op == LANCIUS_OP_ROPE) {
 
 void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch) {
     if (!schedule) return;
+
+    /* A1: mirror legacy runtime pointers into runtime state before execution */
+    for (uint32_t w = 0; w < schedule->wave_count; w++) {
+        lancius_wave* wave = &schedule->waves[w];
+        for (uint32_t i = 0; i < wave->node_count; i++) {
+            lancius_runtime_sync_from_legacy(wave->nodes[i]);
+        }
+    }
+
     for (uint32_t w = 0; w < schedule->wave_count; w++) {
         lancius_wave* wave = &schedule->waves[w];
         for (uint32_t i = 0; i < wave->node_count; i++) {
@@ -321,8 +332,10 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
                     if (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         n->runtime_data = (double*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
-                        n->runtime_data = (double*)lancius_arena_alloc(scratch, elements * sizeof(double), 32);
+                        n->runtime_data = (double*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32); /* A3 */
                     }
+                    /* A2: record buffer ownership */
+                    lancius_node_set_owner(n, (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
                     if(n->runtime_data) for(size_t k=0; k<elements; k++) n->runtime_data[k] = n->attr_val;
                 }
                 continue;
@@ -332,9 +345,12 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
                 if (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         n->runtime_data = (double*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
-                        n->runtime_data = (double*)lancius_arena_alloc(scratch, elements * sizeof(double), 32);
+                        n->runtime_data = (double*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32); /* A3 */
                     }
+                /* A2: record buffer ownership */
+                lancius_node_set_owner(n, (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
                 if (!n->runtime_data) {
+                    lancius_set_error(LANCIUS_ERROR_OOM); /* A4 OOM */
                     fprintf(stderr, "[EXEC FATAL] OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, elements * sizeof(double));
                     continue;
                 }
@@ -347,6 +363,15 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
 
 void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena* scratch, lancius_pool* pool) {
     if (!schedule || !pool) return;
+
+    /* A1: mirror legacy runtime pointers into runtime state before parallel execution */
+    for (uint32_t w = 0; w < schedule->wave_count; w++) {
+        lancius_wave* wave = &schedule->waves[w];
+        for (uint32_t i = 0; i < wave->node_count; i++) {
+            lancius_runtime_sync_from_legacy(wave->nodes[i]);
+        }
+    }
+
     for (uint32_t w = 0; w < schedule->wave_count; w++) {
         lancius_wave* wave = &schedule->waves[w];
         for (uint32_t i = 0; i < wave->node_count; i++) {
@@ -359,8 +384,10 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
                     if (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         n->runtime_data = (double*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
-                        n->runtime_data = (double*)lancius_arena_alloc(scratch, elements * sizeof(double), 32);
+                        n->runtime_data = (double*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32); /* A3 */
                     }
+                    /* A2: record buffer ownership */
+                    lancius_node_set_owner(n, (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
                     if(n->runtime_data) for(size_t k=0; k<elements; k++) n->runtime_data[k] = n->attr_val;
                 }
                 continue;
@@ -369,8 +396,10 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
                 if (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         n->runtime_data = (double*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
-                        n->runtime_data = (double*)lancius_arena_alloc(scratch, elements * sizeof(double), 32);
+                        n->runtime_data = (double*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32); /* A3 */
                     }
+                /* A2: record buffer ownership */
+                lancius_node_set_owner(n, (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
             }
         }
         for (uint32_t i = 0; i < wave->node_count; i++) {
@@ -405,7 +434,7 @@ size_t lancius_schedule_peak_memory(lancius_schedule* schedule) {
         for (uint32_t i = 0; i < wave->node_count; i++) {
             lancius_node* n = wave->nodes[i];
             if (n->op != LANCIUS_OP_INPUT && n->op != LANCIUS_OP_CONST) {
-                wave_mem += lancius_node_elements(n) * sizeof(double);
+                wave_mem += lancius_node_bytes(n); /* A3 */
             }
         }
         if (wave_mem > peak) peak = wave_mem;
@@ -457,15 +486,23 @@ void lancius_schedule_execute_static(lancius_schedule* schedule, void* flat_buff
             lancius_node* n = wave->nodes[i];
             if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST) continue;
 
-            size_t elements = lancius_node_elements(n);
-            size_t size = elements * sizeof(double);
+            size_t elements = lancius_node_elements(n); (void)elements; /* A3 static */
+            size_t size = lancius_node_bytes(n); /* A3 static */
 
             // Align to 32 bytes for AVX2/SIMD
             offset = (offset + 31) & ~31;
 
             // Assign the flat buffer pointer directly to the node
-            n->runtime_data = (double*)((char*)flat_buffer + offset);
-            offset += size;
+                n->runtime_data = (double*)((char*)flat_buffer + offset);
+
+                /* A1: mirror static pool buffer into runtime state */
+                if (n->rt) {
+                    n->rt->buffer = n->runtime_data;
+                    n->rt->offset = offset;
+                }
+                lancius_node_set_owner(n, LANCIUS_MEMORY_POOL); /* A2 static */
+
+                offset += size;
         }
 
         // 2. Execute the math for the wave

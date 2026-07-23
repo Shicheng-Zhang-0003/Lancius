@@ -20,6 +20,8 @@ void lancius_execute_vision_op(lancius_node* n) {
         if (!w) return;
 
         int8_t* in = in_node->runtime_data_int8;
+ /* A2: dynamically quantized activation buffer is owned heap memory */
+ lancius_node_bind_owned_heap_int8(in_node, in_node->runtime_data_int8);
 
         // Dynamic Quantization: If input activation is FP64 (from MaxPool/ReLU), quantize on the fly!
         if (!in && in_node->runtime_data) {

@@ -5,10 +5,13 @@
 #ifndef Lancius_LANCIUS_IR_H
 #define Lancius_LANCIUS_IR_H
 #include "lancius/lancius_arena.h"
+#include "lancius/lancius_types.h"
+#include "lancius/lancius_error.h"
+#include "lancius/lancius_model_format.h"
 #include <stddef.h>
 #include <stdint.h>
 
-typedef enum { LANCIUS_DTYPE_FP64 = 0, LANCIUS_DTYPE_INT8 } lancius_dtype;
+/* A1: lancius_dtype now lives in lancius_types.h */
 
 typedef enum {
     LANCIUS_OP_NOP = 0, LANCIUS_OP_INPUT, LANCIUS_OP_CONST, LANCIUS_OP_ADD, LANCIUS_OP_SUB, LANCIUS_OP_MUL,
@@ -39,6 +42,9 @@ typedef struct lancius_node {
     lancius_dtype dtype;
     double scale;
     int8_t* runtime_data_int8;
+
+    /* A1: separated mutable runtime state. Legacy fields above remain temporary compatibility mirrors. */
+    lancius_runtime_state* rt;
     // V9.5 TENSOR VIEW FIELDS (Zero-Copy Reshape/Permute/Flatten)
     uint8_t is_view;                    // 1 if this node is a view (no owned memory)
     size_t strides[4];                  // Byte strides for each dimension
@@ -49,12 +55,26 @@ typedef struct lancius_graph {
     lancius_arena* arena;
     lancius_node** nodes;
     uint32_t node_count, node_cap, next_id;
+
+    /* A1: runtime state table indexed by node id. */
+    lancius_runtime_state* rt_states;
+    size_t rt_cap;
 } lancius_graph;
 
 static inline size_t lancius_node_elements(const lancius_node* n) {
     size_t e = 1;
     for(uint8_t i=0; i<n->ndim; i++) e *= n->shape[i];
     return e;
+}
+
+/* A3: dtype-aware tensor byte sizing */
+static inline size_t lancius_node_element_bytes(const lancius_node* n) {
+    return lancius_dtype_size(n ? n->dtype : LANCIUS_DTYPE_FP64);
+}
+
+static inline size_t lancius_node_bytes(const lancius_node* n) {
+    if (!n) return 0;
+    return lancius_node_elements(n) * lancius_node_element_bytes(n);
 }
 
 lancius_graph* lancius_graph_create(void);
@@ -106,4 +126,24 @@ lancius_node* lancius_gelu(lancius_graph* g, const lancius_node* in);
 lancius_node* lancius_rmsnorm(lancius_graph* g, const lancius_node* in, const lancius_node* gamma);
 lancius_node* lancius_swiglu(lancius_graph* g, const lancius_node* gate, const lancius_node* up);
 lancius_node* lancius_gqa(lancius_graph* g, const lancius_node* q, const lancius_node* k, const lancius_node* v, uint32_t n_heads_q, uint32_t n_heads_kv);
+
+/* A1: runtime state API */
+lancius_runtime_state* lancius_graph_runtime(lancius_graph* g, uint32_t node_id);
+lancius_runtime_state* lancius_node_rt(const lancius_node* n);
+void lancius_runtime_sync_from_legacy(lancius_node* n);
+void lancius_runtime_sync_to_legacy(lancius_node* n);
+void lancius_graph_sync_runtime_to_legacy(lancius_graph* g);
+
+/* A2: tensor ownership API */
+void lancius_node_set_owner(lancius_node* n, lancius_memory_owner owner);
+lancius_memory_owner lancius_node_get_owner(const lancius_node* n);
+
+void lancius_node_bind_external(lancius_node* n, void* data);
+void lancius_node_bind_external_int8(lancius_node* n, int8_t* data);
+
+void lancius_node_bind_owned_heap(lancius_node* n, void* data);
+void lancius_node_bind_owned_heap_int8(lancius_node* n, int8_t* data);
+
+void lancius_node_release_owned(lancius_node* n);
+void lancius_graph_release_owned(lancius_graph* g);
 #endif

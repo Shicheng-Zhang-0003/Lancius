@@ -110,7 +110,8 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_relu(lancius_graph_handle g, la
 LANCIUS_EXPORT lancius_status lancius_bind_data(lancius_tensor_handle t, double* data_ptr) {
     if (!t || !data_ptr) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
     lancius_node* n = (lancius_node*)t;
-    n->runtime_data = data_ptr;
+    /* A2: external data binding is explicitly non-owned */
+    lancius_node_bind_external(n, data_ptr);
     set_error(LANCIUS_OK);
     return LANCIUS_OK;
 }
@@ -146,4 +147,16 @@ LANCIUS_EXPORT lancius_status lancius_read_output(lancius_tensor_handle t, doubl
 
     set_error(LANCIUS_OK);
     return LANCIUS_OK;
+}
+
+/* A3: dtype query */
+LANCIUS_EXPORT int lancius_tensor_get_dtype(lancius_tensor_handle t) {
+    if (!t) {
+        set_error(LANCIUS_ERR_NULL_PTR);
+        return -1;
+    }
+
+    lancius_node* n = (lancius_node*)t;
+    set_error(LANCIUS_OK);
+    return (int)n->dtype;
 }

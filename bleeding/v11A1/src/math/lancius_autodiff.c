@@ -59,7 +59,7 @@ lancius_training_graph* lancius_ir_autodiff(lancius_graph* fwd_g, lancius_node* 
             case LANCIUS_OP_INPUT:
                 if (old->ndim == 4) n = lancius_input_4d(tg->graph, old->shape[0], old->shape[1], old->shape[2], old->shape[3]);
                 else n = lancius_input(tg->graph, old->shape[0], old->shape[1]);
-                if(n) n->runtime_data = old->runtime_data;
+                if(n) { n->runtime_data = old->runtime_data; lancius_runtime_sync_from_legacy(n); }
                 break;
             case LANCIUS_OP_CONST: n = lancius_const(tg->graph, old->attr_val, old->shape[0], old->shape[1]); break;
             case LANCIUS_OP_ADD: n = lancius_add(tg->graph, in0, in1); break;
@@ -93,6 +93,7 @@ lancius_training_graph* lancius_ir_autodiff(lancius_graph* fwd_g, lancius_node* 
                     n->shape[0] = old->shape[0]; n->shape[1] = old->shape[1]; n->shape[2] = old->shape[2]; n->shape[3] = old->shape[3];
                     n->kernel_h = old->kernel_h; n->kernel_w = old->kernel_w; n->stride = old->stride; n->pad = old->pad;
                     n->runtime_data = old->runtime_data;
+                    lancius_runtime_sync_from_legacy(n);
                     // Track node in training graph
                     if (tg->graph->node_count >= tg->graph->node_cap) {
                         tg->graph->node_cap = tg->graph->node_cap == 0 ? 1024 : tg->graph->node_cap * 2;

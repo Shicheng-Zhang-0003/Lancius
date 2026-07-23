@@ -3,6 +3,7 @@ CFLAGS = -Wall -Wextra -g -Werror -O3 -mavx2 -mfma -fopenmp -std=c11 -I./include
 LDFLAGS = -lm
 SRCS = src/core/lancius_arena.c \
        src/core/lancius_serialize.c \
+src/core/lancius_error.c \
        src/ir/lancius_ir.c \
        src/runtime/lancius_scheduler.c \
        src/math/lancius_autodiff.c \
