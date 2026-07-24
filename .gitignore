@@ -6,7 +6,7 @@
 *.ubyte
 data/
 cifar-10-batches-bin/
-
+reference_materials
 # ==========================================
 # BUILD ARTIFACTS & MODELS
 # ==========================================
