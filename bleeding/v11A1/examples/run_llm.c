@@ -5,7 +5,7 @@
 
 int main() {
     printf("================================================================\n");
-    printf("  Lancius v9A: TRANSFORMER MANDATE (LLM Kernels)             \n");
+    printf("  Lancius v9A: TRANSFORMER KERNEL DEMO (Experimental)             \n");
     printf("================================================================\n\n");
 
     lancius_graph* g = lancius_graph_create();
@@ -80,7 +80,7 @@ for(size_t i=0; i<qkv_sz; i++) {
     free(gamma_data); free(beta_data);
 
     printf("\n================================================================\n");
-    printf("  LANCIUS v9A TRANSFORMER MANDATE VERIFIED.\n");
+    printf("  LANCIUS v11A1 TRANSFORMER KERNEL DEMO EXECUTED.\n");
     printf("================================================================\n");
     return 0;
 }

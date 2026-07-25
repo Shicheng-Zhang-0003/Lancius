@@ -18,7 +18,7 @@ double lr = 0.0003; // V12 Safe LR // V10: Bumped LR for He Init
 
 uint32_t read_int(FILE* f) {
     uint8_t b[4]; size_t dr = fread(b, 1, 4, f); (void)dr;
-    return (b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3];
+    return ((uint32_t)b[0] << 24) | ((uint32_t)b[1] << 16) | ((uint32_t)b[2] << 8) | (uint32_t)b[3];
 }
 
 void download_cifar10() {

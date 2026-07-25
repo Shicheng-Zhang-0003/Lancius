@@ -4,7 +4,11 @@ import struct
 import numpy as np
 import sys
 
+# v11A1 Task 6c: this converter writes v2. C runtime writes/loads v2 and loads v1.
 LANCIUS_MAGIC = 0x21434E41
+LANCIUS_MAGIC_V2 = 0x32434E41
+LANCIUS_VERSION_V2 = 2
+LANCIUS_FLAGS_V2 = 3  # little-endian | static-graph
 OP_MAP = {
     'Conv': 16, 'Relu': 7, 'MaxPool': 17, 'Flatten': 18,
     'MatMul': 6, 'Add': 3, 'Reshape': 27, 'Gemm': 6, 'Transpose': 11
@@ -227,30 +231,44 @@ def convert(onnx_path, lancius_path):
             name_to_id[node.output[0]] = next_id
             next_id += 1
 
-    # 4. Write Binary
+    # 4. Write Binary (v11A1 Task 6c: v2 format)
     with open(lancius_path, 'wb') as f:
-        f.write(struct.pack('<I', LANCIUS_MAGIC))
-        f.write(struct.pack('<I', len(nodes)))
+        header = struct.pack(
+            '<8IQ2I',
+            LANCIUS_MAGIC_V2, LANCIUS_VERSION_V2, LANCIUS_FLAGS_V2,
+            len(nodes), len(nodes), 0, 48, 0,
+            0, 0, 0
+        )
+        f.write(header)
+
         for n in nodes:
-            f.write(struct.pack('<I', n['id']))
-            f.write(struct.pack('<I', n['op']))
-            f.write(struct.pack('<B', n['ndim']))
-            for s in n['shape']:
-                f.write(struct.pack('<Q', s))
-            f.write(struct.pack('<I', len(n['inputs'])))
+            has_w = 1 if n['weights'] else 0
+
+            if has_w:
+                if n['dtype'] == 1:
+                    weight_elems = len(n['weights'])
+                else:
+                    weight_elems = len(n['weights']) // 8
+            else:
+                weight_elems = 0
+
+            f.write(struct.pack(
+                '<IIB4QId4I4I3BdQ',
+                n['id'], n['op'], n['ndim'],
+                n['shape'][0], n['shape'][1], n['shape'][2], n['shape'][3],
+                len(n['inputs']),
+                float(n['attr']),
+                n['meta'][0], n['meta'][1], n['meta'][2], n['meta'][3],
+                n['axes'][0], n['axes'][1], n['axes'][2], n['axes'][3],
+                0, n['dtype'], has_w,
+                float(n['scale']),
+                weight_elems
+            ))
+
             for i in n['inputs']:
                 f.write(struct.pack('<I', i))
-            f.write(struct.pack('<d', n['attr']))
-            for m in n['meta']:
-                f.write(struct.pack('<I', m))
-            for a in n['axes']:
-                f.write(struct.pack('<I', a))
-            f.write(struct.pack('<B', 0))
-            has_w = 1 if n['weights'] else 0
-            f.write(struct.pack('<B', has_w))
-            if has_w:
-                f.write(struct.pack('<B', n['dtype']))
-                f.write(struct.pack('<d', n['scale']))
+
+            if has_w and weight_elems > 0:
                 f.write(n['weights'])
 
     print(f"✅ Translated {len(nodes)} nodes to {lancius_path}")

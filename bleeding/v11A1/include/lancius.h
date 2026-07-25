@@ -9,6 +9,7 @@
  * LANCIUS: Bare-Metal AI Compiler & Runtime
  */
 
+#include "lancius/lancius_version.h"
 #include "lancius/lancius_arena.h"
 #include "lancius/lancius_ir.h"
 #include "lancius/lancius_scheduler.h"

@@ -1,10 +1,10 @@
-# Lancius v10S Changelog
+# Lancius v11A1 Changelog
 
-## v10S Stable Release
+## v11A1 Stable Release
 
 ### Added
 
--   Stable release contract
+-   Development milestone contract
 -   Hardened runtime validation
 -   Expanded testing infrastructure
 -   Stable API boundary

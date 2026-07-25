@@ -58,6 +58,9 @@ lancius_schedule* lancius_ir_schedule(lancius_graph* g) {
     return sched;
 }
 
+static void execute_permute(lancius_node* n);
+static void execute_matmul_batched(lancius_node* n);
+
 static void execute_node_math(lancius_node* n) {
     if (!n) return;
     lancius_runtime_sync_from_legacy(n); /* A1 */
@@ -81,8 +84,7 @@ static void execute_node_math(lancius_node* n) {
             }
         }
         n->runtime_data[0] = total_loss / R;
-        // P0 RED TEAM FIX: Force positive loss scalar for display (Autodiff gradient remains correct)
-        n->runtime_data[0] = fabs(n->runtime_data[0]);
+        if (n->runtime_data[0] < 0.0 && n->runtime_data[0] > -1e-12) n->runtime_data[0] = 0.0;
         return;
     
 
@@ -121,14 +123,30 @@ static void execute_node_math(lancius_node* n) {
 
     
     else if (n->op == LANCIUS_OP_ATTENTION) {
-        double* q = n->inputs[0]->runtime_data;
-        double* k = n->inputs[1]->runtime_data;
-        double* v = n->inputs[2]->runtime_data;
-        if(!q || !k || !v) return;
-        size_t seq_len = n->shape[0];
-        size_t n_heads = n->shape[1];
-        size_t head_dim = n->shape[2];
-        kernel_attention(n->runtime_data, q, k, v, seq_len, n_heads, head_dim);
+        const lancius_node* q_node = n->inputs[0];
+        const lancius_node* k_node = n->inputs[1];
+        const lancius_node* v_node = n->inputs[2];
+
+        double* q = q_node->runtime_data;
+        double* k = k_node->runtime_data;
+        double* v = v_node->runtime_data;
+
+        if (!q || !k || !v) return;
+
+        size_t q_seq = q_node->shape[0];
+        size_t kv_seq = k_node->shape[0];
+        size_t n_heads = q_node->shape[1];
+        size_t head_dim = q_node->shape[2];
+
+        if (q_seq == 1 && kv_seq >= 1) {
+            kernel_attention_kv_cache(n->runtime_data, q, k, v, kv_seq, n_heads, head_dim);
+        } else if (q_seq == kv_seq) {
+            kernel_attention(n->runtime_data, q, k, v, q_seq, n_heads, head_dim);
+        } else {
+            fprintf(stderr, "[LANCIUS EXEC FATAL] unsupported attention shape: q_seq=%zu kv_seq=%zu\n", q_seq, kv_seq);
+            lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
+            abort();
+        }
     }
     
         else if (n->op == LANCIUS_OP_RMSNORM) {
@@ -162,6 +180,26 @@ else if (n->op == LANCIUS_OP_ROPE) {
         double* q = n->runtime_data;
         double* k = n->runtime_data + (seq_len * n_heads * head_dim);
         kernel_rope(q, k, 1, seq_len, n_heads, head_dim, 0);
+    }
+
+    else if (n->op == LANCIUS_OP_PERMUTE) {
+        execute_permute(n);
+        return;
+    }
+    else if (n->op == LANCIUS_OP_MATMUL_BATCHED) {
+        execute_matmul_batched(n);
+        return;
+    }
+
+    /* v11A1 repair: transformer ops are not vision ops */
+    if (n->op == LANCIUS_OP_LAYERNORM ||
+        n->op == LANCIUS_OP_GELU ||
+        n->op == LANCIUS_OP_ATTENTION ||
+        n->op == LANCIUS_OP_RMSNORM ||
+        n->op == LANCIUS_OP_SWIGLU ||
+        n->op == LANCIUS_OP_GQA ||
+        n->op == LANCIUS_OP_ROPE) {
+        return;
     }
 
     if (n->op >= LANCIUS_OP_CONV2D) { lancius_execute_vision_op(n); return; }
@@ -475,6 +513,31 @@ lancius_liveness_profile lancius_analyze_liveness(lancius_graph* g) {
 void lancius_schedule_execute_static(lancius_schedule* schedule, void* flat_buffer) {
     if (!schedule || !flat_buffer) return;
 
+    /* v11A1 Task 8: use attached memory plan when available. */
+    if (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled) {
+        for (uint32_t w = 0; w < schedule->wave_count; w++) {
+            lancius_wave* wave = &schedule->waves[w];
+
+            for (uint32_t i = 0; i < wave->node_count; i++) {
+                lancius_node* n = wave->nodes[i];
+                if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST || n->op == LANCIUS_OP_NOP) continue;
+                if (!schedule->plan->is_pooled[n->id]) continue;
+                n->runtime_data = (double*)((uint8_t*)flat_buffer + schedule->plan->offsets[n->id]);
+                lancius_node_set_owner(n, LANCIUS_MEMORY_POOL);
+                lancius_runtime_sync_from_legacy(n);
+            }
+
+            for (uint32_t i = 0; i < wave->node_count; i++) {
+                lancius_node* n = wave->nodes[i];
+                if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST || n->op == LANCIUS_OP_NOP) continue;
+                if (!schedule->plan->is_pooled[n->id]) continue;
+                execute_node_math(n);
+            }
+        }
+    return;
+    }
+
+
     // Simple bump pointer over the flat buffer
     size_t offset = 0;
 
@@ -490,7 +553,8 @@ void lancius_schedule_execute_static(lancius_schedule* schedule, void* flat_buff
             size_t size = lancius_node_bytes(n); /* A3 static */
 
             // Align to 32 bytes for AVX2/SIMD
-            offset = (offset + 31) & ~31;
+            offset = (offset + 31) & ~(size_t)31;
+            if (size > SIZE_MAX - offset) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
 
             // Assign the flat buffer pointer directly to the node
                 n->runtime_data = (double*)((char*)flat_buffer + offset);
@@ -512,9 +576,117 @@ void lancius_schedule_execute_static(lancius_schedule* schedule, void* flat_buff
             if (!n->runtime_data) continue;
 
             // Reuse the exact same math router from the standard executor
-            // (We cast it to avoid duplicating the massive execute_node_math function)
-            extern void execute_node_math(lancius_node* n);
             execute_node_math(n);
         }
     }
+}
+
+static void execute_permute(lancius_node* n) {
+    if (!n || n->input_count == 0) return;
+
+    const lancius_node* in = n->inputs[0];
+    const double* x = in ? in->runtime_data : NULL;
+    double* y = n->runtime_data;
+
+    if (!x || !y) return;
+
+    size_t in_shape[4] = {1, 1, 1, 1};
+    size_t out_shape[4] = {1, 1, 1, 1};
+
+    for (uint8_t i = 0; i < in->ndim && i < 4; i++) in_shape[i] = in->shape[i];
+    for (uint8_t i = 0; i < n->ndim && i < 4; i++) out_shape[i] = n->shape[i];
+
+    size_t in_stride[4];
+    in_stride[3] = 1;
+    in_stride[2] = in_shape[3];
+    in_stride[1] = in_shape[2] * in_stride[2];
+    in_stride[0] = in_shape[1] * in_stride[1];
+
+    uint32_t axes[4] = {
+        n->axes[0],
+        n->axes[1],
+        n->axes[2],
+        n->axes[3]
+    };
+
+    for (int i = 0; i < 4; i++) {
+        if (axes[i] >= 4) axes[i] = (uint32_t)i;
+    }
+
+    for (size_t i0 = 0; i0 < out_shape[0]; i0++) {
+        for (size_t i1 = 0; i1 < out_shape[1]; i1++) {
+            for (size_t i2 = 0; i2 < out_shape[2]; i2++) {
+                for (size_t i3 = 0; i3 < out_shape[3]; i3++) {
+
+                    size_t out_idx =
+                        ((i0 * out_shape[1] + i1) * out_shape[2] + i2) * out_shape[3] + i3;
+
+                    size_t out_indices[4] = {i0, i1, i2, i3};
+                    size_t in_idx = 0;
+
+                    for (int d = 0; d < 4; d++) {
+                        in_idx += out_indices[d] * in_stride[axes[d]];
+                    }
+
+                    y[out_idx] = x[in_idx];
+                }
+            }
+        }
+    }
+}
+
+static void execute_matmul_batched(lancius_node* n) {
+    if (!n || n->input_count < 2) return;
+
+    const lancius_node* a = n->inputs[0];
+    const lancius_node* b = n->inputs[1];
+
+    const double* A = a ? a->runtime_data : NULL;
+    const double* B = b ? b->runtime_data : NULL;
+    double* C = n->runtime_data;
+
+    if (!A || !B || !C) return;
+
+    size_t batches = a->shape[0];
+    size_t M = a->shape[1];
+    size_t K = a->shape[2];
+    size_t N = b->shape[2];
+
+    for (size_t batch = 0; batch < batches; batch++) {
+        const double* A_batch = A + batch * M * K;
+        const double* B_batch = B + batch * K * N;
+        double* C_batch = C + batch * M * N;
+
+        kernel_matmul(C_batch, A_batch, B_batch, M, K, N);
+    }
+}
+
+size_t lancius_schedule_static_memory_required(lancius_schedule* schedule) {
+    if (!schedule) return 0;
+
+    size_t offset = 0;
+
+    for (uint32_t w = 0; w < schedule->wave_count; w++) {
+        lancius_wave* wave = &schedule->waves[w];
+
+        for (uint32_t i = 0; i < wave->node_count; i++) {
+            lancius_node* n = wave->nodes[i];
+
+            if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST || n->op == LANCIUS_OP_NOP) {
+                continue;
+            }
+
+            size_t bytes = lancius_node_bytes(n);
+
+            offset = (offset + 31) & ~(size_t)31;
+
+            if (bytes > SIZE_MAX - offset) {
+                return 0;
+            }
+
+            offset += bytes;
+        }
+    }
+
+    return offset;
 }

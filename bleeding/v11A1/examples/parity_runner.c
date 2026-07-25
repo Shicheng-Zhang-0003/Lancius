@@ -64,12 +64,16 @@ if(!in_node || !out_node) {
     fclose(f_out);
     free(temp_out);
 
-    // Cleanup
-    // V1.0 ASAN FIX: Free heap-allocated INPUT data (Weights + Input Image)
+    // Cleanup: free only external buffers.
+    // Graph-owned loaded weights are released by lancius_graph_destroy().
     for(uint32_t i=0; i<g->node_count; i++) {
         if (g->nodes[i]->op == LANCIUS_OP_INPUT) {
-            if (g->nodes[i]->runtime_data) free(g->nodes[i]->runtime_data);
-            if (g->nodes[i]->runtime_data_int8) free(g->nodes[i]->runtime_data_int8);
+            if (lancius_node_buffer_is_external(g->nodes[i]) && g->nodes[i]->runtime_data) {
+                free(g->nodes[i]->runtime_data);
+            }
+            if (lancius_node_int8_buffer_is_external(g->nodes[i]) && g->nodes[i]->runtime_data_int8) {
+                free(g->nodes[i]->runtime_data_int8);
+            }
         }
     }
 

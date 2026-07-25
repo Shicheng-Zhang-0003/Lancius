@@ -1,11 +1,11 @@
-# Lancius v10S Compatibility Manifest
+# Lancius v11A1 Compatibility Manifest
 
-Version: v10S\
+Version: v11A1\
 Release Line: 1.0 Stable
 
 ## Purpose
 
-This document defines the compatibility contract of Lancius v10S.
+This document defines the compatibility contract of Lancius v11A1.
 
 ## Stable Components
 
@@ -33,7 +33,7 @@ Supported:
 
 ## Compatibility Guarantees
 
-v10S guarantees:
+v11A1 guarantees:
 
 -   reproducible builds
 -   stable public API behavior
@@ -50,4 +50,4 @@ The following are not guaranteed:
 
 ## Versioning
 
-v10S represents the first stable release of the 1.0 cycle.
+v11A1 represents the first development milestone of the 1.0 cycle.

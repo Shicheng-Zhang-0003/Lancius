@@ -140,9 +140,20 @@ lancius_training_graph* lancius_ir_autodiff(lancius_graph* fwd_g, lancius_node* 
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_mul(tg->graph, gA, B), fwd_to_full);
             accum_grad(tg->graph, grad_map, fwd_n->inputs[1]->id, lancius_mul(tg->graph, gB, A), fwd_to_full);
         
-        } else if (fwd_n->op == LANCIUS_OP_RMSNORM || fwd_n->op == LANCIUS_OP_SWIGLU || fwd_n->op == LANCIUS_OP_GQA) {
+        } else if (
+        fwd_n->op == LANCIUS_OP_RMSNORM ||
+        fwd_n->op == LANCIUS_OP_SWIGLU ||
+        fwd_n->op == LANCIUS_OP_GQA ||
+        fwd_n->op == LANCIUS_OP_LAYERNORM ||
+        fwd_n->op == LANCIUS_OP_GELU ||
+        fwd_n->op == LANCIUS_OP_ROPE ||
+        fwd_n->op == LANCIUS_OP_ATTENTION ||
+        fwd_n->op == LANCIUS_OP_KV_CACHE_READ ||
+        fwd_n->op == LANCIUS_OP_KV_CACHE_WRITE ||
+        fwd_n->op == LANCIUS_OP_EMBEDDING
+    ) {
             // v10S HONESTY: Fail loudly instead of passing mathematically incorrect gradients.
-            fprintf(stderr, "[AUTODIFF FATAL] Transformer backward pass not implemented in v10S.\n");
+            fprintf(stderr, "[AUTODIFF FATAL] Transformer backward pass is not implemented in v11A1.\n");
             free(grad_map); free(fwd_to_full); 
             lancius_graph_destroy(tg->graph); free(tg); 
             return NULL;

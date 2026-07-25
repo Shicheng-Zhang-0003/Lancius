@@ -33,7 +33,7 @@ int test_extreme_values() {
 }
 
 int test_kv_cache_stress() {
-    printf("[SOAK 2] KV-Cache Infinite Sequence Stress (2000 steps)...\n");
+    printf("[SOAK 2] KV-Cache Stress (Experimental demo, 2000 steps)...\n");
     size_t n_heads = 2, head_dim = 4, hidden_size = 8, max_seq = 2048;
     double* k_cache = (double*)calloc(max_seq * hidden_size, sizeof(double));
     double* v_cache = (double*)calloc(max_seq * hidden_size, sizeof(double));

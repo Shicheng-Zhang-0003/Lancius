@@ -3,6 +3,14 @@
 
 #include <stdint.h>
 
+/*
+ * v11A1 model format status:
+ * Active serializer/loader: v2, with v1 load fallback.
+ * v2 fixed-width format is implemented in Task 6b.
+ * Binary compatibility is not guaranteed during v11A1.
+ */
+
+
 /* B1: Lancius model format definition */
 
 #define LANCIUS_MODEL_MAGIC_V1 0x21434E41u
@@ -10,6 +18,9 @@
 
 #define LANCIUS_MODEL_VERSION_V1 1u
 #define LANCIUS_MODEL_VERSION_V2 2u
+
+/* v11A1 Task 6a: active model format decision. */
+#define LANCIUS_MODEL_ACTIVE_FORMAT_VERSION LANCIUS_MODEL_VERSION_V2
 
 #define LANCIUS_MODEL_HEADER_SIZE_V2 48u
 #define LANCIUS_MODEL_MAX_RANK 4u

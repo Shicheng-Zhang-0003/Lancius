@@ -2,6 +2,8 @@ import onnx
 from onnx import helper, TensorProto
 import numpy as np
 
+np.random.seed(42)
+
 def create_tensor(name, shape):
     return helper.make_tensor(
         name, TensorProto.FLOAT, shape,
@@ -46,6 +48,10 @@ graph_def = helper.make_graph(
     initializer=initializers
 )
 
-model_def = helper.make_model(graph_def, producer_name='lancius_pure_onnx')
+model_def = helper.make_model(
+    graph_def,
+    producer_name='lancius_pure_onnx',
+    opset_imports=[helper.make_opsetid("", 17)]
+)
 onnx.save(model_def, 'pytorch_lenet.onnx')
 print("✅ Generated pure ONNX model: pytorch_lenet.onnx")

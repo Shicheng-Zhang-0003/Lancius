@@ -32,3 +32,5 @@ run_trained_batch
 *.onnx
 *.gguf
 *.bin
+audit_known_answer
+audit_regression_13c

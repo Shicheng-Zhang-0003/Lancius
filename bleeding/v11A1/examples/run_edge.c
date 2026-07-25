@@ -1,4 +1,5 @@
 #include "lancius/lancius_inference.h"
+#include "lancius/lancius_memory_planner.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,11 +24,13 @@ int main(int argc, char** argv) {
     printf("[V10S] Running Graph Optimizations...\n");
     lancius_optimize_fusion(g);
     lancius_schedule* sched = lancius_ir_schedule(g);
-    size_t peak_mem = lancius_schedule_peak_memory(sched);
-    size_t arena_size = (peak_mem * 2) + (1024 * 1024); // 2x safety margin + 1MB base
+    lancius_memory_plan* plan = lancius_build_memory_plan(sched, g);
+    size_t peak_mem = plan ? plan->peak_memory : lancius_schedule_static_memory_required(sched);
+    size_t arena_size = peak_mem ? peak_mem : (1024 * 1024);
     printf("  🧠 Liveness Analyzer: Peak Memory = %zu bytes (%.2f KB)\n", peak_mem, peak_mem / 1024.0);
     void* flat_buffer = malloc(arena_size);
     if (!flat_buffer) { printf("FATAL: OOM allocating static buffer."); return 1; }
+    if (plan) lancius_schedule_attach_pool(sched, flat_buffer, plan);
 
     // Find the Input Node (X) and Output Node (Logits)
     lancius_node* input_node = NULL;
@@ -53,6 +56,7 @@ int main(int argc, char** argv) {
     // Allocate input buffer matching the loaded model's EXACT expected shape
     size_t in_size = lancius_node_elements(input_node);
     input_node->runtime_data = (double*)calloc(in_size, sizeof(double));
+    lancius_node_bind_external(input_node, input_node->runtime_data);
 
     // Fill with random noise to simulate a batch of images
     for(size_t i=0; i<in_size; i++) input_node->runtime_data[i] = ((double)rand()/RAND_MAX) - 0.5;
@@ -61,6 +65,7 @@ int main(int argc, char** argv) {
     double max_in = 0.5;
     input_node->scale = max_in / 127.0;
     input_node->runtime_data_int8 = (int8_t*)malloc(in_size);
+    lancius_node_bind_external_int8(input_node, input_node->runtime_data_int8);
     for(size_t i=0; i<in_size; i++) input_node->runtime_data_int8[i] = (int8_t)round(input_node->runtime_data[i] / input_node->scale);
     input_node->dtype = LANCIUS_DTYPE_INT8;
 
@@ -94,6 +99,7 @@ int main(int argc, char** argv) {
     // Cleanup
     free(input_node->runtime_data);
     if(input_node->runtime_data_int8) free(input_node->runtime_data_int8);
+    if (plan) lancius_memory_plan_destroy(plan);
     lancius_schedule_destroy(sched);
     lancius_graph_destroy(g);
     free(flat_buffer);

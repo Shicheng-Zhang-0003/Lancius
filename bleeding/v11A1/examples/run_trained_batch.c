@@ -18,6 +18,7 @@ int main() {
     size_t in_elems = 1 * 3 * 32 * 32;
     float* temp_in = (float*)malloc(in_elems * sizeof(float));
     FILE* f_in = fopen("test_batch.bin", "rb");
+    if (!f_in) { printf("FATAL: missing test_batch.bin\n"); return 1; }
 
     lancius_schedule* sched = lancius_ir_schedule(g);
     lancius_arena* scratch = lancius_arena_create(16 * 1024 * 1024);
@@ -28,7 +29,8 @@ int main() {
     in_node->runtime_data = (double*)malloc(in_elems * sizeof(double));
 
     for(int img=0; img<100; img++) {
-        fread(temp_in, sizeof(float), in_elems, f_in);
+        size_t rd = fread(temp_in, sizeof(float), in_elems, f_in);
+        if (rd != in_elems) break;
         for(size_t i=0; i<in_elems; i++) in_node->runtime_data[i] = (double)temp_in[i];
 
         for(uint32_t w=0; w<sched->wave_count; w++) {
@@ -55,10 +57,16 @@ int main() {
     fclose(f_in); fclose(f_out);
     free(temp_in);
 
+    // Free only external buffers.
+    // Graph-owned loaded weights are released by lancius_graph_destroy().
     for(uint32_t i=0; i<g->node_count; i++) {
         if (g->nodes[i]->op == LANCIUS_OP_INPUT) {
-            if (g->nodes[i]->runtime_data) free(g->nodes[i]->runtime_data);
-            if (g->nodes[i]->runtime_data_int8) free(g->nodes[i]->runtime_data_int8);
+            if (lancius_node_buffer_is_external(g->nodes[i]) && g->nodes[i]->runtime_data) {
+                free(g->nodes[i]->runtime_data);
+            }
+            if (lancius_node_int8_buffer_is_external(g->nodes[i]) && g->nodes[i]->runtime_data_int8) {
+                free(g->nodes[i]->runtime_data_int8);
+            }
         }
     }
 

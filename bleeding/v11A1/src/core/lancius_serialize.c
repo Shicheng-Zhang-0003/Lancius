@@ -4,13 +4,22 @@
 #include <string.h>
 
 #define LANCIUS_MAGIC 0x21434E41 // "LANC!"
+/* v11A1 Task 6a: active format is v1. v2 lands in Task 6b. */
 #define LANCIUS_FORMAT_VERSION 1
+
+/* v11A1 Task 6b: v2 format entry points */
+int lancius_graph_save_v2(lancius_graph* g, const char* path);
+lancius_graph* lancius_graph_load_v2(const char* path);
 
 // Bulletproof macros to silence GCC's aggressive warn_unused_result on fread/fwrite
 #define SAFE_READ(ptr, size, nmemb, stream) do { size_t _r = fread(ptr, size, nmemb, stream); (void)_r; } while(0)
 #define SAFE_WRITE(ptr, size, nmemb, stream) do { size_t _r = fwrite(ptr, size, nmemb, stream); (void)_r; } while(0)
 
 void lancius_graph_save(lancius_graph* g, const char* path) {
+    if (lancius_graph_save_v2(g, path) == 0) return;
+
+    fprintf(stderr, "[LANCIUS SERIAL WARN] v2 save failed, falling back to v1\n");
+
     FILE* f = fopen(path, "wb");
     if (!f) return;
     uint32_t magic = LANCIUS_MAGIC;
@@ -63,6 +72,11 @@ void lancius_graph_save(lancius_graph* g, const char* path) {
 }
 
 lancius_graph* lancius_graph_load(const char* path) {
+    lancius_graph* g_v2 = lancius_graph_load_v2(path);
+    if (g_v2) return g_v2;
+
+    lancius_clear_error();
+
     FILE* f = fopen(path, "rb");
     if (!f) return NULL;
     uint32_t magic, node_count;
@@ -87,6 +101,7 @@ lancius_graph* lancius_graph_load(const char* path) {
         if (id >= map_size) goto fail;
 
         if (fread(&op, sizeof(lancius_opcode), 1, f) != 1) goto fail;
+        if (op > LANCIUS_OP_GQA) goto fail;
         if (fread(&ndim, sizeof(uint8_t), 1, f) != 1) goto fail;
         if (fread(shape, sizeof(size_t), 4, f) != 4) goto fail;
 
