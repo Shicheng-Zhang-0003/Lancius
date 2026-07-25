@@ -9,7 +9,7 @@ const char* VOCAB[] = {"[PAD]", "Hello", " world", "!", " Lancius", " is", " fas
 
 int main() {
     printf("================================================================\n");
-    printf("  Lancius v10S: AUTOREGRESSIVE LLM GENERATION (KV-Cache)      \n");
+    printf("  Lancius v10S: AUTOREGRESSIVE LLM GENERATION (Experimental KV-Cache Demo)      \n");
     printf("================================================================\n\n");
 
     size_t n_heads = 2;
@@ -130,7 +130,7 @@ int main() {
     }
 
     printf("\n\n================================================================\n");
-    printf("  LANCIUS v10 AUTOREGRESSIVE GENERATION COMPLETE.\n");
+    printf("  LANCIUS v11A1 EXPERIMENTAL AUTOREGRESSIVE DEMO COMPLETE.\n");
     printf("  Final Sequence Length: %zu tokens\n", seq_len);
     printf("================================================================\n");
 

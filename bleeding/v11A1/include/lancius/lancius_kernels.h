@@ -49,19 +49,6 @@ void kernel_rmsnorm(double* out, const double* in, const double* gamma, size_t s
 void kernel_swiglu(double* out, const double* gate, const double* up, size_t elements);
 void kernel_gqa(double* out, const double* q, const double* k, const double* v, size_t seq_len, size_t n_heads_q, size_t n_heads_kv, size_t head_dim);
 
-// =====================================================================
-// V10S PERFORMANCE MANDATE: FP32 & SIMD KERNELS
-// =====================================================================
-void kernel_matmul_f32(float* out, const float* a, const float* b, size_t M, size_t K, size_t N);
-void kernel_matmul_f64_simd(double* out, const double* a, const double* b, size_t M, size_t K, size_t N);
 
-// Dtype-aware dispatch macro (Zero-cost abstraction)
-#ifdef LANCIUS_USE_F32
-    #define kernel_matmul_dispatch(out, a, b, M, K, N) \
-        kernel_matmul_f32((float*)(out), (const float*)(a), (const float*)(b), (M), (K), (N))
-#else
-    #define kernel_matmul_dispatch(out, a, b, M, K, N) \
-        kernel_matmul_f64_simd((double*)(out), (const double*)(a), (const double*)(b), (M), (K), (N))
-#endif
 
 #endif

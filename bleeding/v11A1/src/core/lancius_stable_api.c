@@ -12,6 +12,26 @@ static void set_error(lancius_status err) {
     g_last_error = err;
 }
 
+static lancius_status map_internal_error(lancius_error err) {
+    switch (err) {
+        case LANCIUS_ERROR_OK:               return LANCIUS_OK;
+        case LANCIUS_ERROR_OOM:              return LANCIUS_ERR_OOM;
+        case LANCIUS_ERROR_NULL_PTR:         return LANCIUS_ERR_NULL_PTR;
+        case LANCIUS_ERROR_SHAPE_MISMATCH:   return LANCIUS_ERR_SHAPE_MISMATCH;
+        case LANCIUS_ERROR_UNSUPPORTED_OP:   return LANCIUS_ERR_UNSUPPORTED_OP;
+        default:                             return LANCIUS_ERR_UNSUPPORTED_OP;
+    }
+}
+
+static void sync_internal_error(void) {
+    lancius_error err = lancius_get_error();
+    if (err != LANCIUS_ERROR_OK) {
+        set_error(map_internal_error(err));
+        lancius_clear_error();
+    }
+}
+
+
 LANCIUS_EXPORT lancius_status lancius_get_last_error(void) {
     return g_last_error;
 }
@@ -62,7 +82,7 @@ LANCIUS_EXPORT lancius_graph_handle lancius_graph_create_stable(lancius_context 
     if (!wrapper) { set_error(LANCIUS_ERR_OOM); return NULL; }
 
     wrapper->g = lancius_graph_create();
-    if (!wrapper->g) { free(wrapper); set_error(LANCIUS_ERR_OOM); return NULL; }
+    if (!wrapper->g) { free(wrapper); sync_internal_error(); if (g_last_error == LANCIUS_OK) set_error(LANCIUS_ERR_OOM); return NULL; }
 
     wrapper->scratch = lancius_arena_create(16 * 1024 * 1024); // 16MB execution scratch
     wrapper->sched = NULL;
@@ -93,7 +113,7 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_matmul(lancius_graph_handle g, 
     if (!g || !a || !b) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     lancius_node* n = lancius_matmul(wrapper->g, (lancius_node*)a, (lancius_node*)b);
-    if (!n) { set_error(LANCIUS_ERR_SHAPE_MISMATCH); return NULL; }
+    if (!n) { sync_internal_error(); if (g_last_error == LANCIUS_OK) set_error(LANCIUS_ERR_SHAPE_MISMATCH); return NULL; }
     set_error(LANCIUS_OK);
     return (lancius_tensor_handle)n;
 }
@@ -126,8 +146,12 @@ LANCIUS_EXPORT lancius_status lancius_compile_and_run(lancius_graph_handle g) {
     if (!wrapper->sched) { set_error(LANCIUS_ERR_OOM); return LANCIUS_ERR_OOM; }
 
     lancius_arena_reset(wrapper->scratch);
+    lancius_clear_error();
     lancius_schedule_execute(wrapper->sched, wrapper->scratch);
-
+    if (lancius_get_error() != LANCIUS_ERROR_OK) {
+        sync_internal_error();
+        return g_last_error;
+    }
     set_error(LANCIUS_OK);
     return LANCIUS_OK;
 }

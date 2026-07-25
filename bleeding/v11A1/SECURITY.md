@@ -15,5 +15,5 @@ Security concerns include:
 
 ## Stable Branch
 
-The v10S branch receives fixes for critical security and correctness
+The v11A1 branch receives fixes for critical security and correctness
 issues.

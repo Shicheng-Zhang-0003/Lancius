@@ -4,6 +4,8 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 
+torch.manual_seed(42)
+
 class LeNet(nn.Module):
     def __init__(self):
         super(LeNet, self).__init__()

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 static void track(lancius_graph* g, lancius_node* n) {
     if (g->node_count >= g->node_cap) {
@@ -26,6 +27,16 @@ static void lancius_ensure_runtime_capacity(lancius_graph* g, uint32_t id) {
     memset(nr + g->rt_cap, 0, (new_cap - g->rt_cap) * sizeof(lancius_runtime_state));
     g->rt_states = nr;
     g->rt_cap = new_cap;
+    
+    /* v11A1 repair: realloc invalidates cached rt pointers; refresh existing nodes. */
+    if (g->nodes) {
+        for (uint32_t i = 0; i < g->node_count; i++) {
+            lancius_node* existing = g->nodes[i];
+            if (existing && existing->id < g->rt_cap) {
+                existing->rt = &g->rt_states[existing->id];
+            }
+        }
+    }
 }
 
 static lancius_node* alloc_node(lancius_graph* g, lancius_opcode op, uint8_t ndim, uint32_t in_count);
@@ -98,6 +109,7 @@ lancius_node* lancius_broadcast_4d(lancius_graph* g, const lancius_node* a, size
 
 void lancius_graph_destroy(lancius_graph* g) {
     if (!g) return;
+    lancius_graph_release_owned(g);
     free(g->nodes);
     free(g->rt_states); /* A1 */
     lancius_arena_destroy(g->arena);
@@ -543,4 +555,12 @@ void lancius_graph_release_owned(lancius_graph* g) {
     for (uint32_t i = 0; i < g->node_count; i++) {
         lancius_node_release_owned(g->nodes[i]);
     }
+}
+/* v11A1: ownership query helpers */
+bool lancius_node_buffer_is_external(const lancius_node* n) {
+    return n && n->rt && n->rt->buffer_owner == LANCIUS_MEMORY_EXTERNAL;
+}
+
+bool lancius_node_int8_buffer_is_external(const lancius_node* n) {
+    return n && n->rt && n->rt->int8_owner == LANCIUS_MEMORY_EXTERNAL;
 }

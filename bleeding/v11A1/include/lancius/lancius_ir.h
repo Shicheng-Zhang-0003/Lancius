@@ -10,6 +10,9 @@
 #include "lancius/lancius_model_format.h"
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
 
 /* A1: lancius_dtype now lives in lancius_types.h */
 
@@ -61,10 +64,85 @@ typedef struct lancius_graph {
     size_t rt_cap;
 } lancius_graph;
 
+#ifndef LANCIUS_MAX_TENSOR_ELEMS
+#define LANCIUS_MAX_TENSOR_ELEMS ((size_t)100000000)
+#endif
+
+#ifndef LANCIUS_MAX_TENSOR_BYTES
+#define LANCIUS_MAX_TENSOR_BYTES ((size_t)800000000)
+#endif
+
 static inline size_t lancius_node_elements(const lancius_node* n) {
+    if (!n) return 0;
+
+    if (n->ndim > 4) {
+        fprintf(stderr,
+            "[LANCIUS SAFETY FATAL] tensor ndim %u exceeds max rank 4\n",
+            (unsigned)n->ndim);
+        abort();
+    }
+
     size_t e = 1;
-    for(uint8_t i=0; i<n->ndim; i++) e *= n->shape[i];
+
+    for (uint8_t i = 0; i < n->ndim; i++) {
+        size_t dim = n->shape[i];
+
+        if (dim == 0) {
+            e = 0;
+            continue;
+        }
+
+        if (dim > LANCIUS_MAX_TENSOR_ELEMS || e > LANCIUS_MAX_TENSOR_ELEMS / dim) {
+            fprintf(stderr,
+                "[LANCIUS SAFETY FATAL] tensor element count overflow or exceeds sanity limit\n");
+            abort();
+        }
+
+        e *= dim;
+    }
+
     return e;
+}
+
+static inline int lancius_node_elements_checked(const lancius_node* n, size_t* out) {
+    if (!n || !out) return 0;
+    if (n->ndim > 4) return 0;
+
+    size_t e = 1;
+
+    for (uint8_t i = 0; i < n->ndim; i++) {
+        size_t dim = n->shape[i];
+
+        if (dim == 0) {
+            e = 0;
+            continue;
+        }
+
+        if (dim > LANCIUS_MAX_TENSOR_ELEMS || e > LANCIUS_MAX_TENSOR_ELEMS / dim) {
+            return 0;
+        }
+
+        e *= dim;
+    }
+
+    *out = e;
+    return 1;
+}
+
+static inline size_t lancius_node_element_bytes(const lancius_node* n);
+
+static inline int lancius_node_bytes_checked(const lancius_node* n, size_t* out) {
+    size_t elems = 0;
+    if (!lancius_node_elements_checked(n, &elems)) return 0;
+
+    size_t elem_size = lancius_node_element_bytes(n);
+    if (elem_size != 0 && elems > SIZE_MAX / elem_size) return 0;
+
+    size_t bytes = elems * elem_size;
+    if (bytes > LANCIUS_MAX_TENSOR_BYTES) return 0;
+
+    *out = bytes;
+    return 1;
 }
 
 /* A3: dtype-aware tensor byte sizing */
@@ -146,4 +224,8 @@ void lancius_node_bind_owned_heap_int8(lancius_node* n, int8_t* data);
 
 void lancius_node_release_owned(lancius_node* n);
 void lancius_graph_release_owned(lancius_graph* g);
+
+/* v11A1: ownership query helpers */
+bool lancius_node_buffer_is_external(const lancius_node* n);
+bool lancius_node_int8_buffer_is_external(const lancius_node* n);
 #endif

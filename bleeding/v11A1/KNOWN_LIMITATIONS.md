@@ -1,9 +1,9 @@
-# Lancius v10S Known Limitations
+# Lancius v11A1 Known Limitations
 
-This document defines the explicit boundaries of the stable v10S
+This document defines the explicit boundaries of the stable v11A1
 release.
 
-A stable release is not defined by having every feature. It is defined
+A development milestone is not defined by having every feature. It is defined
 by having a clear and reliable contract.
 
 ## Supported
@@ -28,10 +28,10 @@ The following areas are intentionally not considered stable:
 
 ## Training Status
 
-Lancius v10S is inference-first.
+Lancius v11A1 is inference-first.
 
 Training-related components may exist in the codebase but should not be
-considered production-ready.
+considered development preview.
 
 ## Backend Support
 

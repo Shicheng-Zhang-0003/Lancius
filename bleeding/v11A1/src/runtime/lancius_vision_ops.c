@@ -10,53 +10,73 @@
 void lancius_execute_vision_op(lancius_node* n) {
     if (!n || !n->runtime_data) return;
 
-    // V10S ONNX Mixed-Precision Router
-    bool is_int8_weight = (n->input_count >= 2 && n->inputs[1] && n->inputs[1]->dtype == LANCIUS_DTYPE_INT8);
+    /* v11A1: fail loudly on unhandled vision-range ops */
+    switch (n->op) {
+        case LANCIUS_OP_CONV2D:
+        case LANCIUS_OP_CONV2D_RELU_FUSED:
+        case LANCIUS_OP_MAXPOOL2D:
+        case LANCIUS_OP_FLATTEN:
+        case LANCIUS_OP_RESHAPE:
+        case LANCIUS_OP_CONV2D_BWD:
+        case LANCIUS_OP_CONV2D_BWD_W:
+        case LANCIUS_OP_MAXPOOL2D_BWD:
+            break;
 
-    if ((n->op == LANCIUS_OP_CONV2D || n->op == LANCIUS_OP_CONV2D_RELU_FUSED) && is_int8_weight) {
-        lancius_node* in_node = (lancius_node*)n->inputs[0];
+        default:
+            fprintf(stderr,
+                "[LANCIUS VISION FATAL] unsupported vision-range op %d\n",
+                (int)n->op);
+            lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
+            abort();
+    }
+
+    // v11A1 Task 9: no hidden execution-time quantization side effects.
+    // INT8 Conv2D runs only when both activation and weight INT8 buffers already exist.
+    bool can_use_int8 =
+        n->input_count >= 2 &&
+        n->inputs[0] &&
+        n->inputs[1] &&
+        n->inputs[0]->runtime_data_int8 &&
+        n->inputs[1]->runtime_data_int8;
+
+    if ((n->op == LANCIUS_OP_CONV2D || n->op == LANCIUS_OP_CONV2D_RELU_FUSED) && can_use_int8) {
+        const lancius_node* in_node = n->inputs[0];
         const lancius_node* w_node = n->inputs[1];
-        int8_t* w = w_node->runtime_data_int8;
-        if (!w) return;
 
-        int8_t* in = in_node->runtime_data_int8;
- /* A2: dynamically quantized activation buffer is owned heap memory */
- lancius_node_bind_owned_heap_int8(in_node, in_node->runtime_data_int8);
+        const int8_t* in = in_node->runtime_data_int8;
+        const int8_t* w = w_node->runtime_data_int8;
 
-        // Dynamic Quantization: If input activation is FP64 (from MaxPool/ReLU), quantize on the fly!
-        if (!in && in_node->runtime_data) {
-            size_t in_elems = lancius_node_elements(in_node);
-            double max_val = 0.0;
-            for(size_t i=0; i<in_elems; i++) {
-                double abs_v = fabs(in_node->runtime_data[i]);
-                if (abs_v > max_val) max_val = abs_v;
-            }
-            in_node->scale = (max_val > 0.0) ? (max_val / 127.0) : 1e-8;
-            in_node->runtime_data_int8 = (int8_t*)malloc(in_elems);
-            for(size_t i=0; i<in_elems; i++) {
-                in_node->runtime_data_int8[i] = (int8_t)round(in_node->runtime_data[i] / in_node->scale);
-            }
-            in = in_node->runtime_data_int8;
-        }
+        if (!in || !w) return;
 
-        if (!in) return;
+        double scale_in = (in_node->scale != 0.0) ? in_node->scale : 1e-8;
+        double scale_w = (w_node->scale != 0.0) ? w_node->scale : 1e-8;
 
-        kernel_conv2d_int8_fwd(n->runtime_data, in, w, in_node->scale, w_node->scale,
+        kernel_conv2d_int8_fwd(n->runtime_data, in, w, scale_in, scale_w,
             in_node->shape[0], in_node->shape[1], in_node->shape[2], in_node->shape[3],
             w_node->shape[0], w_node->shape[2], w_node->shape[3],
             n->stride, n->pad);
 
-        // Apply ReLU if this is a fused node
         if (n->op == LANCIUS_OP_CONV2D_RELU_FUSED) {
             size_t elems = lancius_node_elements(n);
-            for(size_t i=0; i<elems; i++) {
+            for (size_t i = 0; i < elems; i++) {
                 if (n->runtime_data[i] < 0.0) n->runtime_data[i] = 0.0;
             }
         }
-        return; // Handled INT8 path
+
+        return;
+    }
+
+    // If a Conv2D weight is INT8-only but activations are not INT8, fail loudly.
+    if ((n->op == LANCIUS_OP_CONV2D || n->op == LANCIUS_OP_CONV2D_RELU_FUSED) &&
+        n->input_count >= 2 && n->inputs[1] &&
+        n->inputs[1]->dtype == LANCIUS_DTYPE_INT8 &&
+        !n->inputs[1]->runtime_data) {
+        fprintf(stderr, "[LANCIUS VISION FATAL] INT8 Conv2D requires explicit INT8 activation buffers in v11A1\n");
+        abort();
     }
 
     // Standard FP64 Routing
+
     if (n->op == LANCIUS_OP_CONV2D_RELU_FUSED) {
         double* in = n->inputs[0]->runtime_data;
         double* w = n->inputs[1]->runtime_data;

@@ -1,15 +1,15 @@
-# Lancius v10S
+# Lancius v11A1
 
 ## The Lancius Project
 
-Lancius v10S is the first stable release of the Lancius 1.0 development
+Lancius v11A1 is the first development milestone of the Lancius 1.0 development
 cycle.
 
 Lancius is a lightweight machine learning execution framework focused on
 bare-metal inference, graph execution, runtime control, and efficient
 deployment.
 
-The purpose of v10S is not to represent the final evolution of Lancius.
+The purpose of v11A1 is not to represent the final evolution of Lancius.
 It is a stable foundation: a verified, documented, and reproducible
 release from which future v11 development can proceed.
 
@@ -20,7 +20,7 @@ Lancius follows this development cycle:
 -   v10A1: Initial 1.0 architecture development
 -   v10A2: Architecture expansion and validation
 -   v10A3: Release candidate hardening and adversarial testing
--   v10S: Stable 1.0 release
+-   v11A1: v11A1 development milestone
 
 Future releases will continue the cycle:
 
@@ -31,7 +31,7 @@ Future releases will continue the cycle:
 
 ## Features
 
-v10S provides:
+v11A1 provides:
 
 -   Graph-based execution
 -   Stable C API
@@ -44,7 +44,7 @@ v10S provides:
 
 ## Supported Focus
 
-Lancius v10S is designed around:
+Lancius v11A1 is designed around:
 
 -   deterministic inference
 -   low-level runtime control
