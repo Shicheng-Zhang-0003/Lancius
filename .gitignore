@@ -1,43 +1,36 @@
-# ==========================================
-# DATASETS (Never push binary data)
-# ==========================================
-*.tar.gz
-*.bin
-*.ubyte
-data/
-cifar-10-batches-bin/
-reference_materials
-# ==========================================
-# BUILD ARTIFACTS & MODELS
-# ==========================================
+# Compiled Objects
 *.o
 *.a
 *.so
-*.out
+*.dylib
+
+# Executables
+train_mnist
+train_cifar10
+fuzz_lancius
+test_path_bg
+run_edge
+test_grad_check
+run_llm
+generate_text
+test_torture
+stress_test
+audit_internals
+audit_memory_pool
+audit_flash_attention
+audit_modern_llm
+audit_ffi
+audit_threadpool_parity
+audit_nan_injection
+test_diamond_memory
+soak_fuzz
+parity_runner
+run_trained_batch
+
+# Binaries and Artifacts
 *.lancius
 *.onnx
 *.gguf
-parity_input.bin
-baseline_out.bin
-lancius_out.bin
-
-# ==========================================
-# COMPILED EXECUTABLES
-# ==========================================
-train_mnist
-train_cifar10
-run_edge
-run_llm
-generate_text
-audit_*
-stress_test
-test_*
-fuzz_lancius
-parity_runner
-
-# ==========================================
-# PYTHON & MISC
-# ==========================================
-__pycache__/
-*.pyc
-.DS_Store
+*.bin
+audit_known_answer
+audit_regression_13c
