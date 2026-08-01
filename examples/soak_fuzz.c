@@ -33,48 +33,112 @@ int test_extreme_values() {
 }
 
 int test_kv_cache_stress() {
-    printf("[SOAK 2] KV-Cache Stress (Experimental demo, 2000 steps)...\n");
-    size_t n_heads = 2, head_dim = 4, hidden_size = 8, max_seq = 2048;
-    double* k_cache = (double*)calloc(max_seq * hidden_size, sizeof(double));
-    double* v_cache = (double*)calloc(max_seq * hidden_size, sizeof(double));
+    printf("[SOAK 2] KV-Cache Runtime Stress (v11A2, 2000 steps)...\n");
+
+    size_t n_heads = 2;
+    size_t head_dim = 4;
+    size_t hidden_size = n_heads * head_dim;
+    size_t max_seq = 2048;
+
+    lancius_kv_cache* cache = lancius_kv_cache_create(
+        max_seq,
+        n_heads,
+        head_dim,
+        LANCIUS_DTYPE_FP64
+    );
+
+    if (!cache) {
+        printf("  ❌ FAIL: could not create KV-cache\n");
+        return 0;
+    }
 
     lancius_graph* g = lancius_graph_create();
+
     lancius_node* Q_in = lancius_input(g, 1, hidden_size);
-    Q_in->ndim = 3; Q_in->shape[0] = 1; Q_in->shape[1] = n_heads; Q_in->shape[2] = head_dim;
-    lancius_node* K_in = lancius_input(g, 1, hidden_size);
-    K_in->ndim = 3; K_in->shape[0] = 1; K_in->shape[1] = n_heads; K_in->shape[2] = head_dim;
-    lancius_node* V_in = lancius_input(g, 1, hidden_size);
-    V_in->ndim = 3; V_in->shape[0] = 1; V_in->shape[1] = n_heads; V_in->shape[2] = head_dim;
-    lancius_node* attn = lancius_attention(g, Q_in, K_in, V_in); (void)attn;
+    Q_in->ndim = 3;
+    Q_in->shape[0] = 1;
+    Q_in->shape[1] = n_heads;
+    Q_in->shape[2] = head_dim;
+
+    lancius_node* K_in = lancius_input(g, max_seq, hidden_size);
+    K_in->ndim = 3;
+    K_in->shape[0] = max_seq;
+    K_in->shape[1] = n_heads;
+    K_in->shape[2] = head_dim;
+
+    lancius_node* V_in = lancius_input(g, max_seq, hidden_size);
+    V_in->ndim = 3;
+    V_in->shape[0] = max_seq;
+    V_in->shape[1] = n_heads;
+    V_in->shape[2] = head_dim;
+
+    lancius_node* attn = lancius_attention(g, Q_in, K_in, V_in);
+    lancius_node_bind_transformer_state(attn, cache);
+
+    lancius_node_bind_external(K_in, (void*)lancius_kv_cache_k_buffer(cache, NULL));
+    lancius_node_bind_external(V_in, (void*)lancius_kv_cache_v_buffer(cache, NULL));
 
     lancius_schedule* sched = lancius_ir_schedule(g);
     lancius_arena* scratch = lancius_arena_create(1024 * 1024);
+
+    if (!sched || !scratch) {
+        printf("  ❌ FAIL: could not compile KV-cache stress schedule\n");
+        lancius_kv_cache_destroy(cache);
+        lancius_graph_destroy(g);
+        return 0;
+    }
 
     double* q = (double*)malloc(hidden_size * sizeof(double));
     double* k = (double*)malloc(hidden_size * sizeof(double));
     double* v = (double*)malloc(hidden_size * sizeof(double));
 
+    if (!q || !k || !v) {
+        printf("  ❌ FAIL: OOM allocating Q/K/V stress buffers\n");
+        free(q);
+        free(k);
+        free(v);
+        lancius_schedule_destroy(sched);
+        lancius_arena_destroy(scratch);
+        lancius_graph_destroy(g);
+        lancius_kv_cache_destroy(cache);
+        return 0;
+    }
+
     size_t steps = 2000;
-    for(size_t step=0; step<steps; step++) {
-        if (step >= max_seq) break; // Safety wrap-around
-        for(size_t i=0; i<hidden_size; i++) { q[i] = 0.1; k[i] = 0.2; v[i] = 0.3; }
-        memcpy(k_cache + step * hidden_size, k, hidden_size * sizeof(double));
-        memcpy(v_cache + step * hidden_size, v, hidden_size * sizeof(double));
 
-        Q_in->runtime_data = q; K_in->runtime_data = k_cache; V_in->runtime_data = v_cache;
-        K_in->shape[0] = step + 1; V_in->shape[0] = step + 1;
+    for (size_t step = 0; step < steps; step++) {
+        if (lancius_kv_cache_seq_len(cache) >= max_seq) {
+            break;
+        }
 
-        for(uint32_t w=0; w<sched->wave_count; w++)
-            for(uint32_t i=0; i<sched->waves[w].node_count; i++)
-                if (sched->waves[w].nodes[i]->op != LANCIUS_OP_INPUT)
-                    sched->waves[w].nodes[i]->runtime_data = NULL;
+        for (size_t i = 0; i < hidden_size; i++) {
+            q[i] = 0.1;
+            k[i] = 0.2;
+            v[i] = 0.3;
+        }
+
+        if (lancius_kv_cache_append(cache, k, v, 1) != 0) {
+            break;
+        }
+
+        lancius_node_bind_external(Q_in, q);
 
         lancius_schedule_execute(sched, scratch);
         lancius_arena_reset(scratch);
     }
-    printf("  ✅ PASS: Survived %zu autoregressive steps. Zero OOM, zero leaks.\n", steps);
-    free(q); free(k); free(v); free(k_cache); free(v_cache);
-    lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g);
+
+    printf("  ✅ PASS: Survived %zu autoregressive steps. Zero OOM, zero leaks.\n",
+           lancius_kv_cache_seq_len(cache));
+
+    free(q);
+    free(k);
+    free(v);
+
+    lancius_schedule_destroy(sched);
+    lancius_arena_destroy(scratch);
+    lancius_graph_destroy(g);
+    lancius_kv_cache_destroy(cache);
+
     return 1;
 }
 

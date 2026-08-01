@@ -446,3 +446,27 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
         free(o_i);
     }
 }
+
+
+/*
+ * v11A2 Section 11:
+ * FP32 matmul kernel.
+ *
+ * A2 correctness policy:
+ *   - inputs and outputs are FP32
+ *   - accumulation is FP64 for numerical stability
+ */
+void kernel_matmul_f32(float* out, const float* a, const float* b, size_t M, size_t K, size_t N) {
+#pragma omp parallel for collapse(2) schedule(static)
+    for (size_t r = 0; r < M; r++) {
+        for (size_t c = 0; c < N; c++) {
+            double acc = 0.0;
+
+            for (size_t k = 0; k < K; k++) {
+                acc += (double)a[r * K + k] * (double)b[k * N + c];
+            }
+
+            out[r * N + c] = (float)acc;
+        }
+    }
+}

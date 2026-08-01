@@ -133,6 +133,12 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
                 data = n->runtime_data_int8;
                 elem_size = sizeof(int8_t);
                 elems = lancius_node_elements(n);
+            } else if (rn.dtype == LANCIUS_DTYPE_FP32 && n->runtime_data_f32) {
+                rn.has_weights = 1;
+                rn.dtype = LANCIUS_DTYPE_FP32;
+                data = n->runtime_data_f32;
+                elem_size = sizeof(float);
+                elems = lancius_node_elements(n);
             } else if (n->runtime_data) {
                 rn.has_weights = 1;
                 rn.dtype = LANCIUS_DTYPE_FP64;
@@ -221,7 +227,7 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
         if (rn.weight_elems > 100000000ull) goto fail;
         if (!lancius_dtype_is_valid(rn.dtype)) goto fail;
         if (rn.op > LANCIUS_MODEL_OP_GQA) goto fail;
-        if (rn.dtype != LANCIUS_DTYPE_FP64 && rn.dtype != LANCIUS_DTYPE_INT8) goto fail;
+        if (rn.dtype != LANCIUS_DTYPE_FP64 && rn.dtype != LANCIUS_DTYPE_INT8 && rn.dtype != LANCIUS_DTYPE_FP32) goto fail;
 
         (void)rn.flags;
 
@@ -236,6 +242,11 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
             if (fread(in_ids, sizeof(uint32_t), rn.input_count, f) != rn.input_count) {
                 goto fail;
             }
+        }
+
+        /* A3: reject forward/missing input references */
+        for (uint32_t j = 0; j < rn.input_count; j++) {
+            if (!map_get(&map, in_ids[j])) goto fail;
         }
 
         lancius_node* in0 = rn.input_count > 0 ? map_get(&map, in_ids[0]) : NULL;
@@ -381,9 +392,21 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
             n->scale = rn.scale;
         }
 
+        /*
+         * v11A2 Section 12:
+         * Reject malformed models where file-provided weight length
+         * disagrees with the node shape.
+         */
+        if (rn.has_weights && rn.weight_elems > 0 && n) {
+            size_t expected_elems = 0;
+            if (!lancius_node_elements_checked(n, &expected_elems)) goto fail;
+            if ((uint64_t)expected_elems != rn.weight_elems) goto fail;
+        }
+
         if (rn.has_weights && rn.weight_elems > 0) {
             size_t elems = (size_t)rn.weight_elems;
-            size_t elem_size = (rn.dtype == LANCIUS_DTYPE_INT8) ? sizeof(int8_t) : sizeof(double);
+            size_t elem_size = (rn.dtype == LANCIUS_DTYPE_INT8) ? sizeof(int8_t) :
+                               ((rn.dtype == LANCIUS_DTYPE_FP32) ? sizeof(float) : sizeof(double));
             size_t bytes = elems * elem_size;
 
             if (elem_size != 0 && bytes / elem_size != elems) goto fail;
@@ -400,6 +423,15 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
 
                     n->runtime_data_int8 = buf;
                     lancius_node_bind_owned_heap_int8(n, buf);
+                } else if (rn.dtype == LANCIUS_DTYPE_FP32) {
+                    float* buf = (float*)malloc(bytes);
+                    if (!buf) goto fail;
+                    if (fread(buf, sizeof(float), elems, f) != elems) {
+                        free(buf);
+                        goto fail;
+                    }
+                    n->runtime_data_f32 = buf;
+                    lancius_node_bind_owned_heap_f32(n, buf);
                 } else {
                     double* buf = (double*)malloc(bytes);
                     if (!buf) goto fail;
@@ -416,6 +448,9 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
                 if (bytes > 0 && fseek(f, (long)bytes, SEEK_CUR) != 0) goto fail;
             }
         }
+
+        /* A3: reject duplicate node ids */
+        if (map_get(&map, rn.id)) goto fail;
 
         if (!map_set(&map, rn.id, n)) goto fail;
     }

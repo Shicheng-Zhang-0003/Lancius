@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
 project(Lancius VERSION 11.1.0 LANGUAGES C)
 
+set(LANCIUS_MILESTONE "v11A3")
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -39,4 +41,4 @@ set_target_properties(lancius_shared PROPERTIES OUTPUT_NAME lancius)
 set_target_properties(lancius_shared PROPERTIES C_VISIBILITY_PRESET hidden)
 target_compile_options(lancius_shared PRIVATE -fvisibility=hidden)
 
-message(STATUS "Lancius v11A1 build configured.")
+message(STATUS "Lancius v11A3 build configured.")
