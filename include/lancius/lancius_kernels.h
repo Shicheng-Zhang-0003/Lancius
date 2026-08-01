@@ -12,6 +12,7 @@
 // This is the single source of truth for all LANCIUS math.
 
 void kernel_matmul(double* out, const double* a, const double* b, size_t M, size_t K, size_t N);
+void kernel_matmul_f32(float* out, const float* a, const float* b, size_t M, size_t K, size_t N);
 void kernel_conv2d_fwd(double* out, const double* in, const double* w,
                        size_t N, size_t C_in, size_t H_in, size_t W_in,
                        size_t C_out, size_t K_h, size_t K_w, size_t stride, size_t pad);

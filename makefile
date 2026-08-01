@@ -12,13 +12,14 @@ SRCS = src/core/lancius_arena.c \
        src/math/lancius_autodiff.c \
        src/math/lancius_kernels.c \
        src/runtime/lancius_threadpool.c \
+       src/runtime/lancius_transformer.c \
        src/runtime/lancius_vision_ops.c \
        src/compiler/lancius_bytecode.c \
        src/compiler/lancius_optimizer.c \
        src/compiler/lancius_quantize.c
 
 OBJS = $(SRCS:.c=.o)
-all: liblancius.a audit_internals stress_test test_torture generate_text run_llm train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c
+all: liblancius.a audit_internals stress_test test_torture generate_text run_llm train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path
 liblancius.a: $(OBJS)
 	ar rcs $@ $(OBJS)
 train_mnist: examples/train_mnist.c liblancius.a
@@ -107,7 +108,7 @@ install: liblancius.a
 	@echo "📦 Installing Lancius static library to $(PREFIX)/lib..."
 	@mkdir -p $(PREFIX)/lib
 	@cp liblancius.a $(PREFIX)/lib/
-	@echo "✅ Lancius v11A1 installed successfully."
+	@echo "✅ Lancius v11A3 installed successfully."
 
 uninstall:
 	@echo "🗑️  Removing Lancius from $(PREFIX)..."
@@ -142,12 +143,14 @@ check: all
 	./audit_modern_llm
 	./audit_known_answer
 	./audit_regression_13c
-	@echo "v11A1 check complete."
+	./audit_transformer_known_answer
+	./audit_fp32_path
+	@echo "v11A3 check complete."
 
 check-long: check
 	./soak_fuzz
 	./fuzz_lancius 12345
-	@echo "v11A1 long check complete."
+	@echo "v11A3 long check complete."
 
 # --- v11A1 Task 13b: known-answer audit ---
 audit_known_answer: examples/audit_known_answer.c liblancius.a
@@ -167,4 +170,10 @@ check-sanitizers:
 	./stress_test
 	./test_torture
 	./fuzz_lancius 12345
-	@echo "v11A1 sanitizer gate complete."
+	@echo "v11A3 sanitizer gate complete."
+
+audit_transformer_known_answer: examples/audit_transformer_known_answer.c liblancius.a
+	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
+
+audit_fp32_path: examples/audit_fp32_path.c liblancius.a
+	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread

@@ -48,6 +48,7 @@ typedef enum {
 typedef struct lancius_runtime_state {
     void* buffer;
     int8_t* buffer_int8;
+    float* buffer_f32;
     lancius_dtype dtype;
     double scale;
     lancius_memory_owner owner;
@@ -57,6 +58,7 @@ typedef struct lancius_runtime_state {
     lancius_memory_owner int8_owner;
     size_t offset;
     uint32_t flags;
+    void* transformer_state;
 } lancius_runtime_state;
 
 /* A2: ownership flag bits */

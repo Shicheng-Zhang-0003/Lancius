@@ -18,5 +18,6 @@
 #include "lancius/lancius_kernels.h"
 #include "lancius/lancius_threadpool.h"
 #include "lancius/lancius_vision_ops.h"
+#include "lancius/lancius_transformer.h"
 
 #endif // LANCIUS_UMBRELLA_H

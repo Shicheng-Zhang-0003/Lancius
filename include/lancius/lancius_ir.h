@@ -45,6 +45,7 @@ typedef struct lancius_node {
     lancius_dtype dtype;
     double scale;
     int8_t* runtime_data_int8;
+    float* runtime_data_f32;
 
     /* A1: separated mutable runtime state. Legacy fields above remain temporary compatibility mirrors. */
     lancius_runtime_state* rt;
@@ -160,6 +161,7 @@ void lancius_graph_destroy(lancius_graph* g);
 
 lancius_node* lancius_input(lancius_graph* g, size_t r, size_t c);
 lancius_node* lancius_input_4d(lancius_graph* g, size_t n, size_t c, size_t h, size_t w);
+lancius_node* lancius_input_3d(lancius_graph* g, size_t d0, size_t d1, size_t d2);
 lancius_node* lancius_const(lancius_graph* g, double val, size_t r, size_t c);
 lancius_node* lancius_add(lancius_graph* g, const lancius_node* a, const lancius_node* b);
 lancius_node* lancius_sub(lancius_graph* g, const lancius_node* a, const lancius_node* b);
@@ -221,6 +223,8 @@ void lancius_node_bind_external_int8(lancius_node* n, int8_t* data);
 
 void lancius_node_bind_owned_heap(lancius_node* n, void* data);
 void lancius_node_bind_owned_heap_int8(lancius_node* n, int8_t* data);
+void lancius_node_bind_external_f32(lancius_node* n, float* data);
+void lancius_node_bind_owned_heap_f32(lancius_node* n, float* data);
 
 void lancius_node_release_owned(lancius_node* n);
 void lancius_graph_release_owned(lancius_graph* g);
