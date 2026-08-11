@@ -39,6 +39,32 @@ static int is_little_endian(void) {
     return *(const uint8_t*)&x == 1;
 }
 
+/*
+ * v11A3 format freeze: CRC32 (ISO 3309 / zlib-compatible).
+ * Used to integrity-check the model body (bytes after the 48-byte header).
+ */
+static uint32_t lancius_crc32(uint32_t crc, const uint8_t* data, size_t len) {
+    static uint32_t table[256];
+    static int table_init = 0;
+    if (!table_init) {
+        for (uint32_t i = 0; i < 256; i++) {
+            uint32_t c = i;
+            for (int j = 0; j < 8; j++) {
+                if (c & 1u) c = 0xEDB88320u ^ (c >> 1);
+                else c >>= 1;
+            }
+            table[i] = c;
+        }
+        table_init = 1;
+    }
+    crc = ~crc;
+    for (size_t i = 0; i < len; i++) {
+        crc = table[(crc ^ data[i]) & 0xFFu] ^ (crc >> 8);
+    }
+    return ~crc;
+}
+
+
 typedef struct {
     lancius_node** v;
     uint32_t cap;
@@ -176,6 +202,25 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
         }
     }
 
+    /* v11A3 format freeze: compute and write CRC32 over the model body. */
+    {
+        long body_end = (long)ftell(f);
+        long body_start = (long)sizeof(v2_header);
+        long body_size = body_end - body_start;
+        if (body_size > 0) {
+            uint8_t* body_buf = (uint8_t*)malloc((size_t)body_size);
+            if (body_buf) {
+                fseek(f, body_start, SEEK_SET);
+                if (fread(body_buf, 1, (size_t)body_size, f) == (size_t)body_size) {
+                    uint32_t crc = lancius_crc32(0, body_buf, (size_t)body_size);
+                    fseek(f, 40, SEEK_SET); /* offset of checksum_crc32 in packed header */
+                    fwrite(&crc, sizeof(uint32_t), 1, f);
+                }
+                free(body_buf);
+            }
+        }
+    }
+
     fclose(f);
     return 0;
 }
@@ -201,6 +246,7 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
     if (
         h.version != LANCIUS_MODEL_VERSION_V2 ||
         !(h.flags & LANCIUS_MODEL_FLAG_LITTLE_ENDIAN) ||
+        (h.flags & LANCIUS_MODEL_FLAG_EXTERNAL_WEIGHTS) || /* reserved, reject */
         h.header_size != sizeof(h) ||
         h.node_count > 1000000u
     ) {
@@ -453,6 +499,29 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
         if (map_get(&map, rn.id)) goto fail;
 
         if (!map_set(&map, rn.id, n)) goto fail;
+    }
+
+
+    /* v11A3 format freeze: verify CRC32 if present (non-zero). */
+    if (h.checksum_crc32 != 0) {
+        fseek(f, 0, SEEK_END);
+        long file_end = ftell(f);
+        long body_start = (long)h.header_size;
+        long body_size = file_end - body_start;
+        if (body_size > 0) {
+            uint8_t* body_buf = (uint8_t*)malloc((size_t)body_size);
+            if (!body_buf) goto fail;
+            fseek(f, body_start, SEEK_SET);
+            if (fread(body_buf, 1, (size_t)body_size, f) != (size_t)body_size) {
+                free(body_buf);
+                goto fail;
+            }
+            uint32_t computed_crc = lancius_crc32(0, body_buf, (size_t)body_size);
+            free(body_buf);
+            if (computed_crc != h.checksum_crc32) {
+                goto fail;
+            }
+        }
     }
 
     free(map.v);

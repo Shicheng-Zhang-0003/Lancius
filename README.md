@@ -1,19 +1,18 @@
 <!-- SECTION:HEADER -->
-# Lancius v11A2
+# Lancius v11S
 
-> **Internal milestone:** `v11A2`
-> **Public release:** `V1.1-AlphaRC2`
-> **Status:** Development milestone — **not a stable release**
+> **Internal milestone:** `v11S`
+> **Public release:** `V1.1`
+> **Status:** Stable release candidate
 
 Lancius is a lightweight C machine-learning compiler and runtime focused on
 bare-metal inference, static graph execution, memory planning, and low-level
 runtime control.
 
-`v11A2` is the second development milestone in the Lancius v11 cycle.
-
+`v11S` is the freeze, hardening, and bug-hunting milestone in the Lancius v11 cycle.
 Its theme is:
 
-> **Transformer runtime usability.**
+> **Freeze, hardening, and bug hunting.**
 <!-- /SECTION:HEADER -->
 
 <!-- SECTION:RELEASE_IDENTITY -->
@@ -21,7 +20,7 @@ Its theme is:
 
 | Internal Version | Public Version       | Release Type      |
 |------------------|----------------------|-------------------|
-| `v11A2`          | `V1.1-AlphaRC2`      | Development Alpha |
+| `v11S`          | `V1.1`      | Development Alpha |
 
 Lancius uses the following internal milestone progression:
 
@@ -42,9 +41,9 @@ Where:
 <!-- /SECTION:RELEASE_IDENTITY -->
 
 <!-- SECTION:HIGHLIGHTS -->
-## v11A2 Highlights
+## v11S Highlights
 
-`v11A2` focuses on making Lancius transformer execution more structurally
+`v11S` continues making Lancius transformer execution more structurally
 honest, more testable, and more runtime-oriented.
 
 This milestone is still a development milestone. It is not a stable release.
@@ -106,7 +105,7 @@ cycle.
 <!-- SECTION:WHATS_CHANGED -->
 ## What Changed Since v11A1
 
-`v11A2` continues the v11 development cycle.
+`v11S` continues the v11 development cycle.
 
 The focus of this milestone is not broad feature expansion. The focus is
 making the transformer execution path more real, more testable, and less
@@ -203,8 +202,7 @@ The following remain intentionally deferred:
 - production LLM serving
 - final binary compatibility guarantees
 
-`v11A2` is still a development milestone.
-
+`v11S` is still a development milestone.
 It is not a stable release.
 <!-- /SECTION:WHATS_CHANGED -->
 
@@ -228,7 +226,7 @@ sudo apt install build-essential
 
 ### Build with Make
 
-From inside the `v11A2/` directory:
+From inside the `v11S/` directory:
 
 ```bash
 make clean
@@ -274,7 +272,7 @@ python3 -m pip install onnx onnxruntime numpy
 <!-- SECTION:VALIDATION -->
 ## Validation
 
-Lancius `v11A2` uses a layered validation suite.
+Lancius `v11S` uses a layered validation suite.
 
 The minimum development gate is:
 
@@ -386,7 +384,7 @@ python3 audit_pytorch_parity.py
 <!-- SECTION:FEATURE_STATUS -->
 ## Feature Status
 
-Lancius `v11A2` is a development milestone.
+Lancius `v11S` is a development milestone.
 
 The following table describes the current status of major subsystems.
 
@@ -408,19 +406,19 @@ The following table describes the current status of major subsystems.
 | Dynamic shapes | Not supported | Static graph execution only |
 | Production LLM serving | Not supported | Research and development milestone only |
 
-> v11A2 is intended for development, validation, and experimentation.
+> v11S is intended for development, validation, and experimentation.
 > It is not intended as a production-stable release.
 <!-- /SECTION:FEATURE_STATUS -->
 
 <!-- SECTION:KNOWN_LIMITATIONS -->
 ## Known Limitations
 
-Lancius `v11A2` is a development milestone.
+Lancius `v11S` is a development milestone.
 
 Its limitations are intentional boundaries. They define what this release is
 not claiming to be.
 
-> `v11A2` is not a production-stable release.
+> `v11S` is not a production-stable release.
 
 ### Production Status
 
@@ -455,9 +453,9 @@ The active model format is v2.
 
 However:
 
-- The v2 format is not frozen
-- Binary compatibility is not guaranteed during the v11 development cycle
-- Models produced by `v11A1` or `v11A2` should be treated as development artifacts
+- The v2 format is **frozen** as of v11S
+- Binary compatibility is guaranteed for v2 models written by v11S+
+- Models produced by `v11A1`, `v11A2`, or `v11S` should be treated as development artifacts
 - Legacy v1 loading remains available as a fallback, but v1 is not the active format
 
 ### ONNX Interoperability Limitations
@@ -466,20 +464,23 @@ ONNX conversion is experimental.
 
 - Operator coverage is limited
 - The converter is validated primarily against LeNet-class graphs
-- Broader ONNX usability is not guaranteed in `v11A2`
+- Broader ONNX usability is not guaranteed in `v11S`
 - Unsupported ONNX behavior should be treated as experimental, not stable
 
 ### API Limitations
 
-The stable C API exists, but it is partial.
-
-- It does not yet cover the full runtime surface
-- Examples may still use internal headers
-- The stable API should not yet be treated as a complete public SDK
+The stable C API covers the core inference workflow.
+- Model loading and saving via `lancius_graph_load_stable` / `lancius_graph_save_stable`
+- Graph construction (input, matmul, relu)
+- Data binding and execution
+- Output reading with truncation protection
+- Tensor introspection (element count, dtype)
+- Opaque handles and thread-local error states
+- Transformer ops, conv2d builders, and advanced ops remain internal-only for v11S
 
 ### Training Limitations
 
-Training-related code exists in the repository, but `v11A2` is inference-first.
+Training-related code exists in the repository, but `v11S` is inference-first.
 
 - Training components are experimental
 - Training workflows are not production-grade
@@ -496,9 +497,9 @@ Other architectures may work, but they require additional validation.
 
 ### Hardening Status
 
-`v11A2` includes validation and testing, but it is not fully hardened.
+`v11S` includes validation and testing, but it is not fully hardened.
 
-The next milestone, `v11A3`, is intended to focus on:
+The next milestone, `v11S`, is intended to focus on:
 
 - feature freeze
 - loader hardening
@@ -520,12 +521,14 @@ v2 improves on v1 by using:
 - little-endian encoding
 - explicit header flags
 - stronger loader validation
+- CRC32 body integrity check (v11S)
 
-Legacy v1 loading remains available as a fallback.
+Legacy v1 loading remains available as a deprecated fallback.
 
 However:
 
-> Binary compatibility is **not guaranteed** during the v11 development cycle.
+> Binary compatibility is **guaranteed** for v2 models written by v11S and later.
+> The v2 format is frozen. CRC32 integrity verification is active.
 <!-- /SECTION:MODEL_FORMAT -->
 
 <!-- SECTION:ONNX_INTEROPERABILITY -->
@@ -634,8 +637,9 @@ python3 audit_pytorch_parity.py
 
 Relevant documents in this tree:
 
-- `docs/v11A2_SCOPE.md` — current milestone scope
-- `docs/v11A1_SCOPE.md` — previous milestone scope
+- `docs/v11S_SCOPE.md` — current milestone scope
+- `docs/v11A2_SCOPE.md` — previous milestone scope
+- `docs/v11A1_SCOPE.md` — historical milestone scope
 - `docs/v11A1_MODEL_FORMAT.md` — model format direction
 - `docs/v11A1_OPS.md` — operator support matrix
 - `docs/ARCHITECTURE.md` — high-level architecture overview
@@ -645,10 +649,10 @@ Relevant documents in this tree:
 - `SECURITY.md` — security reporting policy
 - `CHANGELOG.md` — changelog
 
-> Some documents may still reference `v11A1`.
+> Some documents may still reference `v11A1` or `v11A2`.
 >
 > Where that happens, treat them as historical unless they explicitly describe
-> `v11A2` behavior.
+> `v11S` behavior.
 <!-- /SECTION:DOCUMENTATION -->
 
 <!-- SECTION:ROADMAP -->
@@ -668,7 +672,7 @@ For public GitHub releases, internal milestones are mapped as follows:
 |--------------------|----------------------|--------------------------------------|
 | `v11A1`            | `V1.1-AlphaRC1`      | Foundation and runtime honesty       |
 | `v11A2`            | `V1.1-AlphaRC2`      | Transformer runtime usability        |
-| `v11A3`            | `V1.1-AlphaRC3`      | Freeze, hardening, and bug hunting   |
+| `v11S`            | `V1.1`      | Freeze, hardening, and bug hunting   |
 | `v11S`             | `V1.1`               | Stable release candidate             |
 
 ### Current Milestone
@@ -676,28 +680,14 @@ For public GitHub releases, internal milestones are mapped as follows:
 This release is:
 
 ```text
-v11A2 / V1.1-AlphaRC2
+v11S / V1.1
 ```
 
 Its theme is:
 
-> Transformer runtime usability.
+> Freeze, hardening, and bug hunting.
 
-It introduces the KV-cache runtime object, explicit prefill/generation flow,
-transformer known-answer validation, and the beginning of the FP32 execution
-path.
-
-### Next Milestone
-
-The next milestone is:
-
-```text
-v11A3 / V1.1-AlphaRC3
-```
-
-`v11A3` is intended to be a freeze and hardening milestone.
-
-Its focus will be:
+Its focus is:
 
 - feature freeze
 - loader hardening
@@ -707,24 +697,35 @@ Its focus will be:
 - documentation cleanup
 - release-candidate preparation
 
-`v11A3` is not intended to introduce major new features.
+`v11S` is not intended to introduce major new features.
 
-### Stable Release
+### Next Milestone
 
-After `v11A3`, the next stable milestone is:
+The next milestone is:
 
 ```text
 v11S / V1.1
 ```
 
-The stable release will be cut only after the v11A3 hardening gate is
+`v11S` is the stable release candidate. It will be cut only after the
+`v11S` hardening gate is complete.
+
+### Stable Release
+
+After `v11S`, the next stable milestone is:
+
+```text
+v11S / V1.1
+```
+
+The stable release will be cut only after the v11S hardening gate is
 complete.
 <!-- /SECTION:ROADMAP -->
 
 <!-- SECTION:SECURITY -->
 ## Security
 
-Lancius `v11A2` is a development milestone.
+Lancius `v11S` is a development milestone.
 
 Security issues should be reported privately before public disclosure.
 
@@ -736,7 +737,7 @@ Security-relevant concerns include:
 - arbitrary execution risks
 - dependency vulnerabilities
 
-Because `v11A2` is not a stable release, models and inputs should be treated
+Because `v11S` is not a stable release, models and inputs should be treated
 as development artifacts. Do not load untrusted models in production
 environments.
 

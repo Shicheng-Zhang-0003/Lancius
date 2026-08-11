@@ -73,6 +73,17 @@ typedef struct lancius_graph {
 #define LANCIUS_MAX_TENSOR_BYTES ((size_t)800000000)
 #endif
 
+/*
+ * v11S FATAL INVARIANT (not user-reachable via stable API):
+ * lancius_node_elements() calls abort() if ndim > 4 or element count
+ * overflows LANCIUS_MAX_TENSOR_ELEMS. These conditions indicate memory
+ * corruption or a violated internal invariant. Continuing execution
+ * would be unsafe. The stable FFI API validates all inputs before
+ * calling this function, so FFI consumers will never trigger these.
+ *
+ * For checked (non-aborting) element counting, use:
+ *   lancius_node_elements_checked(n, &out)
+ */
 static inline size_t lancius_node_elements(const lancius_node* n) {
     if (!n) return 0;
 

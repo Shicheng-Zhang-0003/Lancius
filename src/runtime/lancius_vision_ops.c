@@ -27,7 +27,7 @@ void lancius_execute_vision_op(lancius_node* n) {
                 "[LANCIUS VISION FATAL] unsupported vision-range op %d\n",
                 (int)n->op);
             lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
-            abort();
+            return; /* v11S: do not abort — return error to caller */
     }
 
     // v11A1 Task 9: no hidden execution-time quantization side effects.
@@ -71,8 +71,9 @@ void lancius_execute_vision_op(lancius_node* n) {
         n->input_count >= 2 && n->inputs[1] &&
         n->inputs[1]->dtype == LANCIUS_DTYPE_INT8 &&
         !n->inputs[1]->runtime_data) {
-        fprintf(stderr, "[LANCIUS VISION FATAL] INT8 Conv2D requires explicit INT8 activation buffers in v11A1\n");
-        abort();
+        fprintf(stderr, "[LANCIUS VISION FATAL] INT8 Conv2D requires explicit INT8 activation buffers\n");
+        lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_DTYPE);
+        return; /* v11S: do not abort — return error to caller */
     }
 
     // Standard FP64 Routing

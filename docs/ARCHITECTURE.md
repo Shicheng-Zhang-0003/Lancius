@@ -1,4 +1,4 @@
-# Lancius v11A1 Architecture Overview
+# Lancius v11S Architecture Overview
 
 ## High Level Pipeline
 
@@ -38,7 +38,7 @@ The architecture separates:
 
 ### Runtime First
 
-Lancius v11A1 prioritizes predictable execution over maximum feature
+Lancius v11S prioritizes predictable execution over maximum feature
 count.
 
 ### Memory Awareness

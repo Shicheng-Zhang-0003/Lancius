@@ -29,7 +29,9 @@ typedef enum {
     LANCIUS_ERR_OOM = -1,
     LANCIUS_ERR_SHAPE_MISMATCH = -2,
     LANCIUS_ERR_NULL_PTR = -3,
-    LANCIUS_ERR_UNSUPPORTED_OP = -4
+    LANCIUS_ERR_UNSUPPORTED_OP = -4,
+    LANCIUS_ERR_BUFFER_TOO_SMALL = -5,
+    LANCIUS_ERR_IO = -6
 } lancius_status;
 
 // Error Handling
@@ -56,6 +58,14 @@ LANCIUS_EXPORT lancius_status lancius_read_output(lancius_tensor_handle t, doubl
 #ifdef __cplusplus
 }
 #endif
+
+
+/* v11A3 stable API expansion: model I/O */
+LANCIUS_EXPORT lancius_graph_handle lancius_graph_load_stable(lancius_context ctx, const char* path);
+LANCIUS_EXPORT lancius_status lancius_graph_save_stable(lancius_graph_handle g, const char* path);
+
+/* v11A3 stable API expansion: tensor introspection */
+LANCIUS_EXPORT size_t lancius_tensor_element_count(lancius_tensor_handle t);
 
 /* A3: dtype query API */
 LANCIUS_EXPORT int lancius_tensor_get_dtype(lancius_tensor_handle t);

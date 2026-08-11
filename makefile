@@ -108,7 +108,7 @@ install: liblancius.a
 	@echo "📦 Installing Lancius static library to $(PREFIX)/lib..."
 	@mkdir -p $(PREFIX)/lib
 	@cp liblancius.a $(PREFIX)/lib/
-	@echo "✅ Lancius v11A3 installed successfully."
+	@echo "✅ Lancius v11S installed successfully."
 
 uninstall:
 	@echo "🗑️  Removing Lancius from $(PREFIX)..."
@@ -145,12 +145,12 @@ check: all
 	./audit_regression_13c
 	./audit_transformer_known_answer
 	./audit_fp32_path
-	@echo "v11A3 check complete."
+	@echo "v11S check complete."
 
 check-long: check
 	./soak_fuzz
 	./fuzz_lancius 12345
-	@echo "v11A3 long check complete."
+	@echo "v11S long check complete."
 
 # --- v11A1 Task 13b: known-answer audit ---
 audit_known_answer: examples/audit_known_answer.c liblancius.a
@@ -170,7 +170,7 @@ check-sanitizers:
 	./stress_test
 	./test_torture
 	./fuzz_lancius 12345
-	@echo "v11A3 sanitizer gate complete."
+	@echo "v11S sanitizer gate complete."
 
 audit_transformer_known_answer: examples/audit_transformer_known_answer.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
