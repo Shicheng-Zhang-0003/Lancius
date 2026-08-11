@@ -33,6 +33,6 @@ typedef struct {
 } lancius_program;
 
 lancius_program* lancius_compile_graph(lancius_graph* g);
-void lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lancius_arena* scratch);
+int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lancius_arena* scratch); /* returns 0 on success, -1 on OOM */
 void lancius_program_destroy(lancius_program* prog);
 #endif

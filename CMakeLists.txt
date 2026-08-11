@@ -42,3 +42,30 @@ set_target_properties(lancius_shared PROPERTIES C_VISIBILITY_PRESET hidden)
 target_compile_options(lancius_shared PRIVATE -fvisibility=hidden)
 
 message(STATUS "Lancius v11S build configured.")
+
+# --- v11S: Install rules ---
+include(GNUInstallDirs)
+
+install(TARGETS lancius_static lancius_shared
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+install(DIRECTORY include/lancius/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/lancius
+    FILES_MATCHING PATTERN "*.h"
+)
+
+install(FILES include/lancius.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+# --- v11S: pkg-config ---
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/lancius.pc.in
+    ${CMAKE_CURRENT_BINARY_DIR}/lancius.pc
+    @ONLY
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/lancius.pc
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
+)

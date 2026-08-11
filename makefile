@@ -171,6 +171,9 @@ check-sanitizers:
 	./test_torture
 	./fuzz_lancius 12345
 	@echo "v11S sanitizer gate complete."
+	@echo "Restoring normal build (removing sanitizer instrumentation)..."
+	$(MAKE) -B liblancius.a
+	@echo "Normal build restored. Safe to run 'make check' now."
 
 audit_transformer_known_answer: examples/audit_transformer_known_answer.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread

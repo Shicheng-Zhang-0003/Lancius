@@ -1,151 +1,0 @@
-make -B test_asan
-make[1]: Entering directory '/home/magi-01/Desktop/work/projects/3344-LLMM/bleeding/v11S'
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/core/lancius_arena.c -o src/core/lancius_arena.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/core/lancius_serialize.c -o src/core/lancius_serialize.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/core/lancius_serialize_v2.c -o src/core/lancius_serialize_v2.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/core/lancius_stable_api.c -o src/core/lancius_stable_api.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/core/lancius_error.c -o src/core/lancius_error.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/ir/lancius_ir.c -o src/ir/lancius_ir.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/runtime/lancius_scheduler.c -o src/runtime/lancius_scheduler.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/runtime/lancius_memory_planner.c -o src/runtime/lancius_memory_planner.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/math/lancius_autodiff.c -o src/math/lancius_autodiff.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/math/lancius_kernels.c -o src/math/lancius_kernels.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/runtime/lancius_threadpool.c -o src/runtime/lancius_threadpool.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/runtime/lancius_transformer.c -o src/runtime/lancius_transformer.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/runtime/lancius_vision_ops.c -o src/runtime/lancius_vision_ops.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/compiler/lancius_bytecode.c -o src/compiler/lancius_bytecode.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/compiler/lancius_optimizer.c -o src/compiler/lancius_optimizer.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -c src/compiler/lancius_quantize.c -o src/compiler/lancius_quantize.o
-ar rcs liblancius.a src/core/lancius_arena.o src/core/lancius_serialize.o src/core/lancius_serialize_v2.o src/core/lancius_stable_api.o src/core/lancius_error.o src/ir/lancius_ir.o src/runtime/lancius_scheduler.o src/runtime/lancius_memory_planner.o src/math/lancius_autodiff.o src/math/lancius_kernels.o src/runtime/lancius_threadpool.o src/runtime/lancius_transformer.o src/runtime/lancius_vision_ops.o src/compiler/lancius_bytecode.o src/compiler/lancius_optimizer.o src/compiler/lancius_quantize.o
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -o stress_test examples/stress_test.c liblancius.a -fsanitize=address -fopenmp -lm -lpthread
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -o test_torture examples/test_torture.c liblancius.a -fsanitize=address -fopenmp -lm -lpthread
-gcc -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC -o fuzz_lancius examples/fuzz_lancius.c liblancius.a -fsanitize=address -fopenmp -lm -lpthread -fopenmp
-✅ ASan Build Complete. Run ./stress_test && ./test_torture
-make[1]: Leaving directory '/home/magi-01/Desktop/work/projects/3344-LLMM/bleeding/v11S'
-./stress_test
-================================================================
-  LANCIUS ULTIMATE STRESS TEST (DEEP INSPECTION MODE)         
-================================================================
-
-[STRESS 1] Arena Hammering (100,000 reset cycles)...
-  [DEBUG] Cycle 0 Pointers: p1=0x521000001500 (mod8=0), p2=0x521000001520 (mod32=0), p3=0x521000001540 (mod64=0)
-  ✅ PASS: Arena survived 100k fragmentation cycles. (Alignments verified)
-[STRESS 2] Autodiff Broadcast & Reduction Nightmare...
-  [DEBUG] Bias Gradients (Expected 32.0): [32.0000 32.0000 32.0000 32.0000 32.0000 32.0000 32.0000 32.0000 32.0000 32.0000 ]
-  ✅ PASS: Autodiff correctly reduced 32x10 gradient to 1x10 bias.
-[STRESS 3] Deep Graph Scheduling (10,000 node chain)...
-  [DEBUG] Successfully built chain of 10000 ReLU nodes.
-  [DEBUG] Scheduler produced 10001 waves for 10001 total nodes.
-  ✅ PASS: Scheduler handled 10k node depth without deadlock.
-[STRESS 4] Malicious Deserialization (Garbage & Truncation)...
-  [DEBUG] Garbage file load returned: (nil)
-  [DEBUG] Truncated file load returned: (nil)
-  ✅ PASS: Serializer safely rejected malicious payloads.
-
-================================================================
-  STRESS TEST COMPLETE: 4 / 4 PASSED
-  🏆 LANCIUS IS BULLETPROOF. NO HIDDEN BUGS FOUND.
-================================================================
-./test_torture
-================================================================
-  LANCIUS TORTURE SUITE (INVARIANT VALIDATION)                 
-================================================================
-
-[TORTURE] Testing Malicious Serialization (Huge Node Count)...
-  ✅ PASS: Malicious model rejected gracefully.
-[TORTURE] Testing Arena Invariants (0-byte and SIZE_MAX)...
-  ✅ PASS: 0-byte allocs do not overlap.
-  ✅ PASS: SIZE_MAX alloc rejected.
-[TORTURE] Testing Cyclic Graph Scheduling...
-  ✅ PASS: Cyclic graphs are structurally prevented by immutable SSA API.
-
-================================================================
-  TORTURE SUITE COMPLETE: 3 PASSED | 0 FAILED
-================================================================
-./fuzz_lancius 12345
-================================================================
-  Lancius DYNAMIC FUZZER (Seed: 12345)
-================================================================
-
-  Fuzzing... 50 / 500 graphs processed.  Fuzzing... 100 / 500 graphs processed.  Fuzzing... 150 / 500 graphs processed.  Fuzzing... 200 / 500 graphs processed.  Fuzzing... 250 / 500 graphs processed.  Fuzzing... 300 / 500 graphs processed.  Fuzzing... 350 / 500 graphs processed.  Fuzzing... 400 / 500 graphs processed.  Fuzzing... 450 / 500 graphs processed.  Fuzzing... 500 / 500 graphs processed.
-
-================================================================
-  FUZZ RESULTS: 500 PASSED | 0 FAILED (out of 500)
-  (Failures here usually mean IR shape-rejection, which is SAFE)
-================================================================
-make -B test_ubsan
-make[1]: Entering directory '/home/magi-01/Desktop/work/projects/3344-LLMM/bleeding/v11S'
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/core/lancius_arena.c -o src/core/lancius_arena.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/core/lancius_serialize.c -o src/core/lancius_serialize.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/core/lancius_serialize_v2.c -o src/core/lancius_serialize_v2.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/core/lancius_stable_api.c -o src/core/lancius_stable_api.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/core/lancius_error.c -o src/core/lancius_error.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/ir/lancius_ir.c -o src/ir/lancius_ir.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/runtime/lancius_scheduler.c -o src/runtime/lancius_scheduler.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/runtime/lancius_memory_planner.c -o src/runtime/lancius_memory_planner.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/math/lancius_autodiff.c -o src/math/lancius_autodiff.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/math/lancius_kernels.c -o src/math/lancius_kernels.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/runtime/lancius_threadpool.c -o src/runtime/lancius_threadpool.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/runtime/lancius_transformer.c -o src/runtime/lancius_transformer.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/runtime/lancius_vision_ops.c -o src/runtime/lancius_vision_ops.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/compiler/lancius_bytecode.c -o src/compiler/lancius_bytecode.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/compiler/lancius_optimizer.c -o src/compiler/lancius_optimizer.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -c src/compiler/lancius_quantize.c -o src/compiler/lancius_quantize.o
-ar rcs liblancius.a src/core/lancius_arena.o src/core/lancius_serialize.o src/core/lancius_serialize_v2.o src/core/lancius_stable_api.o src/core/lancius_error.o src/ir/lancius_ir.o src/runtime/lancius_scheduler.o src/runtime/lancius_memory_planner.o src/math/lancius_autodiff.o src/math/lancius_kernels.o src/runtime/lancius_threadpool.o src/runtime/lancius_transformer.o src/runtime/lancius_vision_ops.o src/compiler/lancius_bytecode.o src/compiler/lancius_optimizer.o src/compiler/lancius_quantize.o
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -o stress_test examples/stress_test.c liblancius.a -fsanitize=undefined -fopenmp -lm -lpthread
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -o test_torture examples/test_torture.c liblancius.a -fsanitize=undefined -fopenmp -lm -lpthread
-gcc -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC -o fuzz_lancius examples/fuzz_lancius.c liblancius.a -fsanitize=undefined -fopenmp -lm -lpthread -fopenmp
-✅ UBSan Build Complete. Run ./stress_test && ./test_torture
-make[1]: Leaving directory '/home/magi-01/Desktop/work/projects/3344-LLMM/bleeding/v11S'
-./stress_test
-================================================================
-  LANCIUS ULTIMATE STRESS TEST (DEEP INSPECTION MODE)         
-================================================================
-
-[STRESS 1] Arena Hammering (100,000 reset cycles)...
-  [DEBUG] Cycle 0 Pointers: p1=0x5a7a7bd043a0 (mod8=0), p2=0x5a7a7bd043c0 (mod32=0), p3=0x5a7a7bd04400 (mod64=0)
-  ✅ PASS: Arena survived 100k fragmentation cycles. (Alignments verified)
-[STRESS 2] Autodiff Broadcast & Reduction Nightmare...
-  [DEBUG] Bias Gradients (Expected 32.0): [32.0000 32.0000 32.0000 32.0000 32.0000 32.0000 32.0000 32.0000 32.0000 32.0000 ]
-  ✅ PASS: Autodiff correctly reduced 32x10 gradient to 1x10 bias.
-[STRESS 3] Deep Graph Scheduling (10,000 node chain)...
-  [DEBUG] Successfully built chain of 10000 ReLU nodes.
-  [DEBUG] Scheduler produced 10001 waves for 10001 total nodes.
-  ✅ PASS: Scheduler handled 10k node depth without deadlock.
-[STRESS 4] Malicious Deserialization (Garbage & Truncation)...
-  [DEBUG] Garbage file load returned: (nil)
-  [DEBUG] Truncated file load returned: (nil)
-  ✅ PASS: Serializer safely rejected malicious payloads.
-
-================================================================
-  STRESS TEST COMPLETE: 4 / 4 PASSED
-  🏆 LANCIUS IS BULLETPROOF. NO HIDDEN BUGS FOUND.
-================================================================
-./test_torture
-================================================================
-  LANCIUS TORTURE SUITE (INVARIANT VALIDATION)                 
-================================================================
-
-[TORTURE] Testing Malicious Serialization (Huge Node Count)...
-  ✅ PASS: Malicious model rejected gracefully.
-[TORTURE] Testing Arena Invariants (0-byte and SIZE_MAX)...
-  ✅ PASS: 0-byte allocs do not overlap.
-  ✅ PASS: SIZE_MAX alloc rejected.
-[TORTURE] Testing Cyclic Graph Scheduling...
-  ✅ PASS: Cyclic graphs are structurally prevented by immutable SSA API.
-
-================================================================
-  TORTURE SUITE COMPLETE: 3 PASSED | 0 FAILED
-================================================================
-./fuzz_lancius 12345
-================================================================
-  Lancius DYNAMIC FUZZER (Seed: 12345)
-================================================================
-
-  Fuzzing... 50 / 500 graphs processed.  Fuzzing... 100 / 500 graphs processed.  Fuzzing... 150 / 500 graphs processed.  Fuzzing... 200 / 500 graphs processed.  Fuzzing... 250 / 500 graphs processed.  Fuzzing... 300 / 500 graphs processed.  Fuzzing... 350 / 500 graphs processed.  Fuzzing... 400 / 500 graphs processed.  Fuzzing... 450 / 500 graphs processed.  Fuzzing... 500 / 500 graphs processed.
-
-================================================================
-  FUZZ RESULTS: 500 PASSED | 0 FAILED (out of 500)
-  (Failures here usually mean IR shape-rejection, which is SAFE)
-================================================================
-v11S sanitizer gate complete.
