@@ -282,6 +282,7 @@ void kernel_attention(double* out, const double* q, const double* k, const doubl
     {
         double* o_i = (double*)calloc(head_dim, sizeof(double));
         double scale = 1.0 / sqrt((double)head_dim);
+    if (o_i) { /* v11S C2 fix: OOM guard */
 
         #pragma omp for collapse(2) schedule(static)
         for (size_t i = 0; i < seq_len; i++) {
@@ -327,6 +328,8 @@ void kernel_attention(double* out, const double* q, const double* k, const doubl
                 }
             }
         }
+        } /* v11S C2 fix: end OOM guard */
+
         free(o_i);
     }
 }
@@ -413,7 +416,8 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
     #pragma omp parallel
     {
         double* o_i = (double*)calloc(head_dim, sizeof(double));
-        #pragma omp for collapse(2) schedule(static)
+    if (o_i) { /* v11S C2 fix: OOM guard */
+    #pragma omp for collapse(2) schedule(static)
         for (size_t i = 0; i < seq_len; i++) {
             for (size_t hq = 0; hq < n_heads_q; hq++) {
                 size_t hk = hq / group_size;
@@ -443,6 +447,8 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
                 for (size_t d = 0; d < head_dim; d++) out_row[d] = o_i[d] * inv_l;
             }
         }
+        } /* v11S C2 fix: end OOM guard */
+
         free(o_i);
     }
 }

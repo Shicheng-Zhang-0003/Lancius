@@ -2,13 +2,11 @@
  * @file lancius.h
  * @brief Umbrella Header: Includes all core subsystems for native C development.
  */
-#ifndef Lancius_LANCIUS_UMBRELLA_H
-#define Lancius_LANCIUS_UMBRELLA_H
+#ifndef LANCIUS_UMBRELLA_H
+#define LANCIUS_UMBRELLA_H
 
 /*
- * Lancius: Bare-Metal AI Compiler & Runtime
- * The Production Distillation.
- * No legacy scalar tapes. No string-based AOT. Pure IR.
+ * LANCIUS: Bare-Metal AI Compiler & Runtime
  */
 
 #include "lancius/lancius_version.h"
@@ -17,5 +15,9 @@
 #include "lancius/lancius_scheduler.h"
 #include "lancius/lancius_autodiff.h"
 #include "lancius/lancius_bytecode.h"
+#include "lancius/lancius_kernels.h"
+#include "lancius/lancius_threadpool.h"
+#include "lancius/lancius_vision_ops.h"
+#include "lancius/lancius_transformer.h"
 
-#endif // Lancius_LANCIUS_UMBRELLA_H
+#endif // LANCIUS_UMBRELLA_H

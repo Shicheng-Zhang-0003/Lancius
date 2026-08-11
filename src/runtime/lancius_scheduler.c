@@ -96,6 +96,8 @@ static void execute_node_math(lancius_node* n) {
             for(size_t c=1; c<C; c++) if(x[r*C+c] > max_val) max_val = x[r*C+c];
             double sum_exp = 0.0;
             for(size_t c=0; c<C; c++) sum_exp += exp(x[r*C+c] - max_val);
+            /* v11S H3 fix: guard against degenerate logits */
+            if (sum_exp <= 0.0 || sum_exp != sum_exp) { total_loss += 1e30; continue; }
             double log_sum_exp = log(sum_exp) + max_val;
             for(size_t c=0; c<C; c++) {
                 if (y[r*C+c] == 1.0) total_loss -= (x[r*C+c] - log_sum_exp);
@@ -770,6 +772,18 @@ void lancius_schedule_execute_static(lancius_schedule* schedule, void* flat_buff
             execute_node_math(n);
         }
     }
+}
+
+/* v11S H2 fix: bounded static executor validates buffer size */
+void lancius_schedule_execute_static_bounded(lancius_schedule* schedule, void* flat_buffer, size_t buffer_size) {
+    if (!schedule || !flat_buffer) return;
+    size_t required = lancius_schedule_static_memory_required(schedule);
+    if (buffer_size < required) {
+        lancius_set_error(LANCIUS_ERROR_OVERFLOW);
+        fprintf(stderr, "[EXEC FATAL] static buffer too small: need %zu, got %zu\n", required, buffer_size);
+        return;
+    }
+    lancius_schedule_execute_static(schedule, flat_buffer);
 }
 
 static void execute_permute(lancius_node* n) {

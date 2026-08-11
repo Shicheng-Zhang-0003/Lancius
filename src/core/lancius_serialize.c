@@ -15,13 +15,13 @@ lancius_graph* lancius_graph_load_v2(const char* path);
 #define SAFE_READ(ptr, size, nmemb, stream) do { size_t _r = fread(ptr, size, nmemb, stream); (void)_r; } while(0)
 #define SAFE_WRITE(ptr, size, nmemb, stream) do { size_t _r = fwrite(ptr, size, nmemb, stream); (void)_r; } while(0)
 
-void lancius_graph_save(lancius_graph* g, const char* path) {
-    if (lancius_graph_save_v2(g, path) == 0) return;
+int lancius_graph_save(lancius_graph* g, const char* path) {
+    if (lancius_graph_save_v2(g, path) == 0) return 0;
 
     fprintf(stderr, "[LANCIUS SERIAL WARN] v2 save failed, falling back to v1\n");
 
     FILE* f = fopen(path, "wb");
-    if (!f) return;
+    if (!f) return -1;
     uint32_t magic = LANCIUS_MAGIC;
     SAFE_WRITE(&magic, sizeof(uint32_t), 1, f);
     SAFE_WRITE(&g->node_count, sizeof(uint32_t), 1, f);
@@ -54,7 +54,7 @@ void lancius_graph_save(lancius_graph* g, const char* path) {
         SAFE_WRITE(&has_weights, sizeof(uint8_t), 1, f);
         if (has_weights) {
             size_t elems = lancius_node_elements(n);
-                if (elems > 100000000) { fprintf(stderr, "[SERIAL FATAL] Tensor size exceeds sanity limit."); fclose(f); return; }
+                if (elems > 100000000) { fprintf(stderr, "[SERIAL FATAL] Tensor size exceeds sanity limit."); fclose(f); return -1; }
             uint8_t dtype = n->dtype;
             /* A3: clamp unknown dtypes to FP64 for serialization safety */
             if (!lancius_dtype_is_valid(dtype)) dtype = LANCIUS_DTYPE_FP64;
@@ -69,6 +69,7 @@ void lancius_graph_save(lancius_graph* g, const char* path) {
     }
     fclose(f);
     printf("[LANCIUS SERIAL] Saved %u nodes to %s\n", g->node_count, path);
+    return 0;
 }
 
 lancius_graph* lancius_graph_load(const char* path) {

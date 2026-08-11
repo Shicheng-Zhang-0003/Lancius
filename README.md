@@ -3,16 +3,16 @@
 
 > **Internal milestone:** `v11S`
 > **Public release:** `V1.1`
-> **Status:** Stable release candidate
+> **Status:** Stable release
 
 Lancius is a lightweight C machine-learning compiler and runtime focused on
 bare-metal inference, static graph execution, memory planning, and low-level
 runtime control.
 
-`v11S` is the freeze, hardening, and bug-hunting milestone in the Lancius v11 cycle.
-Its theme is:
-
-> **Freeze, hardening, and bug hunting.**
+`v11S` is the first stable release of the Lancius 1.1 cycle.
+It represents the completion of the v11A3 hardening gate:
+feature freeze, loader hardening, model-format freeze with CRC32 integrity,
+sanitizer and fuzz validation, and full regression defense.
 <!-- /SECTION:HEADER -->
 
 <!-- SECTION:RELEASE_IDENTITY -->
@@ -20,7 +20,7 @@ Its theme is:
 
 | Internal Version | Public Version       | Release Type      |
 |------------------|----------------------|-------------------|
-| `v11S`          | `V1.1`      | Development Alpha |
+| `v11S`          | `V1.1`      | Stable Release    |
 
 Lancius uses the following internal milestone progression:
 
@@ -36,8 +36,8 @@ Where:
 - `A3` is the freeze, hardening, and bug-hunting milestone
 - the next `S` is the stable release candidate
 
-> This is a development milestone.
-> Binary compatibility is not guaranteed yet.
+> This is a stable release.
+> Binary compatibility is guaranteed for v2 models written by v11S+.
 <!-- /SECTION:RELEASE_IDENTITY -->
 
 <!-- SECTION:HIGHLIGHTS -->
@@ -46,9 +46,9 @@ Where:
 `v11S` continues making Lancius transformer execution more structurally
 honest, more testable, and more runtime-oriented.
 
-This milestone is still a development milestone. It is not a stable release.
+This is the first stable release of the 1.1 cycle.
 
-### Transformer Runtime Usability
+### Transformer Runtime
 
 - Added a dedicated **KV-cache runtime object**
 - Added cache-aware attention execution
@@ -98,8 +98,7 @@ support is deferred.
 
 The v2 model format remains the active development format.
 
-Binary compatibility is still **not guaranteed** during the v11 development
-cycle.
+Binary compatibility is **guaranteed** for v2 models written by v11S and later.
 <!-- /SECTION:HIGHLIGHTS -->
 
 <!-- SECTION:WHATS_CHANGED -->
@@ -202,8 +201,7 @@ The following remain intentionally deferred:
 - production LLM serving
 - final binary compatibility guarantees
 
-`v11S` is still a development milestone.
-It is not a stable release.
+`v11S` is the first stable release of the 1.1 cycle.
 <!-- /SECTION:WHATS_CHANGED -->
 
 <!-- SECTION:BUILDING -->
@@ -384,7 +382,7 @@ python3 audit_pytorch_parity.py
 <!-- SECTION:FEATURE_STATUS -->
 ## Feature Status
 
-Lancius `v11S` is a development milestone.
+Lancius `v11S` is a stable release.
 
 The following table describes the current status of major subsystems.
 
@@ -398,7 +396,7 @@ The following table describes the current status of major subsystems.
 | Prefill / generation flow | Experimental | Explicit prefill and generation paths introduced in v11A2 |
 | FP32 execution | Experimental | FP32 matmul kernel, scheduler dispatch, and serialization support |
 | Stable C API | Partial | Opaque handles and limited graph builders; not full runtime coverage yet |
-| Model format v2 | Development | Active format; binary compatibility is not guaranteed yet |
+| Model format v2 | Stable | Frozen format; binary compatibility guaranteed for v11S+ models |
 | ONNX conversion | Experimental | Validated primarily against LeNet-class graphs |
 | Memory planner | Development | Linear-scan liveness planning and static flat-buffer execution |
 | Threadpool execution | Development | Wave-parallel execution with parity validation |
@@ -406,26 +404,25 @@ The following table describes the current status of major subsystems.
 | Dynamic shapes | Not supported | Static graph execution only |
 | Production LLM serving | Not supported | Research and development milestone only |
 
-> v11S is intended for development, validation, and experimentation.
-> It is not intended as a production-stable release.
+> v11S is intended for edge deployment, bare-metal inference, and stable API consumers.
 <!-- /SECTION:FEATURE_STATUS -->
 
 <!-- SECTION:KNOWN_LIMITATIONS -->
 ## Known Limitations
 
-Lancius `v11S` is a development milestone.
+Lancius `v11S` is a stable release.
 
 Its limitations are intentional boundaries. They define what this release is
 not claiming to be.
 
-> `v11S` is not a production-stable release.
+> `v11S` is a stable release. The limitations below define its supported scope.
 
 ### Production Status
 
-- Not intended for production deployment
-- Not intended as a finalized public SDK
-- Not intended for long-term binary compatibility
-- Internal APIs and runtime structures may still change
+- Intended for edge deployment and bare-metal inference within documented scope
+- Stable C API covers the core inference workflow
+- Binary compatibility guaranteed for v2 models written by v11S+
+- Internal APIs beyond the stable API may change in future cycles
 
 ### Runtime Limitations
 
@@ -644,7 +641,7 @@ Relevant documents in this tree:
 - `docs/v11A1_OPS.md` — operator support matrix
 - `docs/ARCHITECTURE.md` — high-level architecture overview
 - `docs/releases/v10S/RELEASE_NOTES_v10S.md` — historical v10S release notes
-- `v11A1_Release_notes.md` — historical v11A1 release notes
+- `docs/releases/v11S/RELEASE_NOTES_v11S.md` — v11S release notes
 - `KNOWN_LIMITATIONS.md` — explicit limitations and non-goals
 - `SECURITY.md` — security reporting policy
 - `CHANGELOG.md` — changelog
@@ -672,8 +669,8 @@ For public GitHub releases, internal milestones are mapped as follows:
 |--------------------|----------------------|--------------------------------------|
 | `v11A1`            | `V1.1-AlphaRC1`      | Foundation and runtime honesty       |
 | `v11A2`            | `V1.1-AlphaRC2`      | Transformer runtime usability        |
-| `v11S`            | `V1.1`      | Freeze, hardening, and bug hunting   |
-| `v11S`             | `V1.1`               | Stable release candidate             |
+| `v11A3`            | `V1.1-AlphaRC3`      | Freeze, hardening, and bug hunting   |
+| `v11S`             | `V1.1`               | Stable release                       |
 
 ### Current Milestone
 
@@ -685,47 +682,34 @@ v11S / V1.1
 
 Its theme is:
 
-> Freeze, hardening, and bug hunting.
+> Stable release.
 
-Its focus is:
-
-- feature freeze
-- loader hardening
-- model-format hardening
-- sanitizer and fuzz validation
-- regression defense
-- documentation cleanup
-- release-candidate preparation
-
-`v11S` is not intended to introduce major new features.
+v11S is the first stable release of the 1.1 cycle.
+It represents the completion of the v11A3 hardening gate.
 
 ### Next Milestone
 
-The next milestone is:
+The next development cycle is:
 
 ```text
-v11S / V1.1
+v12A1
 ```
 
-`v11S` is the stable release candidate. It will be cut only after the
-`v11S` hardening gate is complete.
+The v12 cycle will focus on FP32 operator expansion, FP32 KV-cache
+storage, broader ONNX coverage, and dynamic shape exploration.
 
 ### Stable Release
 
-After `v11S`, the next stable milestone is:
+`v11S` **is** the stable release.
 
-```text
-v11S / V1.1
-```
-
-The stable release will be cut only after the v11S hardening gate is
-complete.
+The next stable release will be `v12S`, cut after the v12 development
+cycle completes its hardening gate.
 <!-- /SECTION:ROADMAP -->
 
 <!-- SECTION:SECURITY -->
 ## Security
 
-Lancius `v11S` is a development milestone.
+Lancius `v11S` is a stable release.
 
 Security issues should be reported privately before public disclosure.
 
@@ -737,9 +721,9 @@ Security-relevant concerns include:
 - arbitrary execution risks
 - dependency vulnerabilities
 
-Because `v11S` is not a stable release, models and inputs should be treated
-as development artifacts. Do not load untrusted models in production
-environments.
+Models loaded from untrusted sources should still be validated before
+use. The v2 format includes CRC32 integrity verification, but loading
+arbitrary untrusted binaries is not recommended.
 
 For the current reporting policy, see:
 

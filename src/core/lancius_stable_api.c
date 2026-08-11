@@ -6,7 +6,7 @@
 #include <string.h>
 
 // Thread-Local Error State (Production Standard)
-static __thread lancius_status g_last_error = LANCIUS_OK;
+static _Thread_local lancius_status g_last_error = LANCIUS_OK;
 
 static void set_error(lancius_status err) {
     g_last_error = err;
@@ -206,7 +206,11 @@ LANCIUS_EXPORT lancius_graph_handle lancius_graph_load_stable(lancius_context ct
 LANCIUS_EXPORT lancius_status lancius_graph_save_stable(lancius_graph_handle g, const char* path) {
     if (!g || !path) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
-    lancius_graph_save(wrapper->g, path);
+    /* v11S H1 fix: propagate save failure to FFI consumers */
+    if (lancius_graph_save(wrapper->g, path) != 0) {
+        set_error(LANCIUS_ERR_IO);
+        return LANCIUS_ERR_IO;
+    }
     set_error(LANCIUS_OK);
     return LANCIUS_OK;
 }

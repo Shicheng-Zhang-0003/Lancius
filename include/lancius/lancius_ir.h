@@ -202,7 +202,7 @@ lancius_node* lancius_reshape(lancius_graph* g, const lancius_node* in, uint8_t 
 lancius_node* lancius_conv2d_bwd_w(lancius_graph* g, const lancius_node* grad, const lancius_node* fwd_in, uint32_t k_h, uint32_t k_w, uint32_t stride, uint32_t pad);
 lancius_node* lancius_maxpool2d_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* fwd_in, uint32_t kernel, uint32_t stride);
 
-void lancius_graph_save(lancius_graph* g, const char* path);
+int lancius_graph_save(lancius_graph* g, const char* path); /* returns 0 on success, -1 on failure */
 lancius_graph* lancius_graph_load(const char* path);
 
 void lancius_optimize_fusion(lancius_graph* g);

@@ -77,11 +77,11 @@ lancius_program* lancius_compile_graph(lancius_graph* g) {
     return prog;
 }
 
-void lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lancius_arena* scratch) {
-    if (!prog || !scratch || !out) return;
+int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lancius_arena* scratch) {
+    if (!prog || !scratch || !out) return -1;
 
     double** regs = (double**)lancius_arena_alloc(scratch, prog->num_regs * sizeof(double*), 8);
-    if (!regs) return;
+    if (!regs) return -1;
 
     for (uint32_t i = 0; i < prog->input_count; i++) regs[prog->input_regs[i]] = inputs[i];
 
@@ -99,7 +99,7 @@ void lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lan
 
         size_t elements = prog->rows[r_out] * prog->cols[r_out];
         regs[r_out] = (double*)lancius_arena_alloc(scratch, elements * sizeof(double), 32);
-        if (!regs[r_out]) continue;
+        if (!regs[r_out]) return -1; /* v11S C1 fix: OOM is fatal, not silent */
 
         double* a = regs[r_a];
         double* b = is_unary ? NULL : regs[r_b];
@@ -148,6 +148,7 @@ void lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lan
 
     size_t out_elements = prog->rows[prog->out_reg] * prog->cols[prog->out_reg];
     if (regs[prog->out_reg]) memcpy(out, regs[prog->out_reg], out_elements * sizeof(double));
+    return 0;
 }
 
 void lancius_program_destroy(lancius_program* prog) {

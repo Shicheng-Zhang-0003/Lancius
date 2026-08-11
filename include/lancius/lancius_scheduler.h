@@ -26,6 +26,8 @@ typedef struct {
 lancius_liveness_profile lancius_analyze_liveness(lancius_graph* g);
 
 void lancius_schedule_execute_static(lancius_schedule* schedule, void* flat_buffer);
+/* v11S H2: bounded variant validates buffer size before writing */
+void lancius_schedule_execute_static_bounded(lancius_schedule* schedule, void* flat_buffer, size_t buffer_size);
 size_t lancius_schedule_static_memory_required(lancius_schedule* schedule);
 void lancius_schedule_attach_pool(lancius_schedule* schedule, void* flat_buffer, struct lancius_memory_plan* plan);
 #endif
