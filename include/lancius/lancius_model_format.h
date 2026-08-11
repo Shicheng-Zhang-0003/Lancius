@@ -4,10 +4,14 @@
 #include <stdint.h>
 
 /*
- * v11A1 model format status:
- * Active serializer/loader: v2, with v1 load fallback.
- * v2 fixed-width format is implemented in Task 6b.
- * Binary compatibility is not guaranteed during v11A1.
+ * v11A3 model format status:
+ * Active serializer/loader: v2, with v1 load fallback (deprecated).
+ * v2 fixed-width format is FROZEN as of v11A3.
+ * CRC32 integrity check: computed over the body (bytes 48..EOF).
+ *   - checksum_crc32 == 0: legacy model, accepted without verification.
+ *   - checksum_crc32 != 0: verified on load; mismatch rejects the model.
+ * EXTERNAL_WEIGHTS flag: reserved, must not be set in v11S models.
+ * Binary compatibility is guaranteed for v2 models written by v11A3+.
  */
 
 
@@ -27,6 +31,8 @@
 
 #define LANCIUS_MODEL_FLAG_LITTLE_ENDIAN   (1u << 0)
 #define LANCIUS_MODEL_FLAG_STATIC_GRAPH    (1u << 1)
+/* RESERVED: not implemented. Models setting this flag are rejected by the loader.
+ * Reserved for a future external-weights extension (post-v11S). */
 #define LANCIUS_MODEL_FLAG_EXTERNAL_WEIGHTS (1u << 2)
 
 typedef enum {

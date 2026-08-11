@@ -1,4 +1,4 @@
-# Lancius v11A1 Model Format Decision
+# Lancius Model Format (v11A3 Freeze)
 
 ## Active format before Task 6b
 
@@ -35,9 +35,26 @@ Task 6b implemented the C v2 format:
 - checksum field
 - stronger loader validation
 
-## Compatibility policy for v11A1
+## Compatibility policy (v11A3 freeze)
 
-Binary model compatibility is **not guaranteed** during v11A1.
+The v2 model format is **frozen** as of v11A3.
+Binary compatibility is guaranteed for v2 models written by v11A3 and later.
+
+### CRC32 integrity
+
+The `checksum_crc32` header field covers the model body (bytes 48..EOF).
+- `checksum_crc32 == 0`: legacy model (pre-CRC), accepted without verification.
+- `checksum_crc32 != 0`: verified on load; mismatch rejects the model.
+
+### Reserved flags
+
+`LANCIUS_MODEL_FLAG_EXTERNAL_WEIGHTS` (bit 2) is reserved and must not be set.
+The loader rejects models with this flag.
+
+### v1 fallback policy
+
+v1 loading is **deprecated** legacy best-effort. It may be removed in v12.
+v2 is the only supported save format.
 
 Models written by v11A1 before Task 6b should be treated as development artifacts.
 
@@ -50,4 +67,4 @@ C model loading supports:
 - v2 preferred
 - v1 legacy fallback
 
-The Python ONNX converter still writes v1 for now. The C loader accepts v1, so existing parity workflows remain functional.
+The Python ONNX converter writes v2. The C loader accepts both v2 (preferred) and v1 (legacy fallback).

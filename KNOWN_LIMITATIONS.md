@@ -1,7 +1,7 @@
-# Lancius v11A1 Known Limitations
+# Lancius v11S Known Limitations
 
-This document defines the explicit boundaries of the stable v11A1
-release.
+This document defines the explicit boundaries of the v11S
+stable release.
 
 A development milestone is not defined by having every feature. It is defined
 by having a clear and reliable contract.
@@ -28,7 +28,7 @@ The following areas are intentionally not considered stable:
 
 ## Training Status
 
-Lancius v11A1 is inference-first.
+Lancius v11S is inference-first.
 
 Training-related components may exist in the codebase but should not be
 considered development preview.
@@ -41,6 +41,20 @@ Primary supported environment:
 -   x86_64 CPU
 
 Additional architectures may require validation.
+
+## Fatal Invariants
+
+The following conditions are guaranteed to abort the process.
+They represent internal memory-safety invariants that are NOT
+reachable through the stable C API:
+
+-   Tensor ndim exceeds 4 (max rank violation)
+-   Tensor element count overflows or exceeds 100,000,000
+-   Tensor byte count exceeds 800,000,000
+
+All user-reachable errors (unsupported ops, shape mismatches,
+malformed models) return error codes via `lancius_set_error()`
+and do NOT abort.
 
 ## Philosophy
 

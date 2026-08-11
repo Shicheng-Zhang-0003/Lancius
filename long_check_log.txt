@@ -1,0 +1,1 @@
+gcc -Wall -Wextra -g -Werror -O3 -mavx2 -mfma -fopenmp -std=c11 -I./include -fPIC -o audit_internals examples/audit_internals.c liblancius.a -lm

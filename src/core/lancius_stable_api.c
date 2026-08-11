@@ -145,6 +145,16 @@ LANCIUS_EXPORT lancius_status lancius_compile_and_run(lancius_graph_handle g) {
     wrapper->sched = lancius_ir_schedule(wrapper->g);
     if (!wrapper->sched) { set_error(LANCIUS_ERR_OOM); return LANCIUS_ERR_OOM; }
 
+    /* v11A3 fix: auto-size scratch arena from liveness analysis */
+    {
+        size_t peak = lancius_schedule_peak_memory(wrapper->sched);
+        size_t needed = peak + (1024 * 1024); /* 1MB headroom */
+        if (needed > 16 * 1024 * 1024) {
+            lancius_arena_destroy(wrapper->scratch);
+            wrapper->scratch = lancius_arena_create(needed);
+            if (!wrapper->scratch) { set_error(LANCIUS_ERR_OOM); return LANCIUS_ERR_OOM; }
+        }
+    }
     lancius_arena_reset(wrapper->scratch);
     lancius_clear_error();
     lancius_schedule_execute(wrapper->sched, wrapper->scratch);
@@ -166,11 +176,47 @@ LANCIUS_EXPORT lancius_status lancius_read_output(lancius_tensor_handle t, doubl
         return LANCIUS_ERR_SHAPE_MISMATCH;
     }
     size_t elems = lancius_node_elements(n);
-    size_t copy_size = (elems < buffer_size / sizeof(double)) ? elems : buffer_size / sizeof(double);
-    memcpy(out_buffer, n->runtime_data, copy_size * sizeof(double));
-
+    size_t buffer_elems = buffer_size / sizeof(double);
+    /* v11A3 fix: reject silent truncation */
+    if (buffer_elems < elems) {
+        set_error(LANCIUS_ERR_BUFFER_TOO_SMALL);
+        return LANCIUS_ERR_BUFFER_TOO_SMALL;
+    }
+    memcpy(out_buffer, n->runtime_data, elems * sizeof(double));
     set_error(LANCIUS_OK);
     return LANCIUS_OK;
+}
+
+
+/* v11A3 stable API expansion: model I/O */
+LANCIUS_EXPORT lancius_graph_handle lancius_graph_load_stable(lancius_context ctx, const char* path) {
+    if (!ctx || !path) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
+    lancius_graph* g = lancius_graph_load(path);
+    if (!g) { sync_internal_error(); if (g_last_error == LANCIUS_OK) set_error(LANCIUS_ERR_IO); return NULL; }
+    lancius_graph_internal* wrapper = (lancius_graph_internal*)malloc(sizeof(lancius_graph_internal));
+    if (!wrapper) { lancius_graph_destroy(g); set_error(LANCIUS_ERR_OOM); return NULL; }
+    wrapper->g = g;
+    wrapper->scratch = lancius_arena_create(64 * 1024 * 1024); /* 64MB default for loaded models */
+    wrapper->sched = NULL;
+    if (!wrapper->scratch) { lancius_graph_destroy(g); free(wrapper); set_error(LANCIUS_ERR_OOM); return NULL; }
+    set_error(LANCIUS_OK);
+    return (lancius_graph_handle)wrapper;
+}
+
+LANCIUS_EXPORT lancius_status lancius_graph_save_stable(lancius_graph_handle g, const char* path) {
+    if (!g || !path) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
+    lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
+    lancius_graph_save(wrapper->g, path);
+    set_error(LANCIUS_OK);
+    return LANCIUS_OK;
+}
+
+/* v11A3 stable API expansion: tensor introspection */
+LANCIUS_EXPORT size_t lancius_tensor_element_count(lancius_tensor_handle t) {
+    if (!t) { set_error(LANCIUS_ERR_NULL_PTR); return 0; }
+    lancius_node* n = (lancius_node*)t;
+    set_error(LANCIUS_OK);
+    return lancius_node_elements(n);
 }
 
 /* A3: dtype query */

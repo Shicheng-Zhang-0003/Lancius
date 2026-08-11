@@ -216,7 +216,7 @@ static void execute_node_math(lancius_node* n) {
         } else {
             fprintf(stderr, "[LANCIUS EXEC FATAL] unsupported attention shape: q_seq=%zu kv_seq=%zu\n", q_seq, kv_seq);
             lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
-            abort();
+            return; /* v11S: do not abort — return error to caller */
         }
     }
 
