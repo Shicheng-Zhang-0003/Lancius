@@ -1,6 +1,8 @@
 <!-- SECTION:HEADER -->
 # Lancius v11S
 
+## Broke a few stuff in a massive refactor yesterday, restarting today on v11S code state.
+
 > **Internal milestone:** `v11S`
 > **Public release:** `V1.1`
 > **Status:** Stable release
