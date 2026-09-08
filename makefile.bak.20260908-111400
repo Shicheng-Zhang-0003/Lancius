@@ -17,7 +17,6 @@ SRCS = src/core/lancius_arena.c \
        src/compiler/lancius_bytecode.c \
        src/compiler/lancius_optimizer.c \
        src/core/lancius_checked.c \
-src/core/lancius_validate.c \
 src/compiler/lancius_quantize.c
 
 OBJS = $(SRCS:.c=.o)

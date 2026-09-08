@@ -16,9 +16,7 @@ SRCS = src/core/lancius_arena.c \
        src/runtime/lancius_vision_ops.c \
        src/compiler/lancius_bytecode.c \
        src/compiler/lancius_optimizer.c \
-       src/core/lancius_checked.c \
-src/core/lancius_validate.c \
-src/compiler/lancius_quantize.c
+       src/compiler/lancius_quantize.c
 
 OBJS = $(SRCS:.c=.o)
 all: liblancius.a audit_internals stress_test test_torture generate_text run_llm train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path

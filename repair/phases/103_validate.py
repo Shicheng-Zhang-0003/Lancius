@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""Phase 1.3: central validation module (new files, additive)."""
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "00_harness"))
+import safe_edit as se
+
+HEADER = '''#ifndef LANCIUS_VALIDATE_H
+#define LANCIUS_VALIDATE_H
+
+#include <stddef.h>
+#include <stdint.h>
+#include "lancius/lancius_error.h"
+
+/* Central tensor/shape validation. Returns LANCIUS_ERROR_OK on success. */
+lancius_error lancius_validate_rank(uint8_t ndim);
+lancius_error lancius_validate_shape(const size_t* shape, uint8_t ndim);
+lancius_error lancius_validate_permutation(const uint32_t* axes, uint8_t rank);
+lancius_error lancius_validate_matmul(const size_t* a_shape, uint8_t a_ndim,
+                                      const size_t* b_shape, uint8_t b_ndim);
+lancius_error lancius_validate_reshape(size_t in_elems, const size_t* out_shape, uint8_t out_ndim);
+lancius_error lancius_validate_binary_same_shape(const size_t* a, const size_t* b, uint8_t ndim);
+lancius_error lancius_validate_conv2d(size_t H_in, size_t W_in, size_t K_h, size_t K_w,
+                                      uint32_t stride, uint32_t pad);
+lancius_error lancius_validate_gqa(uint32_t n_heads_q, uint32_t n_heads_kv);
+lancius_error lancius_validate_stride_nonzero(uint32_t stride);
+
+#endif /* LANCIUS_VALIDATE_H */
+'''
+
+SOURCE = '''#include "lancius/lancius_validate.h"
+#include "lancius/lancius_checked.h"
+#include "lancius/lancius_ir.h"
+
+lancius_error lancius_validate_rank(uint8_t ndim) {
+    if (ndim == 0 || ndim > 4) return LANCIUS_ERROR_INVALID_RANK;
+    return LANCIUS_ERROR_OK;
+}
+
+lancius_error lancius_validate_shape(const size_t* shape, uint8_t ndim) {
+    lancius_error e = lancius_validate_rank(ndim);
+    if (e != LANCIUS_ERROR_OK) return e;
+    if (!shape) return LANCIUS_ERROR_NULL_PTR;
+    for (uint8_t i = 0; i < ndim; i++) {
+        if (shape[i] == 0) return LANCIUS_ERROR_INVALID_SHAPE;
+    }
+    size_t elems = 0;
+    if (!lancius_checked_product_shape(shape, ndim, &elems)) return LANCIUS_ERROR_LIMIT;
+    if (elems > LANCIUS_MAX_TENSOR_ELEMS) return LANCIUS_ERROR_LIMIT;
+    return LANCIUS_ERROR_OK;
+}
+
+lancius_error lancius_validate_permutation(const uint32_t* axes, uint8_t rank) {
+    if (!axes) return LANCIUS_ERROR_NULL_PTR;
+    if (rank == 0 || rank > 4) return LANCIUS_ERROR_INVALID_RANK;
+    uint8_t seen[4] = {0, 0, 0, 0};
+    for (uint8_t i = 0; i < rank; i++) {
+        uint32_t a = axes[i];
+        if (a >= rank) return LANCIUS_ERROR_INVALID_PERMUTATION;
+        if (seen[a]) return LANCIUS_ERROR_INVALID_PERMUTATION;
+        seen[a] = 1;
+    }
+    return LANCIUS_ERROR_OK;
+}
+
+lancius_error lancius_validate_matmul(const size_t* a_shape, uint8_t a_ndim,
+                                      const size_t* b_shape, uint8_t b_ndim) {
+    if (!a_shape || !b_shape) return LANCIUS_ERROR_NULL_PTR;
+    if (a_ndim < 2 || b_ndim < 2) return LANCIUS_ERROR_INVALID_RANK;
+    if (a_shape[a_ndim - 1] != b_shape[b_ndim - 2]) return LANCIUS_ERROR_SHAPE_MISMATCH;
+    return LANCIUS_ERROR_OK;
+}
+
+lancius_error lancius_validate_reshape(size_t in_elems, const size_t* out_shape, uint8_t out_ndim) {
+    if (!out_shape) return LANCIUS_ERROR_NULL_PTR;
+    lancius_error e = lancius_validate_rank(out_ndim);
+    if (e != LANCIUS_ERROR_OK) return e;
+    size_t out_elems = 0;
+    if (!lancius_checked_product_shape(out_shape, out_ndim, &out_elems)) return LANCIUS_ERROR_LIMIT;
+    if (out_elems != in_elems) return LANCIUS_ERROR_RESHAPE_MISMATCH;
+    return LANCIUS_ERROR_OK;
+}
+
+lancius_error lancius_validate_binary_same_shape(const size_t* a, const size_t* b, uint8_t ndim) {
+    if (!a || !b) return LANCIUS_ERROR_NULL_PTR;
+    lancius_error e = lancius_validate_rank(ndim);
+    if (e != LANCIUS_ERROR_OK) return e;
+    for (uint8_t i = 0; i < ndim; i++) {
+        if (a[i] != b[i]) return LANCIUS_ERROR_SHAPE_MISMATCH;
+    }
+    return LANCIUS_ERROR_OK;
+}
+
+lancius_error lancius_validate_conv2d(size_t H_in, size_t W_in, size_t K_h, size_t K_w,
+                                      uint32_t stride, uint32_t pad) {
+    if (stride == 0) return LANCIUS_ERROR_INVALID_STRIDE;
+    if (K_h == 0 || K_w == 0) return LANCIUS_ERROR_INVALID_SHAPE;
+    if (H_in + 2 * (size_t)pad < K_h) return LANCIUS_ERROR_INVALID_SHAPE;
+    if (W_in + 2 * (size_t)pad < K_w) return LANCIUS_ERROR_INVALID_SHAPE;
+    return LANCIUS_ERROR_OK;
+}
+
+lancius_error lancius_validate_gqa(uint32_t n_heads_q, uint32_t n_heads_kv) {
+    if (n_heads_kv == 0) return LANCIUS_ERROR_INVALID_SHAPE;
+    if (n_heads_q < n_heads_kv) return LANCIUS_ERROR_INVALID_SHAPE;
+    if (n_heads_q % n_heads_kv != 0) return LANCIUS_ERROR_INVALID_SHAPE;
+    return LANCIUS_ERROR_OK;
+}
+
+lancius_error lancius_validate_stride_nonzero(uint32_t stride) {
+    return stride == 0 ? LANCIUS_ERROR_INVALID_STRIDE : LANCIUS_ERROR_OK;
+}
+'''
+
+def main():
+    print("[103] central validation")
+    se.create_file("include/lancius/lancius_validate.h", HEADER, "LANCIUS_VALIDATE_H")
+    se.create_file("src/core/lancius_validate.c", SOURCE, '#include "lancius/lancius_validate.h"')
+    se.add_makefile_source("src/core/lancius_validate.c")
+    print("[103] done")
+
+if __name__ == "__main__":
+    main()

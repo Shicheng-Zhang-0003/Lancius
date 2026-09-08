@@ -1,0 +1,130 @@
+Full audit done. I went file-by-file through the IR, kernels, autodiff, scheduler, memory planner, both serializers, the stable API, the bytecode VM, the transformer/vision runtimes, and the examples — and I worked the actual math of every forward and backward op, not just the control flow.
+
+First, the reframe that matters most: **your forward kernels are mathematically sound. Your backward is sound except for exactly one op. The thing that's broken is not the math — it's validation, failure propagation, and the trust boundary.** That changes how you should prioritize.
+
+Let me give you the three buckets you asked for.
+
+---
+
+## Bucket 1 — Broken right now
+
+### 1a. Things that won't run / crash on reachable paths
+
+These compile and `make check` passes (the happy path is real), but these specific paths crash or hang **today**:
+
+1. **`lancius_permute` with any axis ≥ 4 → segfault in the constructor.** `src/ir/lancius_ir.c`:
+   ```c
+   size_t dims[4] = {...};
+   n->shape[0] = dims[a0];   // a0 = 8 → OOB read, crashes before runtime ever sees it
+   ```
+   The runtime's `execute_permute` has a clamp (`if (axes[i] >= 4) axes[i] = i;`) but it's **too late** — the constructor already read out of bounds. The clamp is a band-aid on the wrong side of the boundary.
+
+2. **Bytecode VM with an unbound input → segfault or silent garbage.** `src/compiler/lancius_bytecode.c`, `lancius_vm_execute`:
+   - `regs` is allocated with `lancius_arena_alloc`, which **does not zero memory**. Only `input_regs` are written. Any register whose input the caller didn't bind is a **garbage pointer**, not NULL.
+   - Binary ops only null-check `a`, never `b`:
+     ```c
+     if (!a) continue;          // guards a only
+     ... o[k] = a[k] + b[k];    // b can be garbage/NULL → crash or wrong numbers
+     ```
+   So `train_mnist` passing exactly `vm_inputs[5]` works only by luck; one fewer input and the VM reads uninitialized pointers.
+
+3. **Division-by-zero (SIGFPE) on `stride == 0`** in `lancius_conv2d` / `lancius_maxpool2d` (`(H_in + 2*pad - K_h) / stride`), and **`kernel_gqa` with `n_heads_kv == 0`** (`group_size = n_heads_q / n_heads_kv`) or `n_heads_q < n_heads_kv` (`hq / group_size` with `group_size == 0`). All reachable through normal constructors with no rejection.
+
+4. **`lancius_reshape` with non-conserved elements → OOB read or silent truncation.** Runtime copies `lancius_node_elements(n)` (the *output* count) from the input buffer. If out > in → reads past the input. If out < in → silently drops data. This is live corruption, not theoretical.
+
+5. **Training/eval examples crash without datasets, not error.** `train_mnist.c`/`train_cifar10.c` → `load_images` does `fread` on a possibly-NULL `FILE*` if the download failed (the `system(curl)` return is discarded). That's a crash, not a graceful "dataset missing."
+
+6. **Big-endian platforms literally cannot save or load** — both v2 save/load `return -1/NULL` if `!is_little_endian()`. That's a hard platform wall dressed up as "fixed-width little-endian encoding."
+
+### 1b. Silently wrong math (runs, produces garbage)
+
+This is the worse category because nothing crashes:
+
+1. **`MATMUL_BATCHED` backward is mathematically wrong.** `src/math/lancius_autodiff.c`:
+   ```c
+   } else if (fwd_n->op == LANCIUS_OP_MATMUL_BATCHED) {
+       accum_grad(..., fwd_n->inputs[0]->id, grad_out, ...);   // passes grad unchanged
+       accum_grad(..., fwd_n->inputs[1]->id, grad_out, ...);
+   }
+   ```
+   The correct gradient is batch-wise `dA = dY @ Bᵀ`, `dB = Aᵀ @ dY` per batch. Passing `grad_out` unchanged to both inputs trains on garbage. **Any model trained through batched matmul is silently corrupted.** This is the single real math bug in the whole autodiff.
+
+2. **Silent execution failures → uninitialized outputs get consumed.** `execute_node_math` is full of `if (!a || !b) return;` with no status. A skipped node leaves its output uninitialized; downstream nodes read it; loss is computed on it; the optimizer updates weights from it. This is the exact "train on garbage" failure, and it's the runtime's default behavior, not an edge case.
+
+3. **Cross-entropy forward/backward disagree on targets.** Forward uses a hard `if (y[r*C+c] == 1.0)` to pick the class; backward uses the soft value `(sm - y)`. They agree for exact one-hot, but the forward is fragile to any float imprecision or label smoothing, and silently contributes zero loss if the `1.0` isn't bit-exact.
+
+---
+
+## Bucket 2 — What will cost you down the line
+
+These run today but are debt that compounds, especially toward a *verifier* whose whole value is trust:
+
+1. **The dual legacy/`rt` runtime-state split is a half-finished migration that pervades everything.** Every node carries both `runtime_data` (legacy) and `rt->buffer`, plus three ownership fields (`owner`, `buffer_owner`, `int8_owner`), and correctness depends on remembering to call `lancius_runtime_sync_from_legacy` / `_to_legacy` at every boundary. This is a permanent source of stale-pointer bugs. It's the highest-leverage refactor you have and it's not optional.
+
+2. **No central validation → every layer reimplements "what is a valid tensor" differently.** Constructors, the v1 loader, the v2 loader, the compiler, and the runtime each have their own partial checks. They *will* drift, and a model valid to one layer will be invalid to another. (The lists call for this; I'm flagging that it's the root cause of most of Bucket 1.)
+
+3. **`abort()` inside a library.** `lancius_node_elements` aborts on rank>4 / overflow. Fine as an internal invariant, fatal as a contract — see Bucket 3 #1 for how this is actually exploitable through the "safe" FFI.
+
+4. **O(V²) scheduler** (repeated full-graph scans). Your 10k-node test passes, but this doesn't scale and gives you no adjacency/liveness structure you'll need for provenance and backward generation.
+
+5. **Thread-local error state hides all parallel failures.** Errors are `_Thread_local`. Workers in `lancius_schedule_execute_parallel` set their *own* error state; the calling thread never sees it. So parallel execution can fail and report success. For a verification engine, invisible failure is disqualifying.
+
+6. **The whole-file CRC read** (`malloc(body_size)` of the entire model) doesn't scale to real checkpoints, and CRC isn't authenticity anyway (the lists got this; it's a real cost).
+
+7. **Dynamic activation quantization is input-dependent and non-deterministic.** The INT8 matmul path recomputes `scale_a` from the *actual activation values* on every execution and `malloc`s a temp int8 buffer (unchecked). Same weights + different input magnitude → different quantization → different results. That's a direct hit on your "deterministic" mandate, plus a per-call allocation and an O(elements) max-pass.
+
+8. **Conv2D weight-gradient memory multiplier.** `kernel_conv2d_bwd_w` does `calloc(w_elems)` *per thread* inside the parallel region. With T threads you allocate T× the weight-gradient buffer. Fine for tiny convs, a memory cliff for bigger ones — and the accumulation order across threads is nondeterministic, so gradients are bitwise-nonreproducible.
+
+9. **`SAFE_WRITE` ignores write errors in v1 save.** A disk-full or I/O error produces a truncated model with a *success* return. For a format you've declared "frozen with integrity guarantees," silently writing a corrupt file is a real liability.
+
+10. **v2 save silently falls back to deprecated v1.** `lancius_graph_save` tries v2, and on failure drops to v1 with only a stderr warning and a success return. So the format of your output file is nondeterministic and the caller can't tell. Not acceptable for a "stable" save contract.
+
+11. **Strategic/license note:** GPL-3.0 on a library whose stated purpose is to be *consumed by your other projects via FFI* forces copyleft on anything linking it. If Lancius is meant to sit under other tools, LGPL (or keeping it a standalone process/service) is worth deciding before you depend on it widely.
+
+---
+
+## Bucket 3 — Not covered by either list
+
+This is the part you specifically asked for. These are findings I did **not** see in `the_list.txt` or `the_list_2.txt`:
+
+1. **The "fatal invariants are not reachable via the stable API" claim is false — a malicious `.lancius` file can `abort()` your FFI host.** This is the most important new finding.
+   - `KNOWN_LIMITATIONS.md` promises: fatal invariants are "NOT reachable through the stable C API… All user-reachable errors return error codes and do NOT abort."
+   - But the v2 loader validates `weight_elems ≤ 1e8` **only for weighted nodes**. A **weightless INPUT node** with shape like `[400,000,000, 1]` passes load (`lancius_input` does no element-count check).
+   - The moment the consumer calls `lancius_compile_and_run` (or even `lancius_tensor_element_count`), `lancius_node_elements` sees `4e8 > 1e8` and **aborts**.
+   - Net effect: a Python/Rust/Go host loading an untrusted model is killed by a model file. That's a DoS through the exact boundary that's advertised as safe, and it happens *after* load reports success. Neither list identified this concrete path.
+
+2. **Deserialization silently swallows constructor failures.** When the v2 loader rebuilds a node via `lancius_matmul`/etc. and the constructor rejects the shape and returns `NULL`, the loader does `map_set(&map, rn.id, NULL)` and keeps going. The result is a "successfully loaded" graph with NULL nodes that downstream ops then treat as valid inputs → cascading NULLs → a structurally intact but semantically empty graph. The loader never verifies that *reconstruction actually produced every node.* (list_2 #34 caught a rank-routing bug; this is the broader, distinct problem that a failed constructor is tolerated.)
+
+3. **IR/runtime dimension mismatch for matmul on ndim>2.** `lancius_matmul` validates using the **last two** dims (`shape[ndim-2]`, `shape[ndim-1]`) and emits a 2D output. But the runtime computes `M = inputs[0]->shape[0]; K = inputs[0]->shape[1]` — the **first two** dims. For any 4D matmul these disagree, so the IR's shape contract and the executed math are inconsistent. Nobody exercises this today, but it's a latent landmine and it's not in either list.
+
+4. **Bytecode VM `regs` uninitialized + missing `b` null-check** (detailed in 1a.2). list_2 #41 flagged the VM's 2D assumption and silent `continue`, but not the uninitialized-register and unchecked-second-operand crash.
+
+5. **Thread-local error loss in parallel execution** (Bucket 2.5). Not in either list. For a project whose north star is auditable verdicts, "the worker errored and nobody was told" is a first-class defect.
+
+6. **Dynamic, input-dependent activation quantization** (Bucket 2.7). list_2 #42 discussed quantization vs. training master-weights, but not the fact that the activation scale is recomputed from live data each run, making the INT8 path nondeterministic and input-dependent.
+
+7. **Fusion mutates the "immutable SSA" graph in place.** `lancius_optimize_fusion` rewrites a ReLU node's opcode, steals the conv's `inputs` array, and NOPs the conv — destroying SSA immutability, and it only works because autodiff carries a fragile special case for `CONV2D_RELU_FUSED`. If fusion order or autodiff changes, this breaks silently. Also `count_consumers` is O(V²). Not called out in either list.
+
+8. **The v2 CRC is verified only after the whole graph is constructed** — so a malicious file can trigger an abort/crash during reconstruction *before* integrity is ever checked (ordering interacts with finding #1). Integrity should gate construction, not follow it.
+
+9. **`lancius_flatten` has an unchecked `shape[1]*shape[2]*shape[3]` size_t product** → can overflow to a small `flat`, yielding a wrong shape and downstream OOB. Subsumed by "checked arithmetic" in the list, but this specific site isn't named and it's on a hot path.
+
+10. **`kernel_attention_kv_cache` `malloc(seq_len*sizeof(double))` is unchecked** and `scale = 1/sqrt(head_dim)` divides by zero if `head_dim==0`. The flash kernel got an OOM guard (`v11S C2 fix`); the kv-cache kernel did not. Inconsistent hardening.
+
+---
+
+## The short, ranked version
+
+If I had to hand you a triage order:
+
+1. **Kill the abort-via-stable-API hole** (Bucket 3.1) — it's exploitable and contradicts your own docs. Validate tensor element counts at load time, in one central place.
+2. **Fix `MATMUL_BATCHED` backward** (1b.1) — the only actual math bug, and it poisons training.
+3. **Make execution return a status and stop on first failure** (1b.2) — eliminate every silent `return` in `execute_node_math` and the scheduler's OOM-then-`continue`.
+4. **Null-check the bytecode VM inputs and zero `regs`** (1a.2).
+5. **Centralize shape/stride/axis/dtype validation** so constructors, loaders, and runtime share one contract (Bucket 2.2) — this collapses most of Buckets 1 and 3 at once.
+6. **Finish the legacy→`rt` migration** (2.1) — remove the dual representation.
+7. **Make parallel errors visible** (2.5) and make quantization deterministic (2.7).
+
+The reassuring part: **you don't have a math problem, you have a contract problem.** The forward kernels and nearly all backward rules are correct. What's missing is the guarantee that invalid states can't be constructed and that failures can't be silent — which is *exactly* the property a verification engine has to have before it's allowed to judge anything else.
+
+Want me to go deeper on any one of these — e.g., write out the exact central validator signature set, the batched-matmul backward derivation, or the handle/registry design that closes the stable-API hole?
