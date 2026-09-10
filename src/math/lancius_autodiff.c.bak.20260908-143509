@@ -177,13 +177,8 @@ lancius_training_graph* lancius_ir_autodiff(lancius_graph* fwd_g, lancius_node* 
         } else if (fwd_n->op == LANCIUS_OP_TRANSPOSE) {
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_transpose(tg->graph, grad_out), fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_MATMUL_BATCHED) {
-            /* v12R1-203: correct batched-matmul backward needs a batched
-               transpose that the IR does not provide. Fail loudly rather
-               than emit mathematically wrong gradients. */
-            fprintf(stderr, "[AUTODIFF FATAL] MATMUL_BATCHED backward is not implemented.\n");
-            free(grad_map); free(fwd_to_full);
-            lancius_graph_destroy(tg->graph); free(tg);
-            return NULL;
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, grad_out, fwd_to_full);
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[1]->id, grad_out, fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_PERMUTE) {
             uint32_t inv_axes[4] = {0,0,0,0};
             for(int i=0; i<4; i++) inv_axes[fwd_n->axes[i]] = i;

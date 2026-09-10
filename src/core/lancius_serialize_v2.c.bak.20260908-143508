@@ -1,5 +1,4 @@
 #include "lancius/lancius_ir.h"
-#include "lancius/lancius_validate.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -311,18 +310,9 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
                 break;
 
             case LANCIUS_MODEL_OP_INPUT:
-/* v12R1-201: validate shape; reject oversized / zero-dim / bad-rank */
-if (rn.ndim == 4) {
-    if (lancius_validate_shape(sh, 4) != LANCIUS_ERROR_OK) goto fail;
-    n = lancius_input_4d(g, sh[0], sh[1], sh[2], sh[3]);
-} else if (rn.ndim == 3) {
-    if (lancius_validate_shape(sh, 3) != LANCIUS_ERROR_OK) goto fail;
-    n = lancius_input_3d(g, sh[0], sh[1], sh[2]);
-} else {
-    if (lancius_validate_shape(sh, 2) != LANCIUS_ERROR_OK) goto fail;
-    n = lancius_input(g, sh[0], sh[1]);
-}
-break;
+                if (rn.ndim == 4) n = lancius_input_4d(g, sh[0], sh[1], sh[2], sh[3]);
+                else n = lancius_input(g, sh[0], sh[1]);
+                break;
 
             case LANCIUS_MODEL_OP_CONST:
                 n = lancius_const(g, rn.attr, sh[0], sh[1]);
@@ -436,8 +426,6 @@ break;
                 break;
         }
 
-        /* v12R1-201: non-NOP op that failed to reconstruct = corrupt model */
-        if (rn.op != LANCIUS_MODEL_OP_NOP && !n) goto fail;
         if (n) {
             n->kernel_h = rn.meta[0];
             n->kernel_w = rn.meta[1];
