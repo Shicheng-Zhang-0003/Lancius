@@ -1,6 +1,4 @@
 #include "lancius/lancius_ir.h"
-#include "lancius/lancius_validate.h"
-#include "lancius/lancius_checked.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -274,7 +272,6 @@ lancius_node* lancius_conv2d(lancius_graph* g, const lancius_node* in, const lan
         fprintf(stderr, "[IR FATAL] Conv2D spatial dimensions underflow.\n");
         return NULL;
     }
-    if (lancius_validate_conv2d(H_in, W_in, K_h, K_w, stride, pad) != LANCIUS_ERROR_OK) return NULL;
     size_t H_out = (H_in + 2*pad - K_h) / stride + 1;
     size_t W_out = (W_in + 2*pad - K_w) / stride + 1;
     lancius_node* n = alloc_node(g, LANCIUS_OP_CONV2D, 4, 2);
@@ -293,7 +290,6 @@ lancius_node* lancius_maxpool2d(lancius_graph* g, const lancius_node* in, uint32
         fprintf(stderr, "[IR FATAL] MaxPool2D spatial dimensions underflow.\n");
         return NULL;
     }
-    if (stride == 0 || kernel == 0) return NULL;
     size_t H_out = (H_in - kernel) / stride + 1;
     size_t W_out = (W_in - kernel) / stride + 1;
     lancius_node* n = alloc_node(g, LANCIUS_OP_MAXPOOL2D, 4, 1);
@@ -308,9 +304,7 @@ lancius_node* lancius_maxpool2d(lancius_graph* g, const lancius_node* in, uint32
 lancius_node* lancius_flatten(lancius_graph* g, const lancius_node* in) {
     if (!in || in->ndim != 4) return NULL;
     size_t N = in->shape[0];
-    size_t flat_dims[3] = {in->shape[1], in->shape[2], in->shape[3]};
-    size_t flat = 0;
-    if (!lancius_checked_product_shape(flat_dims, 3, &flat)) return NULL;
+    size_t flat = in->shape[1] * in->shape[2] * in->shape[3];
     lancius_node* n = alloc_node(g, LANCIUS_OP_FLATTEN, 2, 1);
     if (n) { n->shape[0] = N; n->shape[1] = flat; n->inputs[0] = in; }
     return n;
@@ -319,10 +313,6 @@ lancius_node* lancius_flatten(lancius_graph* g, const lancius_node* in) {
 
 lancius_node* lancius_reshape(lancius_graph* g, const lancius_node* in, uint8_t ndim, size_t s0, size_t s1, size_t s2, size_t s3) {
     if (!in) return NULL;
-    size_t resh_out_shape[4] = {s0, s1, s2, s3};
-    size_t resh_in_elems = 0;
-    if (!lancius_node_elements_checked(in, &resh_in_elems)) return NULL;
-    if (lancius_validate_reshape(resh_in_elems, resh_out_shape, ndim) != LANCIUS_ERROR_OK) return NULL;
     lancius_node* n = alloc_node(g, LANCIUS_OP_RESHAPE, ndim, 1);
     if (n) {
         n->shape[0] = s0; if(ndim>1) n->shape[1] = s1; if(ndim>2) n->shape[2] = s2; if(ndim>3) n->shape[3] = s3;
@@ -347,8 +337,6 @@ lancius_node* lancius_conv2d_bwd_w(lancius_graph* g, const lancius_node* grad, c
 
 lancius_node* lancius_permute(lancius_graph* g, const lancius_node* in, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3) {
     if (!in || in->ndim != 4) return NULL;
-    uint32_t perm_axes[4] = {a0, a1, a2, a3}; /* v12R1-202 */
-    if (lancius_validate_permutation(perm_axes, 4) != LANCIUS_ERROR_OK) return NULL;
     lancius_node* n = alloc_node(g, LANCIUS_OP_PERMUTE, 4, 1);
     if (n) {
         n->axes[0] = a0; n->axes[1] = a1; n->axes[2] = a2; n->axes[3] = a3;
@@ -424,7 +412,6 @@ lancius_node* lancius_swiglu(lancius_graph* g, const lancius_node* gate, const l
 
 lancius_node* lancius_gqa(lancius_graph* g, const lancius_node* q, const lancius_node* k, const lancius_node* v, uint32_t n_heads_q, uint32_t n_heads_kv) {
     if (!q || !k || !v) return NULL;
-    if (lancius_validate_gqa(n_heads_q, n_heads_kv) != LANCIUS_ERROR_OK) return NULL;
     lancius_node* n = alloc_node(g, LANCIUS_OP_GQA, q->ndim, 3);
     if (n) {
         memcpy(n->shape, q->shape, sizeof(size_t) * q->ndim);

@@ -14,6 +14,10 @@ HERE        = os.path.dirname(os.path.abspath(__file__))
 REPAIR_ROOT = os.path.dirname(HERE)
 REPO_ROOT   = os.path.dirname(REPAIR_ROOT)
 
+class AlreadyApplied(RuntimeError):
+    """The repair marker is already present — this script ran before."""
+    pass
+
 def p(rel):
     return os.path.join(REPO_ROOT, rel)
 
@@ -38,7 +42,7 @@ def ensure_unique(content, anchor, label):
 
 def ensure_absent(content, marker, label):
     if marker in content:
-        raise RuntimeError(f"[ABORT] marker already present for {label}: {marker[:60]!r}")
+        raise AlreadyApplied(f"already applied ({label}): marker {marker[:60]!r} present")
 
 def insert_before(content, anchor, text):
     ensure_unique(content, anchor, "insert_before")
@@ -80,12 +84,16 @@ def create_file(rel, content, marker):
     write(path, content)
     print(f"  [create] {rel}")
     return True
-
 def edit_file(rel, transform):
-    """Apply transform(content)->content to an existing file, with backup."""
+    """Apply transform(content)->content to an existing file, with backup.
+    If the transform signals AlreadyApplied, treat it as a clean skip."""
     path = p(rel)
     content = read(path)
-    new = transform(content)
+    try:
+        new = transform(content)
+    except AlreadyApplied as e:
+        print(f"  [skip] {rel}: {e}")
+        return False
     if new == content:
         print(f"  [skip] {rel} unchanged")
         return False
