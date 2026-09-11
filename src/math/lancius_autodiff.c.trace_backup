@@ -57,12 +57,10 @@ lancius_training_graph* lancius_ir_autodiff(lancius_graph* fwd_g, lancius_node* 
 
         switch(old->op) {
             case LANCIUS_OP_INPUT:
-/* v12R1-204: handle 3D inputs so matmul_batched reconstructs correctly */
-if (old->ndim == 4) n = lancius_input_4d(tg->graph, old->shape[0], old->shape[1], old->shape[2], old->shape[3]);
-else if (old->ndim == 3) n = lancius_input_3d(tg->graph, old->shape[0], old->shape[1], old->shape[2]);
-else n = lancius_input(tg->graph, old->shape[0], old->shape[1]);
-if(n) { n->runtime_data = old->runtime_data; lancius_runtime_sync_from_legacy(n); }
-break;
+                if (old->ndim == 4) n = lancius_input_4d(tg->graph, old->shape[0], old->shape[1], old->shape[2], old->shape[3]);
+                else n = lancius_input(tg->graph, old->shape[0], old->shape[1]);
+                if(n) { n->runtime_data = old->runtime_data; lancius_runtime_sync_from_legacy(n); }
+                break;
             case LANCIUS_OP_CONST: n = lancius_const(tg->graph, old->attr_val, old->shape[0], old->shape[1]); break;
             case LANCIUS_OP_ADD: n = lancius_add(tg->graph, in0, in1); break;
             case LANCIUS_OP_SUB: n = lancius_sub(tg->graph, in0, in1); break;

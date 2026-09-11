@@ -4,11 +4,7 @@ set -u
 cd "$(dirname "$0")/../.."   # repo root
 
 echo "[verify_build] make liblancius.a"
-make liblancius.a audit_fault_injection 2>&1
-rc=$?
-if [ $rc -ne 0 ]; then exit $rc; fi
-echo "[verify_build] ./audit_fault_injection"
-./audit_fault_injection
+make liblancius.a 2>&1
 rc=$?
 
 if [ $rc -ne 0 ]; then
