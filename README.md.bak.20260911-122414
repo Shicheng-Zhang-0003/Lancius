@@ -636,14 +636,14 @@ python3 audit_pytorch_parity.py
 
 Relevant documents in this tree:
 
-- `docs/v11A3_SCOPE.md` — current milestone scope
+- `docs/v11S_SCOPE.md` — current milestone scope
 - `docs/v11A2_SCOPE.md` — previous milestone scope
 - `docs/v11A1_SCOPE.md` — historical milestone scope
 - `docs/v11A1_MODEL_FORMAT.md` — model format direction
 - `docs/v11A1_OPS.md` — operator support matrix
 - `docs/ARCHITECTURE.md` — high-level architecture overview
 - `docs/releases/v10S/RELEASE_NOTES_v10S.md` — historical v10S release notes
-- `docs/releases/v11S/GITHUB_RELEASE_v11S.md` — v11S release notes
+- `docs/releases/v11S/RELEASE_NOTES_v11S.md` — v11S release notes
 - `KNOWN_LIMITATIONS.md` — explicit limitations and non-goals
 - `SECURITY.md` — security reporting policy
 - `CHANGELOG.md` — changelog

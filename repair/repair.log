@@ -126,3 +126,8 @@
 [run_repair] 301_fault_injection_audit.py OK + build green
 
 [run_repair] ALL PHASES GREEN
+[run_repair] 12 phase script(s) queued
+
+=== RUN 00_cleanup_and_gate.py ===
+--- VERIFY after 00_cleanup_and_gate.py ---
+[run_repair] HALT: build failed after 00_cleanup_and_gate.py
