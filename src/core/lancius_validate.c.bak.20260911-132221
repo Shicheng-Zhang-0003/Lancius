@@ -80,14 +80,3 @@ lancius_error lancius_validate_gqa(uint32_t n_heads_q, uint32_t n_heads_kv) {
 lancius_error lancius_validate_stride_nonzero(uint32_t stride) {
     return stride == 0 ? LANCIUS_ERROR_INVALID_STRIDE : LANCIUS_ERROR_OK;
 }
-
-lancius_error lancius_validate_binary_broadcast(const lancius_node* a, const lancius_node* b) {
-    if (!a || !b) return LANCIUS_ERROR_NULL_PTR;
-    if (a->ndim != b->ndim) return LANCIUS_ERROR_SHAPE_MISMATCH;
-    for (uint8_t i = 0; i < a->ndim; i++) {
-        if (a->shape[i] != b->shape[i] && a->shape[i] != 1 && b->shape[i] != 1) {
-            return LANCIUS_ERROR_SHAPE_MISMATCH;
-        }
-    }
-    return LANCIUS_ERROR_OK;
-}
