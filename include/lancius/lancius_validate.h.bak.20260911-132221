@@ -4,7 +4,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "lancius/lancius_error.h"
-#include "lancius/lancius_ir.h"
 
 /* Central tensor/shape validation. Returns LANCIUS_ERROR_OK on success. */
 lancius_error lancius_validate_rank(uint8_t ndim);
@@ -19,5 +18,4 @@ lancius_error lancius_validate_conv2d(size_t H_in, size_t W_in, size_t K_h, size
 lancius_error lancius_validate_gqa(uint32_t n_heads_q, uint32_t n_heads_kv);
 lancius_error lancius_validate_stride_nonzero(uint32_t stride);
 
-lancius_error lancius_validate_binary_broadcast(const lancius_node* a, const lancius_node* b);
 #endif /* LANCIUS_VALIDATE_H */

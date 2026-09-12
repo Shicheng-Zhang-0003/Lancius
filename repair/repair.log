@@ -131,3 +131,40 @@
 === RUN 00_cleanup_and_gate.py ===
 --- VERIFY after 00_cleanup_and_gate.py ---
 [run_repair] HALT: build failed after 00_cleanup_and_gate.py
+[run_repair] 13 phase script(s) queued
+
+=== RUN 00_cleanup_and_gate.py ===
+--- VERIFY after 00_cleanup_and_gate.py ---
+[run_repair] 00_cleanup_and_gate.py OK + build green
+
+=== RUN 101_checked_math.py ===
+--- VERIFY after 101_checked_math.py ---
+[run_repair] 101_checked_math.py OK + build green
+
+=== RUN 102_status_codes.py ===
+--- VERIFY after 102_status_codes.py ---
+[run_repair] 102_status_codes.py OK + build green
+
+=== RUN 103_validate.py ===
+--- VERIFY after 103_validate.py ---
+[run_repair] 103_validate.py OK + build green
+
+=== RUN 201_loader_hardening.py ===
+--- VERIFY after 201_loader_hardening.py ---
+[run_repair] 201_loader_hardening.py OK + build green
+
+=== RUN 202_constructor_validation.py ===
+--- VERIFY after 202_constructor_validation.py ---
+[run_repair] 202_constructor_validation.py OK + build green
+
+=== RUN 203_batched_matmul_backward.py ===
+--- VERIFY after 203_batched_matmul_backward.py ---
+[run_repair] 203_batched_matmul_backward.py OK + build green
+
+=== RUN 205_stable_api_validation.py ===
+--- VERIFY after 205_stable_api_validation.py ---
+[run_repair] 205_stable_api_validation.py OK + build green
+
+=== RUN 206_wire_validators.py ===
+--- VERIFY after 206_wire_validators.py ---
+[run_repair] HALT: build failed after 206_wire_validators.py

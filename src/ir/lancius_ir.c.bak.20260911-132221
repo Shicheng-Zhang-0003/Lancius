@@ -183,7 +183,6 @@ lancius_node* lancius_add(lancius_graph* g, const lancius_node* a, const lancius
         if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] ADD NULL input"); return NULL; }
     // V10S FIX: Allow broadcast
 
-    if (lancius_validate_binary_broadcast(a, b) != LANCIUS_ERROR_OK) return NULL;
     lancius_node* n = alloc_node(g, LANCIUS_OP_ADD, a->ndim, 2);
     if (n) { memcpy(n->shape, a->shape, sizeof(size_t)*a->ndim); n->inputs[0] = a; n->inputs[1] = b; } return n;
 }
@@ -191,7 +190,6 @@ lancius_node* lancius_sub(lancius_graph* g, const lancius_node* a, const lancius
         if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] SUB NULL input"); return NULL; }
     // V10S FIX: Allow broadcast
 
-    if (lancius_validate_binary_broadcast(a, b) != LANCIUS_ERROR_OK) return NULL;
     lancius_node* n = alloc_node(g, LANCIUS_OP_SUB, a->ndim, 2);
     if (n) { memcpy(n->shape, a->shape, sizeof(size_t)*a->ndim); n->inputs[0] = a; n->inputs[1] = b; } return n;
 }
@@ -199,7 +197,6 @@ lancius_node* lancius_mul(lancius_graph* g, const lancius_node* a, const lancius
         if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] MUL NULL input"); return NULL; }
     // V10S FIX: Allow broadcast
 
-    if (lancius_validate_binary_broadcast(a, b) != LANCIUS_ERROR_OK) return NULL;
     lancius_node* n = alloc_node(g, LANCIUS_OP_MUL, a->ndim, 2);
     if (n) { memcpy(n->shape, a->shape, sizeof(size_t)*a->ndim); n->inputs[0] = a; n->inputs[1] = b; } return n;
 }
@@ -209,7 +206,6 @@ lancius_node* lancius_matmul(lancius_graph* g, const lancius_node* a, const lanc
         return NULL;
     }
     // V10S FIX: NDim-aware dimension extraction (handles 4D Reshape outputs)
-    if (lancius_validate_matmul(a->shape, a->ndim, b->shape, b->ndim) != LANCIUS_ERROR_OK) return NULL;
     size_t a_rows = a->shape[a->ndim - 2];
     size_t a_cols = a->shape[a->ndim - 1];
     size_t b_rows = b->shape[b->ndim - 2];

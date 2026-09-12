@@ -1,6 +1,4 @@
 #include "lancius/lancius_stable_api.h"
-#include "lancius/lancius_checked.h"
-#include "lancius/lancius_ir.h" /* for LANCIUS_MAX_TENSOR_ELEMS */
 #include "lancius/lancius_ir.h"
 #include "lancius/lancius_scheduler.h"
 #include "lancius/lancius_arena.h"
@@ -105,12 +103,6 @@ LANCIUS_EXPORT void lancius_graph_destroy_stable(lancius_graph_handle g) {
 LANCIUS_EXPORT lancius_tensor_handle lancius_add_input(lancius_graph_handle g, size_t rows, size_t cols) {
     if (!g) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
-    /* v12R1-205: prevent abort() via stable API on oversized tensors */
-    size_t elems = 0;
-    if (!lancius_checked_mul_size(rows, cols, &elems) || elems > LANCIUS_MAX_TENSOR_ELEMS) {
-        set_error(LANCIUS_ERR_SHAPE_MISMATCH);
-        return NULL;
-    }
     lancius_node* n = lancius_input(wrapper->g, rows, cols);
     if (!n) { set_error(LANCIUS_ERR_OOM); return NULL; }
     set_error(LANCIUS_OK);
