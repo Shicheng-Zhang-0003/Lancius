@@ -73,6 +73,7 @@ lancius_kv_cache* lancius_kv_cache_create(
     cache->dtype = dtype;
 
     size_t total_elems = max_seq_len * hidden_size;
+    if (total_elems > SIZE_MAX / sizeof(double)) return NULL;
 
     cache->k = (double*)calloc(total_elems, sizeof(double));
     cache->v = (double*)calloc(total_elems, sizeof(double));
@@ -132,6 +133,7 @@ int lancius_kv_cache_append(
     }
 
     size_t elems = num_tokens * cache->hidden_size;
+    if (elems > SIZE_MAX / sizeof(double)) return -1;
     size_t bytes = elems * sizeof(double);
 
     double* k_dst = cache->k + (cache->seq_len * cache->hidden_size);

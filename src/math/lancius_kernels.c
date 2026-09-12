@@ -13,6 +13,10 @@
 #endif
 
 void kernel_matmul(double* out, const double* a, const double* b, size_t M, size_t K, size_t N) {
+    if (!out || !a || !b) return;
+    if (M == 0 || K == 0 || N == 0) return;
+    if (M > SIZE_MAX / N) return;
+    if (M * N > SIZE_MAX / sizeof(double)) return;
     memset(out, 0, M * N * sizeof(double));
     for(size_t r=0; r<M; r++) {
         for(size_t k=0; k<K; k++) {
@@ -28,8 +32,18 @@ void kernel_matmul(double* out, const double* a, const double* b, size_t M, size
 void kernel_conv2d_fwd(double* out, const double* in, const double* w,
                        size_t N, size_t C_in, size_t H_in, size_t W_in,
                        size_t C_out, size_t K_h, size_t K_w, size_t stride, size_t pad) {
+    if (!out || !in || !w) return;
+    if (stride == 0 || K_h == 0 || K_w == 0) return;
+    if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) return;
+    if (H_in + 2*pad < K_h || W_in + 2*pad < K_w) return;
     size_t H_out = (H_in + 2*pad - K_h)/stride + 1;
     size_t W_out = (W_in + 2*pad - K_w)/stride + 1;
+    if (N && C_out && H_out && W_out) {
+        if (N > SIZE_MAX / C_out) return;
+        if (N * C_out > SIZE_MAX / H_out) return;
+        if (N * C_out * H_out > SIZE_MAX / W_out) return;
+        if (N * C_out * H_out * W_out > SIZE_MAX / sizeof(double)) return;
+    }
     memset(out, 0, N*C_out*H_out*W_out*sizeof(double));
 
     #pragma omp parallel for collapse(2) schedule(static)
@@ -63,6 +77,13 @@ void kernel_conv2d_bwd_in(double* out, const double* grad, const double* w,
                           size_t N, size_t C_in, size_t H_in, size_t W_in,
                           size_t C_out, size_t H_out, size_t W_out,
                           size_t K_h, size_t K_w, size_t stride, size_t pad) {
+    if (!out || !grad || !w) return;
+    if (N && C_in && H_in && W_in) {
+        if (N > SIZE_MAX / C_in) return;
+        if (N * C_in > SIZE_MAX / H_in) return;
+        if (N * C_in * H_in > SIZE_MAX / W_in) return;
+        if (N * C_in * H_in * W_in > SIZE_MAX / sizeof(double)) return;
+    }
     memset(out, 0, N*C_in*H_in*W_in*sizeof(double));
     #pragma omp parallel for schedule(static)
     for(size_t ni=0; ni<N; ni++) {
@@ -94,7 +115,13 @@ void kernel_conv2d_bwd_w(double* out, const double* grad, const double* in,
                          size_t N, size_t C_in, size_t H_in, size_t W_in,
                          size_t C_out, size_t H_out, size_t W_out,
                          size_t K_h, size_t K_w, size_t stride, size_t pad) {
+    if (!out || !grad || !in) return;
+    if (C_out == 0 || C_in == 0 || K_h == 0 || K_w == 0) return;
+    if (C_out > SIZE_MAX / C_in) return;
+    if (C_out * C_in > SIZE_MAX / K_h) return;
+    if (C_out * C_in * K_h > SIZE_MAX / K_w) return;
     size_t w_elems = C_out*C_in*K_h*K_w;
+    if (w_elems > SIZE_MAX / sizeof(double)) return;
     memset(out, 0, w_elems * sizeof(double));
 
     // TITANIUM THREAD-LOCAL ACCUMULATOR: Prevents OpenMP race conditions on weight gradients
@@ -140,8 +167,18 @@ void kernel_conv2d_bwd_w(double* out, const double* grad, const double* in,
 void kernel_conv2d_relu_fwd(double* out, const double* in, const double* w,
                             size_t N, size_t C_in, size_t H_in, size_t W_in,
                             size_t C_out, size_t K_h, size_t K_w, size_t stride, size_t pad) {
+    if (!out || !in || !w) return;
+    if (stride == 0 || K_h == 0 || K_w == 0) return;
+    if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) return;
+    if (H_in + 2*pad < K_h || W_in + 2*pad < K_w) return;
     size_t H_out = (H_in + 2*pad - K_h)/stride + 1;
     size_t W_out = (W_in + 2*pad - K_w)/stride + 1;
+    if (N && C_out && H_out && W_out) {
+        if (N > SIZE_MAX / C_out) return;
+        if (N * C_out > SIZE_MAX / H_out) return;
+        if (N * C_out * H_out > SIZE_MAX / W_out) return;
+        if (N * C_out * H_out * W_out > SIZE_MAX / sizeof(double)) return;
+    }
     memset(out, 0, N*C_out*H_out*W_out*sizeof(double));
 
     #pragma omp parallel for collapse(2) schedule(static)
@@ -177,8 +214,18 @@ void kernel_conv2d_relu_fwd(double* out, const double* in, const double* w,
 void kernel_conv2d_int8_fwd(double* out, const int8_t* in, const int8_t* w, double scale_in, double scale_w,
                             size_t N, size_t C_in, size_t H_in, size_t W_in,
                             size_t C_out, size_t K_h, size_t K_w, size_t stride, size_t pad) {
+    if (!out || !in || !w) return;
+    if (stride == 0 || K_h == 0 || K_w == 0) return;
+    if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) return;
+    if (H_in + 2*pad < K_h || W_in + 2*pad < K_w) return;
     size_t H_out = (H_in + 2*pad - K_h)/stride + 1;
     size_t W_out = (W_in + 2*pad - K_w)/stride + 1;
+    if (N && C_out && H_out && W_out) {
+        if (N > SIZE_MAX / C_out) return;
+        if (N * C_out > SIZE_MAX / H_out) return;
+        if (N * C_out * H_out > SIZE_MAX / W_out) return;
+        if (N * C_out * H_out * W_out > SIZE_MAX / sizeof(double)) return;
+    }
     memset(out, 0, N*C_out*H_out*W_out*sizeof(double));
     double final_scale = scale_in * scale_w;
 
@@ -216,6 +263,8 @@ void kernel_conv2d_int8_fwd(double* out, const int8_t* in, const int8_t* w, doub
 
 void kernel_layernorm(double* out, const double* in, const double* gamma, const double* beta,
                       size_t batch_size, size_t hidden_size, double eps) {
+    if (!out || !in || !gamma || !beta) return;
+    if (batch_size == 0 || hidden_size == 0) return;
     for(size_t b=0; b<batch_size; b++) {
         const double* x = in + b * hidden_size;
         double* y = out + b * hidden_size;
@@ -236,17 +285,20 @@ void kernel_layernorm(double* out, const double* in, const double* gamma, const 
 }
 
 void kernel_gelu(double* out, const double* in, size_t elements) {
+    if (!out || !in) return;
     const double sqrt_2_over_pi = 0.7978845608028654;
     for(size_t i=0; i<elements; i++) {
         double x = in[i];
-        if (x > 100.0) x = 100.0;
-        if (x < -100.0) x = -100.0;
+        /* No clamp: tanh has no overflow; true GELU x->x for large x. */
         out[i] = 0.5 * x * (1.0 + tanh(sqrt_2_over_pi * (x + 0.044715 * x * x * x)));
     }
 }
 
 void kernel_rope(double* q, double* k, size_t batch_size, size_t seq_len, size_t n_heads, size_t head_dim, int pos_offset) {
     // Rotary Position Embedding (RoPE)
+    if (!q || !k) return;
+    if (batch_size == 0 || seq_len == 0 || n_heads == 0 || head_dim == 0) return;
+    if (head_dim % 2 != 0) return; /* odd head_dim must be rejected by caller; refuse silent partial rotation */
     for(size_t b=0; b<batch_size; b++) {
         for(size_t s=0; s<seq_len; s++) {
             int pos = s + pos_offset;
@@ -278,6 +330,8 @@ void kernel_rope(double* q, double* k, size_t batch_size, size_t seq_len, size_t
 void kernel_attention(double* out, const double* q, const double* k, const double* v, size_t seq_len, size_t n_heads, size_t head_dim) {
     // V10S STABLE: FLASH ATTENTION (Online Softmax / SRAM Tiling)
     // Eliminates the O(N^2) attention matrix allocation. Memory bound strictly to O(head_dim) per thread.
+    if (!out || !q || !k || !v) return;
+    if (seq_len == 0 || n_heads == 0 || head_dim == 0) return;
     #pragma omp parallel
     {
         double* o_i = (double*)calloc(head_dim, sizeof(double));
@@ -287,7 +341,7 @@ void kernel_attention(double* out, const double* q, const double* k, const doubl
         #pragma omp for collapse(2) schedule(static)
         for (size_t i = 0; i < seq_len; i++) {
             for (size_t h = 0; h < n_heads; h++) {
-                double m_i = -1e9;
+                double m_i = -INFINITY;
                 double l_i = 0.0;
                 memset(o_i, 0, head_dim * sizeof(double));
 
@@ -305,7 +359,7 @@ void kernel_attention(double* out, const double* q, const double* k, const doubl
                     s_ij *= scale;
 
                     // Causal Mask
-                    if (j > i) s_ij = -1e9;
+                    if (j > i) s_ij = -INFINITY;
 
                     double m_new = (s_ij > m_i) ? s_ij : m_i;
                     double correction = exp(m_i - m_new);
@@ -340,14 +394,17 @@ void kernel_attention(double* out, const double* q, const double* k, const doubl
 // =====================================================================
 void kernel_attention_kv_cache(double* out, const double* q, const double* k_cache, const double* v_cache,
                                size_t seq_len, size_t n_heads, size_t head_dim) {
+    if (!out || !q || !k_cache || !v_cache) return;
+    if (seq_len == 0 || n_heads == 0 || head_dim == 0) return;
     double scale = 1.0 / sqrt((double)head_dim);
     size_t hidden_size = n_heads * head_dim;
 
     memset(out, 0, hidden_size * sizeof(double));
     double* scores = (double*)malloc(seq_len * sizeof(double));
+    if (!scores) return;
 
     for(size_t h=0; h<n_heads; h++) {
-        double max_val = -1e9;
+        double max_val = -INFINITY;
         // 1. Q (1 x head_dim) * K_cache^T (head_dim x seq_len)
         for(size_t j=0; j<seq_len; j++) {
             double sum = 0.0;
@@ -382,6 +439,8 @@ void kernel_attention_kv_cache(double* out, const double* q, const double* k_cac
 }
 
 void kernel_rmsnorm(double* out, const double* in, const double* gamma, size_t seq_len, size_t hidden_size, double eps) {
+    if (!out || !in || !gamma) return;
+    if (seq_len == 0 || hidden_size == 0) return;
     #pragma omp parallel for schedule(static)
     for (size_t i = 0; i < seq_len; i++) {
         double sq_sum = 0.0;
@@ -399,6 +458,7 @@ void kernel_rmsnorm(double* out, const double* in, const double* gamma, size_t s
 }
 
 void kernel_swiglu(double* out, const double* gate, const double* up, size_t elements) {
+    if (!out || !gate || !up) return;
     #pragma omp parallel for simd schedule(static)
     for (size_t i = 0; i < elements; i++) {
         double g = gate[i];
@@ -408,6 +468,9 @@ void kernel_swiglu(double* out, const double* gate, const double* up, size_t ele
 }
 
 void kernel_gqa(double* out, const double* q, const double* k, const double* v, size_t seq_len, size_t n_heads_q, size_t n_heads_kv, size_t head_dim) {
+    if (!out || !q || !k || !v) return;
+    if (seq_len == 0 || n_heads_q == 0 || n_heads_kv == 0 || head_dim == 0) return;
+    if (n_heads_q % n_heads_kv != 0) return;
     size_t hidden_size_q = n_heads_q * head_dim;
     size_t hidden_size_kv = n_heads_kv * head_dim;
     size_t group_size = n_heads_q / n_heads_kv;
@@ -421,7 +484,7 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
         for (size_t i = 0; i < seq_len; i++) {
             for (size_t hq = 0; hq < n_heads_q; hq++) {
                 size_t hk = hq / group_size;
-                double m_i = -1e9;
+                double m_i = -INFINITY;
                 double l_i = 0.0;
                 memset(o_i, 0, head_dim * sizeof(double));
                 const double* q_row = q + (i * hidden_size_q) + (hq * head_dim);
@@ -432,7 +495,7 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
                     #pragma omp simd
                     for (size_t d = 0; d < head_dim; d++) s_ij += q_row[d] * k_row[d];
                     s_ij *= scale;
-                    if (j > i) s_ij = -1e9;
+                    if (j > i) s_ij = -INFINITY;
                     double m_new = (s_ij > m_i) ? s_ij : m_i;
                     double correction = exp(m_i - m_new);
                     double p_ij = exp(s_ij - m_new);
@@ -463,6 +526,8 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
  *   - accumulation is FP64 for numerical stability
  */
 void kernel_matmul_f32(float* out, const float* a, const float* b, size_t M, size_t K, size_t N) {
+    if (!out || !a || !b) return;
+    if (M == 0 || K == 0 || N == 0) return;
 #pragma omp parallel for collapse(2) schedule(static)
     for (size_t r = 0; r < M; r++) {
         for (size_t c = 0; c < N; c++) {

@@ -65,6 +65,9 @@ lancius_error lancius_validate_conv2d(size_t H_in, size_t W_in, size_t K_h, size
                                       uint32_t stride, uint32_t pad) {
     if (stride == 0) return LANCIUS_ERROR_INVALID_STRIDE;
     if (K_h == 0 || K_w == 0) return LANCIUS_ERROR_INVALID_SHAPE;
+    /* Checked: H_in + 2*pad must not wrap and must cover kernel. */
+    if (pad > (SIZE_MAX - H_in) / 2) return LANCIUS_ERROR_OVERFLOW;
+    if (pad > (SIZE_MAX - W_in) / 2) return LANCIUS_ERROR_OVERFLOW;
     if (H_in + 2 * (size_t)pad < K_h) return LANCIUS_ERROR_INVALID_SHAPE;
     if (W_in + 2 * (size_t)pad < K_w) return LANCIUS_ERROR_INVALID_SHAPE;
     return LANCIUS_ERROR_OK;

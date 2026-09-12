@@ -1,11 +1,11 @@
 <!-- SECTION:HEADER -->
-# Lancius v11S
+# Lancius v12R1
 
 ## Broke a few stuff in a massive refactor yesterday, restarting today on v11S code state.
 
-> **Internal milestone:** `v11S`
-> **Public release:** `V1.1`
-> **Status:** Stable release
+> **Internal milestone:** `v12R1`
+> **Public release:** `TBD`
+> **Status:** Development milestone (R1)
 
 Lancius is a lightweight C machine-learning compiler and runtime focused on
 bare-metal inference, static graph execution, memory planning, and low-level
@@ -22,7 +22,7 @@ sanitizer and fuzz validation, and full regression defense.
 
 | Internal Version | Public Version       | Release Type      |
 |------------------|----------------------|-------------------|
-| `v11S`          | `V1.1`      | Stable Release    |
+| `v12R1`          | `TBD`      | Development Milestone    |
 
 Lancius uses the following internal milestone progression:
 
@@ -38,7 +38,7 @@ Where:
 - `A3` is the freeze, hardening, and bug-hunting milestone
 - the next `S` is the stable release candidate
 
-> This is a stable release.
+> This is a development milestone.
 > Binary compatibility is guaranteed for v2 models written by v11S+.
 <!-- /SECTION:RELEASE_IDENTITY -->
 
@@ -226,7 +226,7 @@ sudo apt install build-essential
 
 ### Build with Make
 
-From inside the `v11S/` directory:
+From inside the `v12R1/` directory:
 
 ```bash
 make clean

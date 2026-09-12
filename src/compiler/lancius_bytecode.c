@@ -18,6 +18,10 @@ lancius_program* lancius_compile_graph(lancius_graph* g) {
     prog->rows = (size_t*)calloc(prog->num_regs, sizeof(size_t));
     prog->cols = (size_t*)calloc(prog->num_regs, sizeof(size_t));
     prog->input_regs = (uint32_t*)malloc(g->node_count * sizeof(uint32_t));
+    if (!prog->code || !prog->rows || !prog->cols || !prog->input_regs) {
+        free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog);
+        return NULL;
+    }
     prog->input_count = 0;
 
     // v10S GUARD: Bytecode VM only supports 2D tensors
@@ -67,6 +71,11 @@ lancius_program* lancius_compile_graph(lancius_graph* g) {
         } else if (n->op == LANCIUS_OP_SUM) {
             prog->code[pc++] = LANCIUS_BC_SUM; prog->code[pc++] = out_r;
             prog->code[pc++] = reg_map[n->inputs[0]->id];
+        } else {
+            /* Anything beyond 2D MLP must fail loudly, never miscompile. */
+            fprintf(stderr, "[BYTECODE FATAL] op %d not supported in v10S VM (node %u).\n", n->op, n->id);
+            free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog);
+            return NULL;
         }
     }
     prog->code[pc++] = LANCIUS_BC_HALT;
@@ -105,10 +114,11 @@ int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lanc
         double* b = is_unary ? NULL : regs[r_b];
         double* o = regs[r_out];
 
-        if (!a) continue;
+        if (!a || (!is_unary && !b)) return -1;
 
         if (op == LANCIUS_BC_MATMUL) {
             size_t M = prog->rows[r_a]; size_t K = prog->cols[r_a]; size_t N = prog->cols[r_b];
+            if (prog->rows[r_out] != M || prog->cols[r_out] != N || prog->rows[r_b] != K) return -1;
             for(size_t r=0; r<M; r++) for(size_t c=0; c<N; c++) {
                 double sum = 0.0; for(size_t k=0; k<K; k++) sum += a[r*K + k] * b[k*N + c];
                 o[r*N + c] = sum;
@@ -123,12 +133,19 @@ int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lanc
             for(size_t k=0; k<elements; k++) o[k] = a[k] > 0.0 ? a[k] : 0.0;
         } else if (op == LANCIUS_BC_BROADCAST) {
             size_t cols = prog->cols[r_out]; size_t rows = prog->rows[r_out];
-            size_t in_elems = prog->rows[r_a] * prog->cols[r_a];
+            size_t in_rows = prog->rows[r_a]; size_t in_cols = prog->cols[r_a];
+            size_t in_elems = in_rows * in_cols;
             if (in_elems == 1) {
                 double val = a[0];
                 for(size_t k=0; k<rows*cols; k++) o[k] = val;
-            } else {
+            } else if (in_rows == 1 && in_cols == cols) {
                 for(size_t r=0; r<rows; r++) for(size_t c=0; c<cols; c++) o[r*cols + c] = a[c];
+            } else if (in_cols == 1 && in_rows == rows) {
+                for(size_t r=0; r<rows; r++) for(size_t c=0; c<cols; c++) o[r*cols + c] = a[r];
+            } else if (in_rows == rows && in_cols == cols) {
+                for(size_t k=0; k<rows*cols; k++) o[k] = a[k];
+            } else {
+                return -1;
             }
         } else if (op == LANCIUS_BC_SOFTMAX) {
             size_t R = prog->rows[r_out]; size_t C = prog->cols[r_out];
@@ -147,7 +164,8 @@ int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lanc
     }
 
     size_t out_elements = prog->rows[prog->out_reg] * prog->cols[prog->out_reg];
-    if (regs[prog->out_reg]) memcpy(out, regs[prog->out_reg], out_elements * sizeof(double));
+    if (!regs[prog->out_reg]) return -1;
+    memcpy(out, regs[prog->out_reg], out_elements * sizeof(double));
     return 0;
 }
 

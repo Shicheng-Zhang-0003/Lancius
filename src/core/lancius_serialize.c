@@ -104,6 +104,7 @@ lancius_graph* lancius_graph_load(const char* path) {
         if (fread(&op, sizeof(lancius_opcode), 1, f) != 1) goto fail;
         if (op > LANCIUS_OP_GQA) goto fail;
         if (fread(&ndim, sizeof(uint8_t), 1, f) != 1) goto fail;
+        if (ndim == 0 || ndim > 4) goto fail;
         if (fread(shape, sizeof(size_t), 4, f) != 4) goto fail;
 
         if (fread(&input_count, sizeof(uint32_t), 1, f) != 1) goto fail;
@@ -189,7 +190,16 @@ lancius_graph* lancius_graph_load(const char* path) {
             if (in0 && in1 && in2) n = lancius_attention(g, in0, in1, in2);
         }
         else {
-            fprintf(stderr, "[LANCIUS SERIAL WARN] Unknown op %u during load, skipping\n", op);
+            fprintf(stderr, "[LANCIUS SERIAL FATAL] Unsupported op %u in v1 model, rejecting\n", op);
+            free(in_ids);
+            goto fail;
+        }
+
+        if (!n) { free(in_ids); goto fail; }
+        if (id_map[id] != NULL) { free(in_ids); goto fail; } /* duplicate id */
+        {
+            size_t ne = 0;
+            if (!lancius_node_elements_checked(n, &ne)) { free(in_ids); goto fail; }
         }
 
         if (n) {
@@ -204,7 +214,8 @@ lancius_graph* lancius_graph_load(const char* path) {
             }
             id_map[id] = n;
             if (has_weights) {
-                size_t elems = lancius_node_elements(n);
+                size_t elems = 0;
+                if (!lancius_node_elements_checked(n, &elems)) { free(in_ids); goto fail; }
                 if (elems > SIZE_MAX / sizeof(double)) {
                     fprintf(stderr, "[SERIAL FATAL] Tensor size overflow.\n");
                     free(in_ids); fclose(f); free(id_map);

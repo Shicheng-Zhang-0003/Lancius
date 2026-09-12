@@ -1,5 +1,33 @@
 # Lancius Changelog
 
+## v12R1 (unreleased) — hardening batch — 2026-09-12
+
+Bottom-up correctness pass over all layers (no format / stable-ABI break):
+
+- Scheduler: broadcast column/identity fix, RMSNorm 3D hidden fix,
+  parallel FP32 dispatch + FP32 reset hygiene, cycle returns NULL +
+  GRAPH_CYCLE, matmul overflow guards, XEnt-bwd numerical guard,
+  ROPE even-dim check, permute/batched validation, pool offset bounds
+  (`plan->max_id`), parallel/CONST OOM errors.
+- Bytecode VM fails loud on unsupported ops; VM input/dim checks.
+- `onnx_to_lancius.py`: strict (unknown op / unmapped input / bad perm /
+  unresolvable Reshape raise), real CRC32 in header.
+- Arena/IR: create/alloc/track/realloc guards; builders validate shapes
+  (attention, layernorm/rmsnorm gamma, swiglu, broadcast); fixed
+  `bind_external_int8`, `set_owner`, `release_owned` FP32 leak.
+- Kernels: null/zero/overflow guards everywhere; attention/GQA
+  `-INFINITY` causal sentinel; GELU clamp removed; RoPE odd-dim refuse;
+  KV-cache OOM + zero-len guards; MaxPool `-INFINITY` + NaN propagate;
+  INT8 zero-scale is now a loud error; quantizer clamp + skip-if-INT8.
+- Planner/threadpool: all allocs checked, id bounds, overflow-safe
+  offsets, threadpool create/teardown hardening.
+- Persistence: v2 save CRC fail-closed + `w+b` read-back fix (was silent
+  crc=0), v1 loader ndim/duplicate-id/unknown-op hardening, v2 header
+  reserved-field + duplicate-NOP rejection, stable API error-map
+  completion + FP64-only `read_output` honesty + checked counts.
+- Audits updated to `-INFINITY` / unclamped GELU references.
+- Removed 15 stale `*.bak*` / `*backup*` files.
+
 ## v11S / V1.1 — Stable Release
 
 ### Changed

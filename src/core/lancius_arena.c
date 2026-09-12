@@ -32,12 +32,13 @@ lancius_arena* lancius_arena_create(size_t block_size) {
     if (!a) return NULL;
     a->default_block_size = block_size > 0 ? block_size : (16 * 1024 * 1024); // 16MB default
     a->first = block_create(a->default_block_size);
+    if (!a->first) { free(a); return NULL; }
     a->current = a->first;
     return a;
 }
 
 void* lancius_arena_alloc(lancius_arena* a, size_t size, size_t alignment) {
-    if (!a) return NULL;
+    if (!a || !a->current || !a->current->memory) return NULL;
     if (size == 0) size = 1; // Prevent 0-byte allocs returning overlapping pointers
     if (size > SIZE_MAX - 32) return NULL; // v10S ARMOR: Catch SIZE_MAX before alignment math wraps it to 0
     size = (size + 31) & ~(size_t)31; // Force 32-byte footprint
@@ -60,7 +61,10 @@ void* lancius_arena_alloc(lancius_arena* a, size_t size, size_t alignment) {
     if (total_needed > SIZE_MAX - b->used) return NULL;
 
     if (b->used + total_needed > b->size) {
-        size_t new_size = (size + alignment > a->default_block_size) ? (size + alignment) : a->default_block_size;
+        size_t grow = 0;
+        if (size > SIZE_MAX - alignment) return NULL;
+        grow = size + alignment;
+        size_t new_size = (grow > a->default_block_size) ? grow : a->default_block_size;
         lancius_block* nb = block_create(new_size);
         if (!nb) { fprintf(stderr, "[ARENA FATAL] Failed to allocate block of size %zu!", new_size); return NULL; }
         b->next = nb;
@@ -76,7 +80,7 @@ void* lancius_arena_alloc(lancius_arena* a, size_t size, size_t alignment) {
 }
 
 void lancius_arena_reset(lancius_arena* a) {
-    if (!a) return;
+    if (!a || !a->first) return;
     lancius_block* b = a->first->next;
     while (b) {
         lancius_block* next = b->next;

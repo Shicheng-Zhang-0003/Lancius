@@ -43,17 +43,23 @@ static void accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_i
 
 lancius_training_graph* lancius_ir_autodiff(lancius_graph* fwd_g, lancius_node* loss_node) {
     if (!loss_node) return NULL; // Prevent segfault on malformed graphs
+    if (!fwd_g || fwd_g->next_id == 0) return NULL;
     lancius_training_graph* tg = (lancius_training_graph*)calloc(1, sizeof(lancius_training_graph));
+    if (!tg) return NULL;
     tg->graph = lancius_graph_create();
+    if (!tg->graph) { free(tg); return NULL; }
     tg->max_id = fwd_g->next_id;
     tg->grad_nodes = (lancius_node**)calloc(fwd_g->next_id, sizeof(lancius_node*));
+    if (!tg->grad_nodes) { lancius_graph_destroy(tg->graph); free(tg); return NULL; }
 
     lancius_node** fwd_to_full = (lancius_node**)calloc(fwd_g->next_id, sizeof(lancius_node*));
+    if (!fwd_to_full) { free(tg->grad_nodes); lancius_graph_destroy(tg->graph); free(tg); return NULL; }
     for(uint32_t i=0; i<fwd_g->node_count; i++) {
         lancius_node* old = fwd_g->nodes[i];
+        if (!old) continue;
         lancius_node* n = NULL;
-        const lancius_node* in0 = old->input_count > 0 ? fwd_to_full[old->inputs[0]->id] : NULL;
-        const lancius_node* in1 = old->input_count > 1 ? fwd_to_full[old->inputs[1]->id] : NULL;
+        const lancius_node* in0 = (old->input_count > 0 && old->inputs && old->inputs[0]) ? fwd_to_full[old->inputs[0]->id] : NULL;
+        const lancius_node* in1 = (old->input_count > 1 && old->inputs && old->inputs[1]) ? fwd_to_full[old->inputs[1]->id] : NULL;
 
         switch(old->op) {
             case LANCIUS_OP_INPUT:
@@ -71,7 +77,10 @@ break;
             case LANCIUS_OP_RELU: n = lancius_relu(tg->graph, in0); break;
             case LANCIUS_OP_TRANSPOSE: n = lancius_transpose(tg->graph, in0); break;
             case LANCIUS_OP_SUM: n = lancius_sum(tg->graph, in0); break;
-            case LANCIUS_OP_BROADCAST: n = lancius_broadcast(tg->graph, in0, old->shape[0], old->shape[1]); break;
+            case LANCIUS_OP_BROADCAST:
+                if (old->ndim == 4) n = lancius_broadcast_4d(tg->graph, in0, old->shape[0], old->shape[1], old->shape[2], old->shape[3]);
+                else n = lancius_broadcast(tg->graph, in0, old->shape[0], old->shape[1]);
+                break;
             case LANCIUS_OP_SOFTMAX: n = lancius_softmax(tg->graph, in0); break;
             case LANCIUS_OP_CROSS_ENTROPY: n = lancius_cross_entropy(tg->graph, in0, in1); break;
             case LANCIUS_OP_PERMUTE: n = lancius_permute(tg->graph, in0, old->axes[0], old->axes[1], old->axes[2], old->axes[3]); break;
@@ -91,15 +100,21 @@ break;
                     n->ndim = 4;
                     n->input_count = 2;
                     n->inputs = (const lancius_node**)lancius_arena_alloc(tg->graph->arena, sizeof(lancius_node*) * 2, 8);
+                    if (!n->inputs) { n = NULL; break; }
                     n->inputs[0] = in0; n->inputs[1] = in1;
                     n->shape[0] = old->shape[0]; n->shape[1] = old->shape[1]; n->shape[2] = old->shape[2]; n->shape[3] = old->shape[3];
                     n->kernel_h = old->kernel_h; n->kernel_w = old->kernel_w; n->stride = old->stride; n->pad = old->pad;
+                    n->dtype = LANCIUS_DTYPE_FP64;
+                    n->scale = 1.0;
                     n->runtime_data = old->runtime_data;
                     lancius_runtime_sync_from_legacy(n);
                     // Track node in training graph
                     if (tg->graph->node_count >= tg->graph->node_cap) {
-                        tg->graph->node_cap = tg->graph->node_cap == 0 ? 1024 : tg->graph->node_cap * 2;
-                        tg->graph->nodes = (lancius_node**)realloc(tg->graph->nodes, sizeof(lancius_node*) * tg->graph->node_cap);
+                        size_t new_cap = tg->graph->node_cap == 0 ? 1024 : (size_t)tg->graph->node_cap * 2;
+                        lancius_node** nn = (lancius_node**)realloc(tg->graph->nodes, sizeof(lancius_node*) * new_cap);
+                        if (!nn) { n = NULL; break; }
+                        tg->graph->nodes = nn;
+                        tg->graph->node_cap = (uint32_t)new_cap;
                     }
                     tg->graph->nodes[tg->graph->node_count++] = n;
                 }
@@ -110,6 +125,7 @@ break;
     }
 
     lancius_node** grad_map = (lancius_node**)calloc(fwd_g->next_id, sizeof(lancius_node*));
+    if (!grad_map) { free(fwd_to_full); free(tg->grad_nodes); lancius_graph_destroy(tg->graph); free(tg); return NULL; }
     grad_map[loss_node->id] = lancius_const(tg->graph, 1.0, 1, 1);
 
     for (int i = fwd_g->node_count - 1; i >= 0; i--) {
@@ -124,8 +140,9 @@ break;
             accum_grad(tg->graph, grad_map, fwd_n->inputs[1]->id, grad_out, fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_SUB) {
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, grad_out, fwd_to_full);
-            lancius_node* neg = lancius_const(tg->graph, -1.0, grad_out->shape[0], grad_out->shape[1]);
-            accum_grad(tg->graph, grad_map, fwd_n->inputs[1]->id, lancius_mul(tg->graph, grad_out, neg), fwd_to_full);
+            lancius_node* neg = lancius_const(tg->graph, -1.0, 1, 1);
+            lancius_node* prod = (neg && grad_out) ? lancius_mul(tg->graph, grad_out, neg) : NULL;
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[1]->id, prod, fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_MUL) {
             lancius_node* A = fwd_to_full[fwd_n->inputs[0]->id];
             lancius_node* B = fwd_to_full[fwd_n->inputs[1]->id];

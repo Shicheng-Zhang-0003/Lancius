@@ -21,6 +21,24 @@ static lancius_status map_internal_error(lancius_error err) {
         case LANCIUS_ERROR_NULL_PTR:         return LANCIUS_ERR_NULL_PTR;
         case LANCIUS_ERROR_SHAPE_MISMATCH:   return LANCIUS_ERR_SHAPE_MISMATCH;
         case LANCIUS_ERROR_UNSUPPORTED_OP:   return LANCIUS_ERR_UNSUPPORTED_OP;
+        case LANCIUS_ERROR_UNSUPPORTED_DTYPE:return LANCIUS_ERR_UNSUPPORTED_OP;
+        case LANCIUS_ERROR_INVALID_DTYPE:    return LANCIUS_ERR_UNSUPPORTED_OP;
+        case LANCIUS_ERROR_INVALID_MODEL:    return LANCIUS_ERR_IO;
+        case LANCIUS_ERROR_VERSION_MISMATCH: return LANCIUS_ERR_IO;
+        case LANCIUS_ERROR_IO:               return LANCIUS_ERR_IO;
+        case LANCIUS_ERROR_GRAPH_CYCLE:      return LANCIUS_ERR_SHAPE_MISMATCH;
+        case LANCIUS_ERROR_GRAPH_INVALID:    return LANCIUS_ERR_SHAPE_MISMATCH;
+        case LANCIUS_ERROR_OVERFLOW:         return LANCIUS_ERR_OOM;
+        case LANCIUS_ERROR_LIMIT:            return LANCIUS_ERR_OOM;
+        case LANCIUS_ERROR_INTERNAL:         return LANCIUS_ERR_UNSUPPORTED_OP;
+        case LANCIUS_ERROR_INVALID_HANDLE:   return LANCIUS_ERR_NULL_PTR;
+        case LANCIUS_ERROR_LIFETIME:         return LANCIUS_ERR_NULL_PTR;
+        case LANCIUS_ERROR_INVALID_RANK:     return LANCIUS_ERR_SHAPE_MISMATCH;
+        case LANCIUS_ERROR_INVALID_SHAPE:    return LANCIUS_ERR_SHAPE_MISMATCH;
+        case LANCIUS_ERROR_INVALID_STRIDE:   return LANCIUS_ERR_SHAPE_MISMATCH;
+        case LANCIUS_ERROR_INVALID_PERMUTATION: return LANCIUS_ERR_SHAPE_MISMATCH;
+        case LANCIUS_ERROR_RESHAPE_MISMATCH: return LANCIUS_ERR_SHAPE_MISMATCH;
+        case LANCIUS_ERROR_NUMERICAL:        return LANCIUS_ERR_SHAPE_MISMATCH;
         default:                             return LANCIUS_ERR_UNSUPPORTED_OP;
     }
 }
@@ -45,6 +63,8 @@ LANCIUS_EXPORT const char* lancius_get_error_string(lancius_status err) {
         case LANCIUS_ERR_SHAPE_MISMATCH: return "Shape Mismatch";
         case LANCIUS_ERR_NULL_PTR: return "Null Pointer";
         case LANCIUS_ERR_UNSUPPORTED_OP: return "Unsupported Operation";
+        case LANCIUS_ERR_BUFFER_TOO_SMALL: return "Buffer Too Small";
+        case LANCIUS_ERR_IO: return "I/O Error";
         default: return "Unknown Error";
     }
 }
@@ -130,7 +150,7 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_relu(lancius_graph_handle g, la
     if (!g || !a) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     lancius_node* n = lancius_relu(wrapper->g, (lancius_node*)a);
-    if (!n) { set_error(LANCIUS_ERR_OOM); return NULL; }
+    if (!n) { sync_internal_error(); if (g_last_error == LANCIUS_OK) set_error(LANCIUS_ERR_SHAPE_MISMATCH); return NULL; }
     set_error(LANCIUS_OK);
     return (lancius_tensor_handle)n;
 }
@@ -150,12 +170,14 @@ LANCIUS_EXPORT lancius_status lancius_compile_and_run(lancius_graph_handle g) {
 
     if (wrapper->sched) lancius_schedule_destroy(wrapper->sched);
 
+    lancius_clear_error();
     wrapper->sched = lancius_ir_schedule(wrapper->g);
-    if (!wrapper->sched) { set_error(LANCIUS_ERR_OOM); return LANCIUS_ERR_OOM; }
+    if (!wrapper->sched) { sync_internal_error(); if (g_last_error == LANCIUS_OK) set_error(LANCIUS_ERR_OOM); return g_last_error; }
 
     /* v11A3 fix: auto-size scratch arena from liveness analysis */
     {
         size_t peak = lancius_schedule_peak_memory(wrapper->sched);
+        if (peak > SIZE_MAX - (1024 * 1024)) { set_error(LANCIUS_ERR_OOM); return LANCIUS_ERR_OOM; }
         size_t needed = peak + (1024 * 1024); /* 1MB headroom */
         if (needed > 16 * 1024 * 1024) {
             lancius_arena_destroy(wrapper->scratch);
@@ -177,19 +199,22 @@ LANCIUS_EXPORT lancius_status lancius_compile_and_run(lancius_graph_handle g) {
 LANCIUS_EXPORT lancius_status lancius_read_output(lancius_tensor_handle t, double* out_buffer, size_t buffer_size) {
     if (!t || !out_buffer) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
     lancius_node* n = (lancius_node*)t;
+    if (n->dtype != LANCIUS_DTYPE_FP64) { set_error(LANCIUS_ERR_UNSUPPORTED_OP); return LANCIUS_ERR_UNSUPPORTED_OP; }
     if (!n->runtime_data) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
 
     if (buffer_size % sizeof(double) != 0) {
         set_error(LANCIUS_ERR_SHAPE_MISMATCH);
         return LANCIUS_ERR_SHAPE_MISMATCH;
     }
-    size_t elems = lancius_node_elements(n);
+    size_t elems = 0;
+    if (!lancius_node_elements_checked(n, &elems)) { set_error(LANCIUS_ERR_SHAPE_MISMATCH); return LANCIUS_ERR_SHAPE_MISMATCH; }
     size_t buffer_elems = buffer_size / sizeof(double);
     /* v11A3 fix: reject silent truncation */
     if (buffer_elems < elems) {
         set_error(LANCIUS_ERR_BUFFER_TOO_SMALL);
         return LANCIUS_ERR_BUFFER_TOO_SMALL;
     }
+    if (elems > SIZE_MAX / sizeof(double)) { set_error(LANCIUS_ERR_OOM); return LANCIUS_ERR_OOM; }
     memcpy(out_buffer, n->runtime_data, elems * sizeof(double));
     set_error(LANCIUS_OK);
     return LANCIUS_OK;
@@ -227,8 +252,10 @@ LANCIUS_EXPORT lancius_status lancius_graph_save_stable(lancius_graph_handle g, 
 LANCIUS_EXPORT size_t lancius_tensor_element_count(lancius_tensor_handle t) {
     if (!t) { set_error(LANCIUS_ERR_NULL_PTR); return 0; }
     lancius_node* n = (lancius_node*)t;
+    size_t elems = 0;
+    if (!lancius_node_elements_checked(n, &elems)) { set_error(LANCIUS_ERR_SHAPE_MISMATCH); return 0; }
     set_error(LANCIUS_OK);
-    return lancius_node_elements(n);
+    return elems;
 }
 
 /* A3: dtype query */
