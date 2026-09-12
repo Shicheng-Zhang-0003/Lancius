@@ -1,9 +1,9 @@
 # Lancius Current Status
 
-Current internal milestone: **v11S**
-Previous internal milestone: **v11A3**
-Public equivalent: **V1.1**
-Release line: **1.1 stable**
+Current internal milestone: **v12R1**
+Previous internal milestone: **v11S**
+Public equivalent: **TBD**
+Release line: **12 R1 development**
 
 ## Phase
 
@@ -27,3 +27,10 @@ v11S inherits the v11A3 feature freeze:
 - no new model-format changes
 
 Only critical bug fixes are accepted post-release.
+
+## Hardening batch — 2026-09-12
+
+Bottom-up pass applied (see CHANGELOG): build clean under
+`-Wall -Wextra -Werror`; `audit_regression_13c` 49/49,
+`audit_known_answer` 67/67, `audit_transformer_known_answer` 265/265,
+`audit_fp32_path` 19/19 green. Stale backup files removed.

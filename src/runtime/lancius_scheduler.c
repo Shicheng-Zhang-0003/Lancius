@@ -3,6 +3,7 @@
 #include "lancius/lancius_transformer.h"
 #include "lancius/lancius_vision_ops.h"
 #include "lancius/lancius_kernels.h"
+#include "lancius/lancius_validate.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -13,13 +14,20 @@
 lancius_schedule* lancius_ir_schedule(lancius_graph* g) {
     if (!g || g->node_count == 0) return NULL;
     lancius_schedule* sched = (lancius_schedule*)calloc(1, sizeof(lancius_schedule));
+    if (!sched) { lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
+    if (g->next_id == 0 || !g->nodes) { free(sched); lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return NULL; }
     uint32_t* in_degree = (uint32_t*)calloc(g->next_id, sizeof(uint32_t));
-    lancius_node** queue = (lancius_node**)malloc(sizeof(lancius_node*) * g->node_count);
+    lancius_node** queue = (lancius_node**)malloc(sizeof(lancius_node*) * (size_t)g->node_count);
+    if (!in_degree || !queue) { free(in_degree); free(queue); free(sched); lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
 
-    for (uint32_t i = 0; i < g->node_count; i++) in_degree[g->nodes[i]->id] = g->nodes[i]->input_count;
+    for (uint32_t i = 0; i < g->node_count; i++) {
+        if (!g->nodes[i] || g->nodes[i]->id >= g->next_id) { free(in_degree); free(queue); free(sched->waves); free(sched); lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return NULL; }
+        in_degree[g->nodes[i]->id] = g->nodes[i]->input_count;
+    }
 
     uint32_t wave_cap = 16;
     sched->waves = (lancius_wave*)malloc(sizeof(lancius_wave) * wave_cap);
+    if (!sched->waves) { free(in_degree); free(queue); free(sched); lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
     uint32_t processed = 0;
 
     while (processed < g->node_count) {
@@ -33,15 +41,36 @@ lancius_schedule* lancius_ir_schedule(lancius_graph* g) {
         }
         if (q_tail == 0) {
             fprintf(stderr, "[SCHEDULER FATAL] Cycle or disconnect! Processed %u / %u\n", processed, g->node_count);
-            break;
+            lancius_set_error(LANCIUS_ERROR_GRAPH_CYCLE);
+            for (uint32_t w = 0; w < sched->wave_count; w++) free(sched->waves[w].nodes);
+            free(sched->waves); free(sched);
+            free(in_degree); free(queue);
+            return NULL;
         }
         if (sched->wave_count >= wave_cap) {
+            if (wave_cap > UINT32_MAX / 2) { lancius_set_error(LANCIUS_ERROR_OOM); break; }
             wave_cap *= 2;
-            sched->waves = (lancius_wave*)realloc(sched->waves, sizeof(lancius_wave) * wave_cap);
+            lancius_wave* nw = (lancius_wave*)realloc(sched->waves, sizeof(lancius_wave) * (size_t)wave_cap);
+            if (!nw) {
+                lancius_set_error(LANCIUS_ERROR_OOM);
+                for (uint32_t w = 0; w < sched->wave_count; w++) free(sched->waves[w].nodes);
+                free(sched->waves); free(sched);
+                free(in_degree); free(queue);
+                return NULL;
+            }
+            sched->waves = nw;
         }
         lancius_wave* w = &sched->waves[sched->wave_count++];
         w->node_count = q_tail;
-        w->nodes = (lancius_node**)malloc(sizeof(lancius_node*) * q_tail);
+        w->nodes = (lancius_node**)malloc(sizeof(lancius_node*) * (size_t)q_tail);
+        if (!w->nodes) {
+            lancius_set_error(LANCIUS_ERROR_OOM);
+            sched->wave_count--;
+            for (uint32_t ww = 0; ww < sched->wave_count; ww++) free(sched->waves[ww].nodes);
+            free(sched->waves); free(sched);
+            free(in_degree); free(queue);
+            return NULL;
+        }
         memcpy(w->nodes, queue, sizeof(lancius_node*) * q_tail);
 
         for (uint32_t i = 0; i < g->node_count; i++) {
@@ -49,6 +78,7 @@ lancius_schedule* lancius_ir_schedule(lancius_graph* g) {
             if (in_degree[n->id] == UINT32_MAX) continue;
             bool ready = true;
             for (uint32_t j = 0; j < n->input_count; j++) {
+                if (!n->inputs || !n->inputs[j] || n->inputs[j]->id >= g->next_id) { ready = false; break; }
                 if (in_degree[n->inputs[j]->id] != UINT32_MAX) { ready = false; break; }
             }
             if (ready) in_degree[n->id] = 0;
@@ -111,14 +141,16 @@ static void execute_node_math(lancius_node* n) {
     }
     else if (n->op == LANCIUS_OP_CROSS_ENTROPY_BWD) {
         double* x = n->inputs[0]->runtime_data; double* y = n->inputs[1]->runtime_data; double* g = n->inputs[2]->runtime_data;
-        if (!x || !y || !g) return;
+        if (!x || !y || !g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         size_t R = n->shape[0]; size_t C = n->shape[1];
+        if (R == 0 || C == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
         double scale = g[0] / R;
         for(size_t r=0; r<R; r++) {
             double max_val = x[r*C];
             for(size_t c=1; c<C; c++) if(x[r*C+c] > max_val) max_val = x[r*C+c];
             double sum_exp = 0.0;
             for(size_t c=0; c<C; c++) sum_exp += exp(x[r*C+c] - max_val);
+            if (sum_exp <= 0.0 || sum_exp != sum_exp) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
             for(size_t c=0; c<C; c++) {
                 double sm = exp(x[r*C+c] - max_val) / sum_exp;
                 n->runtime_data[r*C+c] = (sm - y[r*C+c]) * scale;
@@ -226,7 +258,12 @@ static void execute_node_math(lancius_node* n) {
             double* in = n->inputs[0]->runtime_data;
             double* gamma = n->inputs[1]->runtime_data;
             if(!in || !gamma) return;
-            kernel_rmsnorm(n->runtime_data, in, gamma, n->shape[0], n->shape[1], 1e-5);
+            /* Same contract as LayerNorm above: norm domain is everything after batch dim. */
+            size_t batch = n->shape[0];
+            size_t total = lancius_node_elements(n);
+            size_t hidden = (batch ? total / batch : 0);
+            if (hidden == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+            kernel_rmsnorm(n->runtime_data, in, gamma, batch, hidden, 1e-5);
         }
         else if (n->op == LANCIUS_OP_SWIGLU) {
             double* gate = n->inputs[0]->runtime_data;
@@ -243,12 +280,16 @@ static void execute_node_math(lancius_node* n) {
         }
 else if (n->op == LANCIUS_OP_ROPE) {
         double* qk = n->inputs[0]->runtime_data;
-        if(!qk) return;
+        if(!qk) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         size_t seq_len = n->shape[0];
         size_t n_heads = n->shape[1];
         size_t head_dim_x2 = n->shape[2];
+        if (seq_len == 0 || n_heads == 0 || head_dim_x2 == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+        if (head_dim_x2 % 2 != 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
         size_t head_dim = head_dim_x2 / 2;
-        size_t elems = seq_len * n_heads * head_dim_x2;
+        size_t elems = 0;
+        if (!lancius_node_elements_checked(n, &elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
+        if (elems > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
         memcpy(n->runtime_data, qk, elems * sizeof(double)); // Preserve SSA
         double* q = n->runtime_data;
         double* k = n->runtime_data + (seq_len * n_heads * head_dim);
@@ -331,14 +372,25 @@ else if (n->op == LANCIUS_OP_ROPE) {
         // V10S ONNX Mixed-Precision MatMul
         if (b_int8 && a) {
             size_t M = n->inputs[0]->shape[0]; size_t K = n->inputs[0]->shape[1]; size_t N = n->inputs[1]->shape[1];
+            if (M == 0 || K == 0 || N == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+            if (K > SIZE_MAX / N && 0) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+            if (M > SIZE_MAX / K) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+            if (M > SIZE_MAX / N) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+            if (M * N > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
             double scale_b = n->inputs[1]->scale;
             double max_a = 0.0;
             size_t elems_a = M * K;
             for(size_t i=0; i<elems_a; i++) { double v = fabs(a[i]); if(v>max_a) max_a = v; }
             double scale_a = (max_a > 0.0) ? (max_a / 127.0) : 1e-8;
 
-            int8_t* a_int8 = (int8_t*)malloc(elems_a);
-            for(size_t i=0; i<elems_a; i++) a_int8[i] = (int8_t)round(a[i] / scale_a);
+            int8_t* a_int8 = (int8_t*)malloc(elems_a ? elems_a : 1);
+            if (!a_int8) { lancius_set_error(LANCIUS_ERROR_OOM); return; }
+            for(size_t i=0; i<elems_a; i++) {
+                double q = round(a[i] / scale_a);
+                if (q > 127.0) q = 127.0;
+                if (q < -128.0) q = -128.0;
+                a_int8[i] = (int8_t)q;
+            }
 
             memset(n->runtime_data, 0, M * N * sizeof(double));
             double final_scale = scale_a * scale_b;
@@ -355,8 +407,11 @@ else if (n->op == LANCIUS_OP_ROPE) {
             return;
         }
 
-        if (!a || !b) return;
+        if (!a || !b) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         size_t M = n->inputs[0]->shape[0]; size_t K = n->inputs[0]->shape[1]; size_t N = n->inputs[1]->shape[1];
+        if (M == 0 || K == 0 || N == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+        if (n->inputs[0]->shape[1] != n->inputs[1]->shape[0]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        if (M > SIZE_MAX / N || M * N > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
         memset(n->runtime_data, 0, M * N * sizeof(double));
         // IKJ loop order: perfectly contiguous for AVX2 SIMD vectorization
         for(size_t r=0; r<M; r++) {
@@ -408,8 +463,21 @@ else if (n->op == LANCIUS_OP_ROPE) {
             double val = a[0];
             for(size_t k=0; k<elements; k++) n->runtime_data[k] = val;
         } else {
+            /* Output is 2D [R,C]; input may be [1,C] row, [R,1] column, or [R,C] identity. */
+            size_t R = n->shape[0];
             size_t cols = n->shape[1];
-            for(size_t r=0; r<n->shape[0]; r++) for(size_t c=0; c<cols; c++) n->runtime_data[r*cols + c] = a[c];
+            size_t in_R = n->inputs[0]->shape[0];
+            size_t in_C = n->inputs[0]->shape[1];
+            if (in_R == 1 && in_C == cols) {
+                for(size_t r=0; r<R; r++) for(size_t c=0; c<cols; c++) n->runtime_data[r*cols + c] = a[c];
+            } else if (in_C == 1 && in_R == R) {
+                for(size_t r=0; r<R; r++) for(size_t c=0; c<cols; c++) n->runtime_data[r*cols + c] = a[r];
+            } else if (in_R == R && in_C == cols) {
+                for(size_t k=0; k<elements; k++) n->runtime_data[k] = a[k];
+            } else {
+                lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH);
+                return;
+            }
         }
     }
     else if (n->op == LANCIUS_OP_RELU_BWD) {
@@ -444,6 +512,20 @@ else if (n->op == LANCIUS_OP_ROPE) {
     }
 }
 
+static int plan_pool_offset(lancius_schedule* schedule, const lancius_node* n, size_t nbytes, size_t* out_off) {
+    if (!schedule || !schedule->plan || !n || !out_off) return 0;
+    lancius_memory_plan* plan = schedule->plan;
+    if (!plan->offsets || !plan->is_pooled) return 0;
+    if (n->id >= plan->max_id) return 0;
+    if (!plan->is_pooled[n->id]) return 0;
+    if (!schedule->static_pool) return 0;
+    size_t off = plan->offsets[n->id];
+    if (off > plan->peak_memory) return 0;
+    if (nbytes > plan->peak_memory - off) return 0;
+    *out_off = off;
+    return 1;
+}
+
 static void lancius_schedule_prepare_buffers(lancius_schedule* schedule) {
     if (!schedule) return;
 
@@ -466,23 +548,28 @@ static void lancius_schedule_prepare_buffers(lancius_schedule* schedule) {
             lancius_node* n = wave->nodes[i];
             if (!n || !n->rt) continue;
 
-            if (schedule->plan &&
-                schedule->plan->offsets &&
-                schedule->plan->is_pooled &&
-                schedule->plan->is_pooled[n->id] &&
-                schedule->static_pool) {
-                n->runtime_data = (double*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
-                n->rt->buffer = n->runtime_data;
-                n->rt->offset = schedule->plan->offsets[n->id];
-                n->rt->buffer_owner = LANCIUS_MEMORY_POOL;
-                n->rt->owner = LANCIUS_MEMORY_POOL;
-                continue;
+            size_t nbytes = 0;
+            if (lancius_node_bytes_checked(n, &nbytes) && nbytes > 0) {
+                size_t off = 0;
+                if (plan_pool_offset(schedule, n, nbytes, &off)) {
+                    n->runtime_data = (double*)((uint8_t*)schedule->static_pool + off);
+                    n->rt->buffer = n->runtime_data;
+                    n->rt->offset = off;
+                    n->rt->buffer_owner = LANCIUS_MEMORY_POOL;
+                    n->rt->owner = LANCIUS_MEMORY_POOL;
+                    continue;
+                }
+            } else if (schedule->plan && schedule->static_pool) {
+                /* Plan attached but size invalid: do not trust pool, fall through to invalidate. */
+                lancius_set_error(LANCIUS_ERROR_LIMIT);
             }
 
             if (n->rt->buffer_owner == LANCIUS_MEMORY_ARENA ||
                 n->rt->buffer_owner == LANCIUS_MEMORY_POOL) {
                 n->runtime_data = NULL;
                 n->rt->buffer = NULL;
+                n->runtime_data_f32 = NULL;
+                n->rt->buffer_f32 = NULL;
                 n->rt->offset = 0;
             }
         }
@@ -512,14 +599,15 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
             if (n->op == LANCIUS_OP_NOP) continue; // V9 Fix: Skip neutralized nodes
             if (n->op == LANCIUS_OP_CONST) {
                 if(!n->runtime_data) {
-                    if (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
+                    if (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         n->runtime_data = (double*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
                         n->runtime_data = (double*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32); /* A3 */
                     }
                     /* A2: record buffer ownership */
-                    lancius_node_set_owner(n, (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
-                    if(n->runtime_data) for(size_t k=0; k<elements; k++) n->runtime_data[k] = n->attr_val;
+                    lancius_node_set_owner(n, (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
+                    if (!n->runtime_data) { lancius_set_error(LANCIUS_ERROR_OOM); }
+                    else for(size_t k=0; k<elements; k++) n->runtime_data[k] = n->attr_val;
                 }
                 continue;
             }
@@ -528,7 +616,7 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
                 if (!n->runtime_data_f32) {
                     float* buf_f32 = NULL;
 
-                    if (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
+                    if (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         buf_f32 = (float*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
                         buf_f32 = (float*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32);
@@ -537,7 +625,7 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
                     n->runtime_data_f32 = buf_f32;
                     if (n->rt) n->rt->buffer_f32 = buf_f32;
 
-                    lancius_node_set_owner(n, (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
+                    lancius_node_set_owner(n, (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
 
                     if (!buf_f32) {
                         lancius_set_error(LANCIUS_ERROR_OOM);
@@ -546,13 +634,13 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
                     }
                 }
             } else if (!n->runtime_data) {
-                if (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
+                if (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         n->runtime_data = (double*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
                         n->runtime_data = (double*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32); /* A3 */
                     }
                 /* A2: record buffer ownership */
-                lancius_node_set_owner(n, (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
+                lancius_node_set_owner(n, (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
                 if (!n->runtime_data) {
                     lancius_set_error(LANCIUS_ERROR_OOM); /* A4 OOM */
                     fprintf(stderr, "[EXEC FATAL] OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, elements * sizeof(double));
@@ -587,14 +675,15 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
             if (n->op == LANCIUS_OP_NOP) continue; // V9 Fix: Skip neutralized nodes
             if (n->op == LANCIUS_OP_CONST) {
                 if(!n->runtime_data) {
-                    if (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
+                    if (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         n->runtime_data = (double*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
                         n->runtime_data = (double*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32); /* A3 */
                     }
                     /* A2: record buffer ownership */
-                    lancius_node_set_owner(n, (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
-                    if(n->runtime_data) for(size_t k=0; k<elements; k++) n->runtime_data[k] = n->attr_val;
+                    lancius_node_set_owner(n, (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
+                    if (!n->runtime_data) { lancius_set_error(LANCIUS_ERROR_OOM); }
+                    else for(size_t k=0; k<elements; k++) n->runtime_data[k] = n->attr_val;
                 }
                 continue;
             }
@@ -602,7 +691,7 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
                 if (!n->runtime_data_f32) {
                     float* buf_f32 = NULL;
 
-                    if (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
+                    if (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         buf_f32 = (float*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
                         buf_f32 = (float*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32);
@@ -611,7 +700,7 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
                     n->runtime_data_f32 = buf_f32;
                     if (n->rt) n->rt->buffer_f32 = buf_f32;
 
-                    lancius_node_set_owner(n, (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
+                    lancius_node_set_owner(n, (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
 
                     if (!buf_f32) {
                         lancius_set_error(LANCIUS_ERROR_OOM);
@@ -620,19 +709,28 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
                     }
                 }
             } else if (!n->runtime_data) {
-                if (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
+                if (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         n->runtime_data = (double*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
                         n->runtime_data = (double*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32); /* A3 */
                     }
                 /* A2: record buffer ownership */
-                lancius_node_set_owner(n, (schedule->plan && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
+                lancius_node_set_owner(n, (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
+                if (!n->runtime_data) {
+                    lancius_set_error(LANCIUS_ERROR_OOM);
+                    fprintf(stderr, "[EXEC FATAL] OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, lancius_node_bytes(n));
+                    continue;
+                }
             }
         }
         for (uint32_t i = 0; i < wave->node_count; i++) {
             lancius_node* n = wave->nodes[i];
             if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST) continue;
-            if (!n->runtime_data) continue;
+            if (n->dtype == LANCIUS_DTYPE_FP32) {
+                if (!n->runtime_data_f32) continue;
+            } else {
+                if (!n->runtime_data) continue;
+            }
             lancius_pool_submit(pool, (lancius_task_fn)execute_node_math, n);
         }
         lancius_pool_wait(pool);
@@ -660,8 +758,12 @@ size_t lancius_schedule_peak_memory(lancius_schedule* schedule) {
         lancius_wave* wave = &schedule->waves[w];
         for (uint32_t i = 0; i < wave->node_count; i++) {
             lancius_node* n = wave->nodes[i];
+            if (!n) continue;
             if (n->op != LANCIUS_OP_INPUT && n->op != LANCIUS_OP_CONST) {
-                wave_mem += lancius_node_bytes(n); /* A3 */
+                size_t b = 0;
+                if (!lancius_node_bytes_checked(n, &b)) return 0;
+                if (wave_mem > SIZE_MAX - b) return 0;
+                wave_mem += b;
             }
         }
         if (wave_mem > peak) peak = wave_mem;
@@ -709,12 +811,18 @@ void lancius_schedule_execute_static(lancius_schedule* schedule, void* flat_buff
 
             for (uint32_t i = 0; i < wave->node_count; i++) {
                 lancius_node* n = wave->nodes[i];
+                if (!n) continue;
                 if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST || n->op == LANCIUS_OP_NOP) continue;
+                if (n->id >= schedule->plan->max_id) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); continue; }
                 if (!schedule->plan->is_pooled[n->id]) continue;
+                size_t nbytes = 0;
+                if (!lancius_node_bytes_checked(n, &nbytes)) { lancius_set_error(LANCIUS_ERROR_LIMIT); continue; }
+                size_t off = schedule->plan->offsets[n->id];
+                if (off > schedule->plan->peak_memory || nbytes > schedule->plan->peak_memory - off) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); continue; }
                 if (n->dtype == LANCIUS_DTYPE_FP32) {
-                    n->runtime_data_f32 = (float*)((uint8_t*)flat_buffer + schedule->plan->offsets[n->id]);
+                    n->runtime_data_f32 = (float*)((uint8_t*)flat_buffer + off);
                 } else {
-                    n->runtime_data = (double*)((uint8_t*)flat_buffer + schedule->plan->offsets[n->id]);
+                    n->runtime_data = (double*)((uint8_t*)flat_buffer + off);
                 }
                 lancius_node_set_owner(n, LANCIUS_MEMORY_POOL);
                 lancius_runtime_sync_from_legacy(n);
@@ -722,7 +830,9 @@ void lancius_schedule_execute_static(lancius_schedule* schedule, void* flat_buff
 
             for (uint32_t i = 0; i < wave->node_count; i++) {
                 lancius_node* n = wave->nodes[i];
+                if (!n) continue;
                 if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST || n->op == LANCIUS_OP_NOP) continue;
+                if (n->id >= schedule->plan->max_id) continue;
                 if (!schedule->plan->is_pooled[n->id]) continue;
                 execute_node_math(n);
             }
@@ -787,13 +897,14 @@ void lancius_schedule_execute_static_bounded(lancius_schedule* schedule, void* f
 }
 
 static void execute_permute(lancius_node* n) {
-    if (!n || n->input_count == 0) return;
+    if (!n || n->input_count == 0) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
 
     const lancius_node* in = n->inputs[0];
     const double* x = in ? in->runtime_data : NULL;
     double* y = n->runtime_data;
 
-    if (!x || !y) return;
+    if (!x || !y) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (!in || in->ndim != 4 || n->ndim != 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
 
     size_t in_shape[4] = {1, 1, 1, 1};
     size_t out_shape[4] = {1, 1, 1, 1};
@@ -814,9 +925,7 @@ static void execute_permute(lancius_node* n) {
         n->axes[3]
     };
 
-    for (int i = 0; i < 4; i++) {
-        if (axes[i] >= 4) axes[i] = (uint32_t)i;
-    }
+    if (lancius_validate_permutation(axes, 4) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_INVALID_PERMUTATION); return; }
 
     for (size_t i0 = 0; i0 < out_shape[0]; i0++) {
         for (size_t i1 = 0; i1 < out_shape[1]; i1++) {
@@ -841,7 +950,7 @@ static void execute_permute(lancius_node* n) {
 }
 
 static void execute_matmul_batched(lancius_node* n) {
-    if (!n || n->input_count < 2) return;
+    if (!n || n->input_count < 2) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
 
     const lancius_node* a = n->inputs[0];
     const lancius_node* b = n->inputs[1];
@@ -850,12 +959,17 @@ static void execute_matmul_batched(lancius_node* n) {
     const double* B = b ? b->runtime_data : NULL;
     double* C = n->runtime_data;
 
-    if (!A || !B || !C) return;
+    if (!A || !B || !C) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (!a || !b || a->ndim != 3 || b->ndim != 3) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
+    if (a->shape[0] != b->shape[0] || a->shape[2] != b->shape[1]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+    if (n->shape[0] != a->shape[0] || n->shape[1] != a->shape[1] || n->shape[2] != b->shape[2]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
 
     size_t batches = a->shape[0];
     size_t M = a->shape[1];
     size_t K = a->shape[2];
     size_t N = b->shape[2];
+    if (batches == 0 || M == 0 || K == 0 || N == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    if (M > SIZE_MAX / K || M * K > SIZE_MAX / N) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
 
     for (size_t batch = 0; batch < batches; batch++) {
         const double* A_batch = A + batch * M * K;
@@ -876,13 +990,16 @@ size_t lancius_schedule_static_memory_required(lancius_schedule* schedule) {
 
         for (uint32_t i = 0; i < wave->node_count; i++) {
             lancius_node* n = wave->nodes[i];
+            if (!n) continue;
 
             if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST || n->op == LANCIUS_OP_NOP) {
                 continue;
             }
 
-            size_t bytes = lancius_node_bytes(n);
+            size_t bytes = 0;
+            if (!lancius_node_bytes_checked(n, &bytes)) return 0;
 
+            if (offset > SIZE_MAX - 31) return 0;
             offset = (offset + 31) & ~(size_t)31;
 
             if (bytes > SIZE_MAX - offset) {

@@ -110,7 +110,7 @@ install: liblancius.a
 	@echo "📦 Installing Lancius static library to $(PREFIX)/lib..."
 	@mkdir -p $(PREFIX)/lib
 	@cp liblancius.a $(PREFIX)/lib/
-	@echo "✅ Lancius v11S installed successfully."
+	@echo "✅ Lancius v12R1 installed successfully."
 
 uninstall:
 	@echo "🗑️  Removing Lancius from $(PREFIX)..."
@@ -148,12 +148,12 @@ check: all
 	./audit_transformer_known_answer
 	./audit_fp32_path
 	./audit_fault_injection
-	@echo "v11S check complete."
+	@echo "v12R1 check complete."
 
 check-long: check
 	./soak_fuzz
 	./fuzz_lancius 12345
-	@echo "v11S long check complete."
+	@echo "v12R1 long check complete."
 
 # --- v11A1 Task 13b: known-answer audit ---
 audit_known_answer: examples/audit_known_answer.c liblancius.a
@@ -173,7 +173,7 @@ check-sanitizers:
 	./stress_test
 	./test_torture
 	./fuzz_lancius 12345
-	@echo "v11S sanitizer gate complete."
+	@echo "v12R1 sanitizer gate complete."
 	@echo "Restoring normal build (removing sanitizer instrumentation)..."
 	$(MAKE) -B liblancius.a
 	@echo "Normal build restored. Safe to run 'make check' now."

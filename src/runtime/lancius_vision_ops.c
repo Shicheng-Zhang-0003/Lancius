@@ -48,8 +48,13 @@ void lancius_execute_vision_op(lancius_node* n) {
 
         if (!in || !w) return;
 
-        double scale_in = (in_node->scale != 0.0) ? in_node->scale : 1e-8;
-        double scale_w = (w_node->scale != 0.0) ? w_node->scale : 1e-8;
+        double scale_in = in_node->scale;
+        double scale_w = w_node->scale;
+        if (scale_in == 0.0 || scale_w == 0.0) {
+            fprintf(stderr, "[LANCIUS VISION FATAL] INT8 Conv2D scale is 0 (misconfigured quantizer)\n");
+            lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE);
+            return;
+        }
 
         kernel_conv2d_int8_fwd(n->runtime_data, in, w, scale_in, scale_w,
             in_node->shape[0], in_node->shape[1], in_node->shape[2], in_node->shape[3],
@@ -107,6 +112,8 @@ void lancius_execute_vision_op(lancius_node* n) {
         size_t N = in_node->shape[0], C = in_node->shape[1], H_in = in_node->shape[2], W_in = in_node->shape[3];
         size_t K = n->kernel_h;
         size_t stride = n->stride;
+        if (stride == 0 || K == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_STRIDE); return; }
+        if (H_in < K || W_in < K) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
         size_t H_out = (H_in - K) / stride + 1;
         size_t W_out = (W_in - K) / stride + 1;
 
@@ -115,14 +122,17 @@ void lancius_execute_vision_op(lancius_node* n) {
             for(size_t c=0; c<C; c++) {
                 for(size_t ho=0; ho<H_out; ho++) {
                     for(size_t wo=0; wo<W_out; wo++) {
-                        double max_val = -1e9;
+                        double max_val = -INFINITY;
                         for(size_t kh=0; kh<K; kh++) {
                             for(size_t kw=0; kw<K; kw++) {
                                 size_t ih = ho*stride + kh;
                                 size_t iw = wo*stride + kw;
                                 size_t in_idx = ni*(C*H_in*W_in) + c*(H_in*W_in) + ih*W_in + iw;
-                                if (in[in_idx] > max_val) max_val = in[in_idx];
+                                double v = in[in_idx];
+                                if (v != v) { max_val = v; break; }
+                                if (v > max_val) max_val = v;
                             }
+                            if (max_val != max_val) break;
                         }
                         size_t out_idx = ni*(C*H_out*W_out) + c*(H_out*W_out) + ho*W_out + wo;
                         n->runtime_data[out_idx] = max_val;
@@ -134,14 +144,18 @@ void lancius_execute_vision_op(lancius_node* n) {
     else if (n->op == LANCIUS_OP_FLATTEN) {
         double* in = n->inputs[0]->runtime_data;
         if (!in) return;
-        size_t elems = lancius_node_elements(n);
+        size_t elems = 0;
+        if (!lancius_node_elements_checked(n, &elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
+        if (elems > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
         memcpy(n->runtime_data, in, elems * sizeof(double));
     }
     else if (n->op == LANCIUS_OP_RESHAPE) {
         // V9 Fix: Route RESHAPE backward pass (Flatten gradient)
         double* in = n->inputs[0]->runtime_data;
         if (!in) return;
-        size_t elems = lancius_node_elements(n);
+        size_t elems = 0;
+        if (!lancius_node_elements_checked(n, &elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
+        if (elems > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
         memcpy(n->runtime_data, in, elems * sizeof(double));
     }
     else if (n->op == LANCIUS_OP_CONV2D_BWD) {
@@ -189,18 +203,21 @@ void lancius_execute_vision_op(lancius_node* n) {
                         size_t grad_idx = ni*(C*H_out*W_out) + c*(H_out*W_out) + ho*W_out + wo;
                         double g = grad[grad_idx];
 
-                        double max_val = -1e9;
+                        double max_val = -INFINITY;
                         size_t max_ih = 0, max_iw = 0;
                         for(size_t kh=0; kh<K; kh++) {
                             for(size_t kw=0; kw<K; kw++) {
                                 size_t ih = ho*stride + kh;
                                 size_t iw = wo*stride + kw;
                                 size_t in_idx = ni*(C*H_in*W_in) + c*(H_in*W_in) + ih*W_in + iw;
-                                if (fwd_in[in_idx] > max_val) {
-                                    max_val = fwd_in[in_idx];
+                                double v = fwd_in[in_idx];
+                                if (v != v) { max_val = v; max_ih = ih; max_iw = iw; break; }
+                                if (v > max_val) {
+                                    max_val = v;
                                     max_ih = ih; max_iw = iw;
                                 }
                             }
+                            if (max_val != max_val) break;
                         }
                         size_t in_idx = ni*(C*H_in*W_in) + c*(H_in*W_in) + max_ih*W_in + max_iw;
                         n->runtime_data[in_idx] += g;

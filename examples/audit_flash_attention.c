@@ -13,14 +13,14 @@ void naive_attention(double* out, const double* q, const double* k, const double
     for (size_t i = 0; i < seq_len; i++) {
         for (size_t h = 0; h < n_heads; h++) {
             // Compute scores
-            double max_s = -1e9;
+            double max_s = -INFINITY;
             for (size_t j = 0; j < seq_len; j++) {
                 double s = 0.0;
                 for (size_t d = 0; d < head_dim; d++) {
                     s += q[(i * n_heads * head_dim) + (h * head_dim) + d] * k[(j * n_heads * head_dim) + (h * head_dim) + d];
                 }
                 s *= scale;
-                if (j > i) s = -1e9; // Causal
+                if (j > i) s = -INFINITY; // Causal
                 scores[j] = s;
                 if (s > max_s) max_s = s;
             }

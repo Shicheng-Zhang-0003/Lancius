@@ -101,7 +101,7 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
     if (!g || !path) return -1;
     if (!is_little_endian()) return -1;
 
-    FILE* f = fopen(path, "wb");
+    FILE* f = fopen(path, "w+b");
     if (!f) return -1;
 
     v2_header h;
@@ -155,23 +155,25 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
         size_t elems = 0;
 
         if (n->op == LANCIUS_OP_INPUT) {
+            size_t ne = 0;
+            if (!lancius_node_elements_checked(n, &ne)) { fclose(f); return -1; }
             if (rn.dtype == LANCIUS_DTYPE_INT8 && n->runtime_data_int8) {
                 rn.has_weights = 1;
                 data = n->runtime_data_int8;
                 elem_size = sizeof(int8_t);
-                elems = lancius_node_elements(n);
+                elems = ne;
             } else if (rn.dtype == LANCIUS_DTYPE_FP32 && n->runtime_data_f32) {
                 rn.has_weights = 1;
                 rn.dtype = LANCIUS_DTYPE_FP32;
                 data = n->runtime_data_f32;
                 elem_size = sizeof(float);
-                elems = lancius_node_elements(n);
+                elems = ne;
             } else if (n->runtime_data) {
                 rn.has_weights = 1;
                 rn.dtype = LANCIUS_DTYPE_FP64;
                 data = n->runtime_data;
                 elem_size = sizeof(double);
-                elems = lancius_node_elements(n);
+                elems = ne;
             }
         }
 
@@ -205,21 +207,21 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
 
     /* v11A3 format freeze: compute and write CRC32 over the model body. */
     {
-        long body_end = (long)ftell(f);
+        if (fflush(f) != 0) { fclose(f); return -1; }
+        long body_end = ftell(f);
         long body_start = (long)sizeof(v2_header);
+        if (body_end < 0 || body_end < body_start) { fclose(f); return -1; }
         long body_size = body_end - body_start;
-        if (body_size > 0) {
-            uint8_t* body_buf = (uint8_t*)malloc((size_t)body_size);
-            if (body_buf) {
-                fseek(f, body_start, SEEK_SET);
-                if (fread(body_buf, 1, (size_t)body_size, f) == (size_t)body_size) {
-                    uint32_t crc = lancius_crc32(0, body_buf, (size_t)body_size);
-                    fseek(f, 40, SEEK_SET); /* offset of checksum_crc32 in packed header */
-                    fwrite(&crc, sizeof(uint32_t), 1, f);
-                }
-                free(body_buf);
-            }
-        }
+        if (body_size <= 0) { fclose(f); return -1; }
+        uint8_t* body_buf = (uint8_t*)malloc((size_t)body_size);
+        if (!body_buf) { fclose(f); return -1; }
+        if (fseek(f, body_start, SEEK_SET) != 0) { free(body_buf); fclose(f); return -1; }
+        if (fread(body_buf, 1, (size_t)body_size, f) != (size_t)body_size) { free(body_buf); fclose(f); return -1; }
+        uint32_t crc = lancius_crc32(0, body_buf, (size_t)body_size);
+        free(body_buf);
+        if (crc == 0) crc = 1; /* 0 means legacy/unverified; never emit it */
+        if (fseek(f, 40, SEEK_SET) != 0) { fclose(f); return -1; } /* offset of checksum_crc32 */
+        if (fwrite(&crc, sizeof(uint32_t), 1, f) != 1) { fclose(f); return -1; }
     }
 
     fclose(f);
@@ -249,7 +251,11 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
         !(h.flags & LANCIUS_MODEL_FLAG_LITTLE_ENDIAN) ||
         (h.flags & LANCIUS_MODEL_FLAG_EXTERNAL_WEIGHTS) || /* reserved, reject */
         h.header_size != sizeof(h) ||
-        h.node_count > 1000000u
+        h.node_count > 1000000u ||
+        h.reserved0 != 0 ||
+        h.reserved1 != 0 ||
+        h.weight_block_offset != 0 ||
+        h.attribute_count != 0
     ) {
         fclose(f);
         return NULL;
@@ -263,6 +269,12 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
 
     idmap map = {NULL, 0};
     uint32_t* in_ids = NULL;
+    uint32_t* seen_ids = NULL;
+    uint32_t seen_count = 0;
+    if (h.node_count > 0) {
+        seen_ids = (uint32_t*)malloc((size_t)h.node_count * sizeof(uint32_t));
+        if (!seen_ids) { fclose(f); lancius_graph_destroy(g); return NULL; }
+    }
 
     for (uint32_t i = 0; i < h.node_count; i++) {
         v2_node rn;
@@ -325,6 +337,7 @@ if (rn.ndim == 4) {
 break;
 
             case LANCIUS_MODEL_OP_CONST:
+                if (rn.ndim != 2) goto fail;
                 n = lancius_const(g, rn.attr, sh[0], sh[1]);
                 break;
 
@@ -358,7 +371,8 @@ break;
 
             case LANCIUS_MODEL_OP_BROADCAST:
                 if (rn.ndim == 4) n = lancius_broadcast_4d(g, in0, sh[0], sh[1], sh[2], sh[3]);
-                else n = lancius_broadcast(g, in0, sh[0], sh[1]);
+                else if (rn.ndim == 2) n = lancius_broadcast(g, in0, sh[0], sh[1]);
+                else goto fail;
                 break;
 
             case LANCIUS_MODEL_OP_TRANSPOSE:
@@ -507,8 +521,10 @@ break;
             }
         }
 
-        /* A3: reject duplicate node ids */
+        /* A3: reject duplicate node ids (including NOP ids, which map to NULL) */
+        for (uint32_t _d = 0; _d < seen_count; _d++) { if (seen_ids[_d] == rn.id) goto fail; }
         if (map_get(&map, rn.id)) goto fail;
+        seen_ids[seen_count++] = rn.id;
 
         if (!map_set(&map, rn.id, n)) goto fail;
     }
@@ -537,6 +553,7 @@ break;
     }
 
     free(map.v);
+    free(seen_ids);
     fclose(f);
 
     for (uint32_t i = 0; i < g->node_count; i++) {
@@ -548,6 +565,7 @@ break;
 fail:
     free(in_ids);
     free(map.v);
+    free(seen_ids);
     if (g) lancius_graph_destroy(g);
     fclose(f);
     return NULL;

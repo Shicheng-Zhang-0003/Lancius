@@ -1,6 +1,8 @@
 import onnx
 from onnx import numpy_helper, TensorProto
 import struct
+import io
+import zlib
 import numpy as np
 import sys
 
@@ -84,12 +86,15 @@ def convert(onnx_path, lancius_path):
     # 3. Map Operations
     for node in graph.node:
         if node.op_type not in OP_MAP and node.op_type != 'Constant':
-            continue
+            raise ValueError(f"Unsupported ONNX op '{node.op_type}' (output '{node.output[0] if node.output else '?'}'). Converter supports only {sorted(OP_MAP)}.")
 
         if node.op_type == 'Constant':
             continue # Already handled in pre-pass
 
         op = OP_MAP[node.op_type]
+        missing = [i for i in node.input if i and i not in name_to_id]
+        if missing:
+            raise ValueError(f"Node '{node.op_type}' has unmapped inputs {missing}. Refusing to emit partial inputs.")
         inputs = [name_to_id[i] for i in node.input if i in name_to_id]
 
         out_shape = [1, 1, 1, 1]
@@ -111,7 +116,7 @@ def convert(onnx_path, lancius_path):
                     else:
                         has_neg = True
 
-                resolved_neg = 2048 # Default fallback
+                resolved_neg = None
                 if has_neg and node.input[0] in name_to_id:
                     in_id = name_to_id[node.input[0]]
                     for n in nodes:
@@ -119,9 +124,11 @@ def convert(onnx_path, lancius_path):
                             in_shape = [s for s in n['shape'] if s > 0]
                             total_in = 1
                             for s in in_shape: total_in *= s
-                            if total_known > 0:
+                            if total_known > 0 and total_in % total_known == 0:
                                 resolved_neg = total_in // total_known
                             break
+                if has_neg and resolved_neg is None:
+                    raise ValueError(f"Reshape '{node.output[0]}' has dynamic dim {target_dims} that cannot be resolved from input.")
 
                 for d in target_dims:
                     if d <= 0:
@@ -131,13 +138,12 @@ def convert(onnx_path, lancius_path):
 
                 if len(resolved_dims) == 2:
                     out_shape = [1, resolved_dims[1], 1, 1]
-                    # V10S FIX: Force ndim=2 for MatMul compatibility
-                    nodes[-1]['ndim'] = 2
                 elif len(resolved_dims) == 4:
                     out_shape = [1, resolved_dims[1], resolved_dims[2], resolved_dims[3]]
+                else:
+                    raise ValueError(f"Reshape '{node.output[0]}' resolved to unsupported rank {len(resolved_dims)}: {resolved_dims}.")
             else:
-                # ULTIMATE FALLBACK: If shape tensor is completely missing, assume LeNet flatten
-                out_shape = [1, 2048, 1, 1]
+                raise ValueError(f"Reshape '{node.output[0]}' has no resolvable shape tensor '{shape_tensor_name}'. Refusing LeNet fallback.")
         else:
             for vi in graph.value_info:
                 if vi.name == node.output[0]:
@@ -168,7 +174,9 @@ def convert(onnx_path, lancius_path):
                 if attr.name == 'transB':
                     transB = attr.i
 
-            matmul_inputs = [name_to_id[i] for i in node.input[:2] if i in name_to_id]
+            matmul_inputs = [name_to_id[i] for i in node.input[:2]]
+            if len(matmul_inputs) != 2:
+                raise ValueError(f"Gemm '{node.output[0]}' needs 2 mapped inputs, got {node.input[:2]}.")
 
             if transB == 1 and len(matmul_inputs) >= 2:
                 w_name = node.input[1]
@@ -217,6 +225,8 @@ def convert(onnx_path, lancius_path):
                 })
                 name_to_id[node.output[0]] = next_id
                 next_id += 1
+            else:
+                raise ValueError(f"Transpose '{node.output[0]}' has unsupported perm {perm}. Supports only [1,0] / [1,0,2,3].")
         else:
             # V10S FIX: Force ndim=2 for Reshape to match C MatMul expectations
             calc_ndim = len([s for s in out_shape if s > 0])
@@ -231,45 +241,49 @@ def convert(onnx_path, lancius_path):
             name_to_id[node.output[0]] = next_id
             next_id += 1
 
-    # 4. Write Binary (v11A1 Task 6c: v2 format)
+    # 4. Write Binary (v2 format with CRC32 over body bytes 48..EOF)
+    body = io.BytesIO()
+    for n in nodes:
+        has_w = 1 if n['weights'] else 0
+
+        if has_w:
+            if n['dtype'] == 1:
+                weight_elems = len(n['weights'])
+            else:
+                weight_elems = len(n['weights']) // 8
+        else:
+            weight_elems = 0
+
+        body.write(struct.pack(
+            '<IIB4QId4I4I3BdQ',
+            n['id'], n['op'], n['ndim'],
+            n['shape'][0], n['shape'][1], n['shape'][2], n['shape'][3],
+            len(n['inputs']),
+            float(n['attr']),
+            n['meta'][0], n['meta'][1], n['meta'][2], n['meta'][3],
+            n['axes'][0], n['axes'][1], n['axes'][2], n['axes'][3],
+            0, n['dtype'], has_w,
+            float(n['scale']),
+            weight_elems
+        ))
+
+        for i in n['inputs']:
+            body.write(struct.pack('<I', i))
+
+        if has_w and weight_elems > 0:
+            body.write(n['weights'])
+
+    body_bytes = body.getvalue()
+    checksum = zlib.crc32(body_bytes) & 0xFFFFFFFF
     with open(lancius_path, 'wb') as f:
         header = struct.pack(
             '<8IQ2I',
             LANCIUS_MAGIC_V2, LANCIUS_VERSION_V2, LANCIUS_FLAGS_V2,
             len(nodes), len(nodes), 0, 48, 0,
-            0, 0, 0
+            0, checksum, 0
         )
         f.write(header)
-
-        for n in nodes:
-            has_w = 1 if n['weights'] else 0
-
-            if has_w:
-                if n['dtype'] == 1:
-                    weight_elems = len(n['weights'])
-                else:
-                    weight_elems = len(n['weights']) // 8
-            else:
-                weight_elems = 0
-
-            f.write(struct.pack(
-                '<IIB4QId4I4I3BdQ',
-                n['id'], n['op'], n['ndim'],
-                n['shape'][0], n['shape'][1], n['shape'][2], n['shape'][3],
-                len(n['inputs']),
-                float(n['attr']),
-                n['meta'][0], n['meta'][1], n['meta'][2], n['meta'][3],
-                n['axes'][0], n['axes'][1], n['axes'][2], n['axes'][3],
-                0, n['dtype'], has_w,
-                float(n['scale']),
-                weight_elems
-            ))
-
-            for i in n['inputs']:
-                f.write(struct.pack('<I', i))
-
-            if has_w and weight_elems > 0:
-                f.write(n['weights'])
+        f.write(body_bytes)
 
     print(f"✅ Translated {len(nodes)} nodes to {lancius_path}")
 

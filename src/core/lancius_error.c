@@ -29,6 +29,18 @@ const char* lancius_error_string(lancius_error err) {
         case LANCIUS_ERROR_IO:               return "io error";
         case LANCIUS_ERROR_OVERFLOW:         return "overflow";
         case LANCIUS_ERROR_INTERNAL:         return "internal error";
+        case LANCIUS_ERROR_INVALID_HANDLE:   return "invalid handle";
+        case LANCIUS_ERROR_LIFETIME:         return "lifetime error";
+        case LANCIUS_ERROR_INVALID_RANK:     return "invalid rank";
+        case LANCIUS_ERROR_INVALID_SHAPE:    return "invalid shape";
+        case LANCIUS_ERROR_INVALID_STRIDE:   return "invalid stride";
+        case LANCIUS_ERROR_INVALID_DTYPE:    return "invalid dtype";
+        case LANCIUS_ERROR_INVALID_PERMUTATION: return "invalid permutation";
+        case LANCIUS_ERROR_RESHAPE_MISMATCH: return "reshape mismatch";
+        case LANCIUS_ERROR_GRAPH_CYCLE:      return "graph cycle";
+        case LANCIUS_ERROR_GRAPH_INVALID:    return "graph invalid";
+        case LANCIUS_ERROR_NUMERICAL:        return "numerical error";
+        case LANCIUS_ERROR_LIMIT:            return "limit exceeded";
         default:                             return "unknown error";
     }
 }

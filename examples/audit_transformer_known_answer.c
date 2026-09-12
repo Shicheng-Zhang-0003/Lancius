@@ -57,7 +57,7 @@ static void naive_attention(
 
     for (size_t i = 0; i < seq_len; i++) {
         for (size_t h = 0; h < n_heads; h++) {
-            double max_s = -1e9;
+            double max_s = -INFINITY;
 
             for (size_t j = 0; j < seq_len; j++) {
                 double s = 0.0;
@@ -71,7 +71,7 @@ static void naive_attention(
                 s *= scale;
 
                 if (j > i) {
-                    s = -1e9;
+                    s = -INFINITY;
                 }
 
                 scores[j] = s;
@@ -110,9 +110,6 @@ static void naive_attention(
 }
 
 static double ref_gelu(double x) {
-    if (x > 100.0) x = 100.0;
-    if (x < -100.0) x = -100.0;
-
     const double sqrt_2_over_pi = 0.7978845608028654;
     return 0.5 * x * (1.0 + tanh(sqrt_2_over_pi * (x + 0.044715 * x * x * x)));
 }

@@ -14,6 +14,7 @@ typedef struct lancius_memory_plan {
     size_t peak_memory;     // Total bytes required for the flat buffer
     size_t* offsets;        // Array of size g->next_id: offsets[node_id] = byte offset
     uint8_t* is_pooled;     // Array of size g->next_id: 1 if this node uses the pool
+    uint32_t max_id;        // Bounds for offsets/is_pooled (== g->next_id at build time)
 } lancius_memory_plan;
 
 // Analyzes the scheduled waves and computes the linear scan memory plan
