@@ -27,15 +27,15 @@ sanitizer and fuzz validation, and full regression defense.
 Lancius uses the following internal milestone progression:
 
 ```text
-S → A1 → A2 → A3 → S
+S → R1 → R2 → R3 → S
 ```
 
 Where:
 
 - `S` is a stable release
-- `A1` is the first development milestone after the previous stable release
-- `A2` is the second development milestone, where new subsystems begin becoming independent
-- `A3` is the freeze, hardening, and bug-hunting milestone
+- `R1` is the first development milestone after the previous stable release
+- `R2` is the second development milestone, where new subsystems begin becoming independent
+- `R3` is the freeze, hardening, and bug-hunting milestone
 - the next `S` is the stable release candidate
 
 > This is a development milestone.
@@ -636,7 +636,7 @@ python3 audit_pytorch_parity.py
 
 Relevant documents in this tree:
 
-- `docs/v11A3_SCOPE.md` — current milestone scope
+- `docs/v11A3_SCOPE.md` — last frozen milestone scope
 - `docs/v11A2_SCOPE.md` — previous milestone scope
 - `docs/v11A1_SCOPE.md` — historical milestone scope
 - `docs/v11A1_MODEL_FORMAT.md` — model format direction
@@ -651,18 +651,18 @@ Relevant documents in this tree:
 > Some documents may still reference `v11A1` or `v11A2`.
 >
 > Where that happens, treat them as historical unless they explicitly describe
-> `v11S` behavior.
+> current (`v12R1`) behavior.
 <!-- /SECTION:DOCUMENTATION -->
 
 <!-- SECTION:ROADMAP -->
 ## Roadmap
 
-Lancius is currently in the v11 development cycle.
+Lancius is currently in the v12 development cycle.
 
 The internal milestone progression is:
 
 ```text
-S → A1 → A2 → A3 → S
+S → R1 → R2 → R3 → S
 ```
 
 For public GitHub releases, internal milestones are mapped as follows:
@@ -673,28 +673,29 @@ For public GitHub releases, internal milestones are mapped as follows:
 | `v11A2`            | `V1.1-AlphaRC2`      | Transformer runtime usability        |
 | `v11A3`            | `V1.1-AlphaRC3`      | Freeze, hardening, and bug hunting   |
 | `v11S`             | `V1.1`               | Stable release                       |
+| `v12R1`            | `TBD`                | Current development milestone        |
 
 ### Current Milestone
 
 This release is:
 
 ```text
-v11S / V1.1
+v12R1
 ```
 
 Its theme is:
 
-> Stable release.
+> Development milestone (R1).
 
-v11S is the first stable release of the 1.1 cycle.
+Previous stable: v11S / V1.1, the first stable release of the 1.1 cycle.
 It represents the completion of the v11A3 hardening gate.
 
 ### Next Milestone
 
-The next development cycle is:
+The next milestone is:
 
 ```text
-v12A1
+v12R2
 ```
 
 The v12 cycle will focus on FP32 operator expansion, FP32 KV-cache
