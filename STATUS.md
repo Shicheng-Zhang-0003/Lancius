@@ -7,7 +7,8 @@ Release line: **12 R1 development**
 
 ## Phase
 
-v11S is the stable release candidate.
+v12R1 is the first development milestone of the v12 cycle
+(progression `S → R1 → R2 → R3 → S`), built on the v11S stable baseline.
 
 The v11A3 hardening gate is complete:
 - `make check` green
