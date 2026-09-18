@@ -148,7 +148,8 @@ static inline int lancius_node_bytes_checked(const lancius_node* n, size_t* out)
     if (!lancius_node_elements_checked(n, &elems)) return 0;
 
     size_t elem_size = lancius_node_element_bytes(n);
-    if (elem_size != 0 && elems > SIZE_MAX / elem_size) return 0;
+    if (elem_size == 0) return 0;
+    if (elems > SIZE_MAX / elem_size) return 0;
 
     size_t bytes = elems * elem_size;
     if (bytes > LANCIUS_MAX_TENSOR_BYTES) return 0;

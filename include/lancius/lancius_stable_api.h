@@ -31,7 +31,12 @@ typedef enum {
     LANCIUS_ERR_NULL_PTR = -3,
     LANCIUS_ERR_UNSUPPORTED_OP = -4,
     LANCIUS_ERR_BUFFER_TOO_SMALL = -5,
-    LANCIUS_ERR_IO = -6
+    LANCIUS_ERR_IO = -6,
+    // v12R1 hostile fix: preserve cycle/overflow/numerical/handle causes (were collapsed to SHAPE/OOM)
+    LANCIUS_ERR_GRAPH_CYCLE = -7,
+    LANCIUS_ERR_OVERFLOW = -8,
+    LANCIUS_ERR_NUMERICAL = -9,
+    LANCIUS_ERR_INVALID_HANDLE = -10
 } lancius_status;
 
 // Error Handling

@@ -1,4 +1,5 @@
 #include "lancius/lancius_arena.h"
+#include "lancius/lancius_error.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -38,15 +39,15 @@ lancius_arena* lancius_arena_create(size_t block_size) {
 }
 
 void* lancius_arena_alloc(lancius_arena* a, size_t size, size_t alignment) {
-    if (!a || !a->current || !a->current->memory) return NULL;
+    if (!a || !a->current || !a->current->memory) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (size == 0) size = 1; // Prevent 0-byte allocs returning overlapping pointers
-    if (size > SIZE_MAX - 32) return NULL; // v10S ARMOR: Catch SIZE_MAX before alignment math wraps it to 0
+    if (size > SIZE_MAX - 32) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; } // v10S ARMOR: Catch SIZE_MAX before alignment math wraps it to 0
     size = (size + 31) & ~(size_t)31; // Force 32-byte footprint
     if (alignment == 0) alignment = 32; // V10S ARMOR: Enforce 32-byte AVX2 boundary
-    if (alignment & (alignment - 1)) return NULL; // Must be power of 2
+    if (alignment & (alignment - 1)) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; } // Must be power of 2
 
     // RED TEAM FIX 1: Prevent SIZE_MAX overflow on size + alignment
-    if (size > SIZE_MAX - alignment) return NULL;
+    if (size > SIZE_MAX - alignment) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }
 
     lancius_block* b = a->current;
     uintptr_t ptr = (uintptr_t)(b->memory + b->used);
@@ -54,19 +55,19 @@ void* lancius_arena_alloc(lancius_arena* a, size_t size, size_t alignment) {
     size_t pad = aligned - ptr;
 
     // RED TEAM FIX 2: Prevent overflow on pad + size
-    if (size > SIZE_MAX - pad) return NULL;
+    if (size > SIZE_MAX - pad) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }
     size_t total_needed = pad + size;
 
     // RED TEAM FIX 3: Prevent overflow on b->used + total_needed
-    if (total_needed > SIZE_MAX - b->used) return NULL;
+    if (total_needed > SIZE_MAX - b->used) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }
 
     if (b->used + total_needed > b->size) {
         size_t grow = 0;
-        if (size > SIZE_MAX - alignment) return NULL;
+        if (size > SIZE_MAX - alignment) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }
         grow = size + alignment;
         size_t new_size = (grow > a->default_block_size) ? grow : a->default_block_size;
         lancius_block* nb = block_create(new_size);
-        if (!nb) { fprintf(stderr, "[ARENA FATAL] Failed to allocate block of size %zu!", new_size); return NULL; }
+        if (!nb) { fprintf(stderr, "[ARENA FATAL] Failed to allocate block of size %zu!", new_size); lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
         b->next = nb;
         a->current = nb;
         b = nb;

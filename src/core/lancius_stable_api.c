@@ -26,19 +26,19 @@ static lancius_status map_internal_error(lancius_error err) {
         case LANCIUS_ERROR_INVALID_MODEL:    return LANCIUS_ERR_IO;
         case LANCIUS_ERROR_VERSION_MISMATCH: return LANCIUS_ERR_IO;
         case LANCIUS_ERROR_IO:               return LANCIUS_ERR_IO;
-        case LANCIUS_ERROR_GRAPH_CYCLE:      return LANCIUS_ERR_SHAPE_MISMATCH;
-        case LANCIUS_ERROR_GRAPH_INVALID:    return LANCIUS_ERR_SHAPE_MISMATCH;
-        case LANCIUS_ERROR_OVERFLOW:         return LANCIUS_ERR_OOM;
-        case LANCIUS_ERROR_LIMIT:            return LANCIUS_ERR_OOM;
+        case LANCIUS_ERROR_GRAPH_CYCLE:      return LANCIUS_ERR_GRAPH_CYCLE;
+        case LANCIUS_ERROR_GRAPH_INVALID:    return LANCIUS_ERR_UNSUPPORTED_OP;
+        case LANCIUS_ERROR_OVERFLOW:         return LANCIUS_ERR_OVERFLOW;
+        case LANCIUS_ERROR_LIMIT:            return LANCIUS_ERR_OVERFLOW;
         case LANCIUS_ERROR_INTERNAL:         return LANCIUS_ERR_UNSUPPORTED_OP;
-        case LANCIUS_ERROR_INVALID_HANDLE:   return LANCIUS_ERR_NULL_PTR;
-        case LANCIUS_ERROR_LIFETIME:         return LANCIUS_ERR_NULL_PTR;
+        case LANCIUS_ERROR_INVALID_HANDLE:   return LANCIUS_ERR_INVALID_HANDLE;
+        case LANCIUS_ERROR_LIFETIME:         return LANCIUS_ERR_INVALID_HANDLE;
         case LANCIUS_ERROR_INVALID_RANK:     return LANCIUS_ERR_SHAPE_MISMATCH;
         case LANCIUS_ERROR_INVALID_SHAPE:    return LANCIUS_ERR_SHAPE_MISMATCH;
         case LANCIUS_ERROR_INVALID_STRIDE:   return LANCIUS_ERR_SHAPE_MISMATCH;
         case LANCIUS_ERROR_INVALID_PERMUTATION: return LANCIUS_ERR_SHAPE_MISMATCH;
         case LANCIUS_ERROR_RESHAPE_MISMATCH: return LANCIUS_ERR_SHAPE_MISMATCH;
-        case LANCIUS_ERROR_NUMERICAL:        return LANCIUS_ERR_SHAPE_MISMATCH;
+        case LANCIUS_ERROR_NUMERICAL:        return LANCIUS_ERR_NUMERICAL;
         default:                             return LANCIUS_ERR_UNSUPPORTED_OP;
     }
 }
@@ -65,6 +65,10 @@ LANCIUS_EXPORT const char* lancius_get_error_string(lancius_status err) {
         case LANCIUS_ERR_UNSUPPORTED_OP: return "Unsupported Operation";
         case LANCIUS_ERR_BUFFER_TOO_SMALL: return "Buffer Too Small";
         case LANCIUS_ERR_IO: return "I/O Error";
+        case LANCIUS_ERR_GRAPH_CYCLE: return "Graph Cycle";
+        case LANCIUS_ERR_OVERFLOW: return "Overflow/Limit";
+        case LANCIUS_ERR_NUMERICAL: return "Numerical Error";
+        case LANCIUS_ERR_INVALID_HANDLE: return "Invalid Handle/Lifetime";
         default: return "Unknown Error";
     }
 }
