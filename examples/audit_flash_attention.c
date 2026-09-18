@@ -100,6 +100,7 @@ int main() {
     }
     printf("================================================================\n");
 
+    int _rc = (max_diff < 1e-5) ? 0 : 1;
     free(q); free(k); free(v); free(out_naive); free(out_flash);
-    return 0;
+    return _rc;
 }
