@@ -92,6 +92,62 @@ lancius_schedule* lancius_ir_schedule(lancius_graph* g) {
 static void execute_permute(lancius_node* n);
 static void execute_matmul_batched(lancius_node* n);
 
+/* v12R1 hostile fix: N-dim broadcast-aware binary elementwise.
+ * Previous code did flat a[k]+b[k], which is wrong + OOB whenever
+ * shapes differ with a 1-dim (e.g. [2,2] vs [1,2]). Correct math:
+ * out[I] = A[bcast(I)] OP B[bcast(I)], where bcast maps dim->0 if input dim==1. */
+static void execute_broadcast_binary(lancius_node* n, int op) {
+    const lancius_node* A = n->inputs[0];
+    const lancius_node* B = n->inputs[1];
+    double* a = A->runtime_data; double* b = B->runtime_data; double* o = n->runtime_data;
+    if (!a || !b || !o) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    uint8_t nd = n->ndim;
+    if (nd == 0 || nd > 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
+    size_t out_shape[4] = {1,1,1,1}, a_shape[4] = {1,1,1,1}, b_shape[4] = {1,1,1,1};
+    for (uint8_t i = 0; i < nd && i < 4; i++) {
+        out_shape[i] = n->shape[i];
+        a_shape[i] = A->shape[i];
+        b_shape[i] = B->shape[i];
+    }
+    size_t a_stride[4] = {0,0,0,0}, b_stride[4] = {0,0,0,0};
+    a_stride[nd-1] = 1; b_stride[nd-1] = 1;
+    for (int i = (int)nd-2; i >= 0; i--) {
+        size_t an = a_shape[i+1] ? a_shape[i+1] : 1;
+        size_t bn = b_shape[i+1] ? b_shape[i+1] : 1;
+        if (an && a_stride[i+1] > SIZE_MAX / an) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        if (bn && b_stride[i+1] > SIZE_MAX / bn) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        a_stride[i] = a_stride[i+1] * an;
+        b_stride[i] = b_stride[i+1] * bn;
+    }
+    size_t total = 1;
+    for (uint8_t i = 0; i < nd; i++) {
+        if (out_shape[i] == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+        if (out_shape[i] && total > SIZE_MAX / out_shape[i]) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        total *= out_shape[i];
+    }
+    size_t idx[4] = {0,0,0,0};
+    for (size_t lin = 0; lin < total; lin++) {
+        size_t rem = lin;
+        for (int d = (int)nd-1; d >= 0; d--) {
+            idx[d] = out_shape[d] ? (rem % out_shape[d]) : 0;
+            rem /= (out_shape[d] ? out_shape[d] : 1);
+        }
+        size_t ai = 0, bi = 0;
+        for (uint8_t d = 0; d < nd; d++) {
+            size_t a_c = (a_shape[d] == 1) ? 0 : idx[d];
+            size_t b_c = (b_shape[d] == 1) ? 0 : idx[d];
+            if (a_c && a_stride[d] && a_c > (SIZE_MAX - ai) / a_stride[d]) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+            if (b_c && b_stride[d] && b_c > (SIZE_MAX - bi) / b_stride[d]) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+            ai += a_c * a_stride[d];
+            bi += b_c * b_stride[d];
+        }
+        double av = a[ai], bv = b[bi];
+        if (op == 0) o[lin] = av + bv;
+        else if (op == 1) o[lin] = av - bv;
+        else o[lin] = av * bv;
+    }
+}
+
 static void execute_node_math(lancius_node* n) {
     if (!n) return;
     lancius_runtime_sync_from_legacy(n); /* A1 */
@@ -337,7 +393,15 @@ else if (n->op == LANCIUS_OP_ROPE) {
         }
 
         if (!a || !b) return;
-        for(size_t k=0; k<elements; k++) n->runtime_data[k] = a[k] + b[k];
+        {
+            bool same = (n->inputs[0]->ndim == n->inputs[1]->ndim) && (n->inputs[0]->ndim == n->ndim);
+            if (same) {
+                for (uint8_t i = 0; i < n->ndim; i++)
+                    if (n->inputs[0]->shape[i] != n->inputs[1]->shape[i]) { same = false; break; }
+            } else same = false;
+            if (same) { for(size_t k=0; k<elements; k++) n->runtime_data[k] = a[k] + b[k]; }
+            else execute_broadcast_binary(n, 0);
+        }
     }
     else if (n->op == LANCIUS_OP_MATMUL) {
         /*
@@ -427,12 +491,28 @@ else if (n->op == LANCIUS_OP_ROPE) {
     else if (n->op == LANCIUS_OP_MUL) {
         double* a = n->inputs[0]->runtime_data; double* b = n->inputs[1]->runtime_data;
         if (!a || !b) return;
-        for(size_t k=0; k<elements; k++) n->runtime_data[k] = a[k] * b[k];
+        {
+            bool same = (n->inputs[0]->ndim == n->inputs[1]->ndim) && (n->inputs[0]->ndim == n->ndim);
+            if (same) {
+                for (uint8_t i = 0; i < n->ndim; i++)
+                    if (n->inputs[0]->shape[i] != n->inputs[1]->shape[i]) { same = false; break; }
+            } else same = false;
+            if (same) { for(size_t k=0; k<elements; k++) n->runtime_data[k] = a[k] * b[k]; }
+            else execute_broadcast_binary(n, 2);
+        }
     }
     else if (n->op == LANCIUS_OP_SUB) {
         double* a = n->inputs[0]->runtime_data; double* b = n->inputs[1]->runtime_data;
         if (!a || !b) return;
-        for(size_t k=0; k<elements; k++) n->runtime_data[k] = a[k] - b[k];
+        {
+            bool same = (n->inputs[0]->ndim == n->inputs[1]->ndim) && (n->inputs[0]->ndim == n->ndim);
+            if (same) {
+                for (uint8_t i = 0; i < n->ndim; i++)
+                    if (n->inputs[0]->shape[i] != n->inputs[1]->shape[i]) { same = false; break; }
+            } else same = false;
+            if (same) { for(size_t k=0; k<elements; k++) n->runtime_data[k] = a[k] - b[k]; }
+            else execute_broadcast_binary(n, 1);
+        }
     }
     else if (n->op == LANCIUS_OP_TRANSPOSE) {
         double* a = n->inputs[0]->runtime_data; if (!a) return;

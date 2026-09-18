@@ -233,13 +233,19 @@ lancius_node* lancius_const(lancius_graph* g, double val, size_t r, size_t c) {
     lancius_node* n = alloc_node(g, LANCIUS_OP_CONST, 2, 0);
     if (n) { n->shape[0] = r; n->shape[1] = c; n->attr_val = val; } return n;
 }
+static void broadcast_out_shape(const lancius_node* a, const lancius_node* b, size_t* out) {
+    for (uint8_t i = 0; i < a->ndim; i++) {
+        size_t da = a->shape[i], db = b->shape[i];
+        out[i] = (da > db) ? da : db;
+    }
+}
 lancius_node* lancius_add(lancius_graph* g, const lancius_node* a, const lancius_node* b) {
         if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] ADD NULL input"); return NULL; }
     // V10S FIX: Allow broadcast
 
     if (lancius_validate_binary_broadcast(a, b) != LANCIUS_ERROR_OK) return NULL;
     lancius_node* n = alloc_node(g, LANCIUS_OP_ADD, a->ndim, 2);
-    if (n) { memcpy(n->shape, a->shape, sizeof(size_t)*a->ndim); n->inputs[0] = a; n->inputs[1] = b; } return n;
+    if (n) { broadcast_out_shape(a, b, n->shape); n->inputs[0] = a; n->inputs[1] = b; } return n;
 }
 lancius_node* lancius_sub(lancius_graph* g, const lancius_node* a, const lancius_node* b) {
         if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] SUB NULL input"); return NULL; }
@@ -247,7 +253,7 @@ lancius_node* lancius_sub(lancius_graph* g, const lancius_node* a, const lancius
 
     if (lancius_validate_binary_broadcast(a, b) != LANCIUS_ERROR_OK) return NULL;
     lancius_node* n = alloc_node(g, LANCIUS_OP_SUB, a->ndim, 2);
-    if (n) { memcpy(n->shape, a->shape, sizeof(size_t)*a->ndim); n->inputs[0] = a; n->inputs[1] = b; } return n;
+    if (n) { broadcast_out_shape(a, b, n->shape); n->inputs[0] = a; n->inputs[1] = b; } return n;
 }
 lancius_node* lancius_mul(lancius_graph* g, const lancius_node* a, const lancius_node* b) {
         if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] MUL NULL input"); return NULL; }
@@ -255,7 +261,7 @@ lancius_node* lancius_mul(lancius_graph* g, const lancius_node* a, const lancius
 
     if (lancius_validate_binary_broadcast(a, b) != LANCIUS_ERROR_OK) return NULL;
     lancius_node* n = alloc_node(g, LANCIUS_OP_MUL, a->ndim, 2);
-    if (n) { memcpy(n->shape, a->shape, sizeof(size_t)*a->ndim); n->inputs[0] = a; n->inputs[1] = b; } return n;
+    if (n) { broadcast_out_shape(a, b, n->shape); n->inputs[0] = a; n->inputs[1] = b; } return n;
 }
 lancius_node* lancius_matmul(lancius_graph* g, const lancius_node* a, const lancius_node* b) {
     if (!a || !b || a->ndim < 2 || b->ndim < 2) {

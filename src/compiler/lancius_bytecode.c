@@ -123,12 +123,23 @@ int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lanc
                 double sum = 0.0; for(size_t k=0; k<K; k++) sum += a[r*K + k] * b[k*N + c];
                 o[r*N + c] = sum;
             }
-        } else if (op == LANCIUS_BC_ADD) {
-            for(size_t k=0; k<elements; k++) o[k] = a[k] + b[k];
-        } else if (op == LANCIUS_BC_SUB) {
-            for(size_t k=0; k<elements; k++) o[k] = a[k] - b[k];
-        } else if (op == LANCIUS_BC_MUL) {
-            for(size_t k=0; k<elements; k++) o[k] = a[k] * b[k];
+        } else if (op == LANCIUS_BC_ADD || op == LANCIUS_BC_SUB || op == LANCIUS_BC_MUL) {
+            // Hostile fix: broadcast-aware (was flat a[k] OP b[k] => wrong + OOB on [2,2] vs [1,2])
+            size_t R = prog->rows[r_out], Cc = prog->cols[r_out];
+            size_t aR = prog->rows[r_a], aC = prog->cols[r_a];
+            size_t bR = prog->rows[r_b], bC = prog->cols[r_b];
+            size_t aE = (aR && aC && aC <= SIZE_MAX / (aR ? aR : 1)) ? aR*aC : 0;
+            size_t bE = (bR && bC && bC <= SIZE_MAX / (bR ? bR : 1)) ? bR*bC : 0;
+            if (aE != R*Cc && aE != 1 && !(aR == 1 && aC == Cc) && !(aC == 1 && aR == R)) return -1;
+            if (bE != R*Cc && bE != 1 && !(bR == 1 && bC == Cc) && !(bC == 1 && bR == R)) return -1;
+            for (size_t r = 0; r < R; r++) for (size_t c = 0; c < Cc; c++) {
+                size_t oi = r*Cc + c;
+                size_t ai = (aE == 1) ? 0 : ((aR == 1 && aC == Cc) ? c : ((aC == 1 && aR == R) ? r : oi));
+                size_t bi = (bE == 1) ? 0 : ((bR == 1 && bC == Cc) ? c : ((bC == 1 && bR == R) ? r : oi));
+                if (op == LANCIUS_BC_ADD) o[oi] = a[ai] + b[bi];
+                else if (op == LANCIUS_BC_SUB) o[oi] = a[ai] - b[bi];
+                else o[oi] = a[ai] * b[bi];
+            }
         } else if (op == LANCIUS_BC_RELU) {
             for(size_t k=0; k<elements; k++) o[k] = a[k] > 0.0 ? a[k] : 0.0;
         } else if (op == LANCIUS_BC_BROADCAST) {
