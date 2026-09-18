@@ -1,11 +1,9 @@
 <!-- SECTION:HEADER -->
-# Lancius v12R1
+# Lancius v12A2
 
-## Broke a few stuff in a massive refactor yesterday, restarting today on v11S code state.
-
-> **Internal milestone:** `v12R1`
+> **Internal milestone:** `v12A2`
 > **Public release:** `TBD`
-> **Status:** Development milestone (R1)
+> **Status:** Development milestone (A2 — second v12 milestone, R2 phase)
 
 Lancius is a lightweight C machine-learning compiler and runtime focused on
 bare-metal inference, static graph execution, memory planning, and low-level
@@ -15,6 +13,11 @@ runtime control.
 It represents the completion of the v11A3 hardening gate:
 feature freeze, loader hardening, model-format freeze with CRC32 integrity,
 sanitizer and fuzz validation, and full regression defense.
+
+`v12A2` builds on the `v11S` stable baseline and the `v12R1` development
+snapshot. Its theme is **mathematical correctness**: a hostile,
+formula-by-formula audit of every numeric path, with each confirmed defect
+fixed and re-proven by independent execution.
 <!-- /SECTION:HEADER -->
 
 <!-- SECTION:RELEASE_IDENTITY -->
@@ -22,7 +25,7 @@ sanitizer and fuzz validation, and full regression defense.
 
 | Internal Version | Public Version       | Release Type      |
 |------------------|----------------------|-------------------|
-| `v12R1`          | `TBD`      | Development Milestone    |
+| `v12A2`          | `TBD`      | Development Milestone    |
 
 Lancius uses the following internal milestone progression:
 
@@ -38,65 +41,99 @@ Where:
 - `R3` is the freeze, hardening, and bug-hunting milestone
 - the next `S` is the stable release candidate
 
+`v12A2` is the second development milestone of the v12 cycle (the R2 phase
+in R-series numbering), following `v12R1`.
+
 > This is a development milestone.
 > Binary compatibility is guaranteed for v2 models written by v11S+.
 <!-- /SECTION:RELEASE_IDENTITY -->
 
 <!-- SECTION:HIGHLIGHTS -->
-## v11S Highlights
+## v12A2 Highlights
 
-`v11S` continues making Lancius transformer execution more structurally
-honest, more testable, and more runtime-oriented.
+`v12A2` makes Lancius numerically honest: every kernel, executor, gradient,
+shape formula, serializer field, and converter mapping was independently
+re-derived and re-executed. Plausible outputs were not accepted as proof.
 
-This is the first stable release of the 1.1 cycle.
+### Correctness Fixes (audited, fixed, re-proven)
 
-### Transformer Runtime
+- **Broadcast elementwise math is now correct.** Direct `ADD`/`SUB`/`MUL`
+  on broadcastable shapes (e.g. `[2,2]` with `[1,2]`) previously ran a flat
+  `a[k] OP b[k]` loop — wrong values plus an out-of-bounds read.
+  IR builders now emit the true broadcast output shape
+  (`out[i] = max(a[i], b[i])`), and both the scheduler and the bytecode VM
+  execute N-dimensional strided broadcast. Verified both argument orders:
+  `[1,2,3,4] OP [10,20] → [10,40,30,80]` / `[11,22,13,24]`.
+- **Softmax zero-sum guard.** All-`-inf` rows previously produced silent
+  `NaN`. Both the scheduler and the VM now return a numerical error instead.
+- **Model integrity is now mandatory.** A zero CRC field previously disabled
+  verification entirely (4 zeroed bytes bypassed integrity). The v2 loader
+  now rejects `checksum == 0` by default; legacy unverified loads require
+  explicit opt-in via `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1`. Duplicate-ID
+  detection is O(1), sparse IDs are bounded, and weight skipping streams
+  instead of truncating through `long`.
+- **Attention execution is validated.** Cache heads/dim must match the query,
+  K/V heads/dim must match, and single-token decode without a bound cache is
+  rejected instead of attending over garbage. GQA Q/K/V shapes are checked
+  against declared heads/dim.
+- **INT8 accumulation is 64-bit.** The `int32` accumulator overflowed past
+  132104 terms; both the INT8 conv kernel and the mixed-precision matmul now
+  use `int64`. The dead `&& 0` overflow guard is a real check.
+- **No more silent OOM.** Thread-local weight buffers and Flash/GQA scratch
+  allocations now report `OOM` instead of emitting zeros or uninitialized
+  tiles. Arena allocation failures report error codes.
+- **No more `abort()` on the execution hot paths.** Scheduler, planner, and
+  vision copy paths use the `_checked` element/byte counters and return
+  errors on corrupt shapes.
 
-- Added a dedicated **KV-cache runtime object**
-- Added cache-aware attention execution
-- Added explicit **prefill** and **generation** execution flows
-- Improved RoPE position handling through cache state
-- Added first-class 3D transformer tensor construction
-- Reduced demo-style graph mutation in transformer examples
+### ONNX Strictness
 
-### Transformer Validation
+The converter now fails loud instead of emitting silently wrong graphs:
 
-- Added a dedicated transformer known-answer audit
-- Validates core transformer math and runtime behavior, including:
-  - LayerNorm
-  - RMSNorm
-  - GELU
-  - SwiGLU
-  - RoPE
-  - full causal attention
-  - KV-cache step parity
-  - prefill + generation parity
-  - grouped-query attention, GQA
+- `Reshape` follows ONNX semantics: `0` copies the input dim, `-1` infers.
+  The two were previously conflated.
+- `Gemm` rejects `transA` and non-unit `alpha`/`beta`, and transposed weights
+  are cloned per use instead of mutating a shared initializer in place.
+- Asymmetric Conv pads/strides and non-square MaxPool kernels are rejected
+  instead of silently keeping only the first element.
+- Symbolic (dynamic-batch) dimensions are rejected instead of being silently
+  frozen to 1. Export static batches for conversion.
 
-The KV-cache parity test is especially important because it verifies that
-stepwise cache-backed generation matches full causal attention over the same
-sequence.
+### Training Alignment
 
-### FP32 Execution Foundation
+- CIFAR-10 inputs are now `((x/255) - 0.5) / 0.5` in `[-1,1]`, matching the
+  PyTorch `Normalize((0.5,), (0.5,))` reference. The old `[-0.5,0.5]` range
+  halved the effective scale versus tuned learning rates.
+- MNIST uses He initialization (correct for ReLU) instead of
+  Xavier-uniform, binds training parameters by buffer identity instead of
+  shape-sniffing, zeroes gradient buffers per batch, and documents the true
+  cross-entropy mean scale (`1/R`, i.e. `1/64` — not `1/640`).
+- CIFAR-10 evaluation tracks logits by graph identity instead of picking the
+  first `ADD` with 10 columns (the autodiff graph contains many), and logs
+  raw versus clamped loss so divergence can no longer hide at `2.3025`.
 
-- Added FP32 runtime buffer support
-- Added an FP32 matmul kernel
-- Added scheduler dispatch for FP32 matmul
-- Added FP32 model serialization support
-- Added an FP32 path audit
+### API and Harness Honesty
 
-The current FP32 matmul path uses FP32 inputs and outputs with FP64
-accumulation for numerical stability.
+- The stable FFI error space now preserves causes: `GRAPH_CYCLE`,
+  `OVERFLOW`, `NUMERICAL`, and `INVALID_HANDLE` instead of collapsing them
+  into shape-mismatch/OOM/null.
+- Audits that printed PASS/FAIL but always exited 0 now propagate failures
+  (`audit_modern_llm`, `audit_flash_attention`, `audit_threadpool_parity`,
+  `audit_ffi`, `audit_pytorch_parity.py`).
+- `lancius_dtype_size()` returns 0 on invalid codes and
+  `checked_product_shape(NULL)` fails instead of masking caller bugs.
 
-FP32 execution is currently scoped primarily to matmul. Wider FP32 operator
-support is deferred.
+### Inherited Baseline (v11S / v12R1)
 
-### Runtime and Loader Hardening
-
-- Improved repeated-execution hygiene
-- Improved malformed-model rejection
-- Continued hardening of the v2 model format
-- Continued separation between runtime state and demo-level graph mutation
+- Dedicated **KV-cache runtime object** with explicit **prefill** and
+  **generation** flows, `lancius_input_3d()`, and a 265-check transformer
+  known-answer audit (LayerNorm, RMSNorm, GELU, SwiGLU, RoPE, full causal
+  attention, KV-cache step parity, prefill+generation parity, GQA).
+- FP32 foundation: FP32 buffers, FP64-accumulation matmul kernel, scheduler
+  dispatch, serialization roundtrip, and path audit. FP32 remains
+  matmul-scoped; there is no FP32 LLM path yet.
+- v2 model format with CRC32 body integrity, reserved-flag rejection, and
+  fail-closed malformed-model handling.
 
 The v2 model format remains the active development format.
 
@@ -104,106 +141,48 @@ Binary compatibility is **guaranteed** for v2 models written by v11S and later.
 <!-- /SECTION:HIGHLIGHTS -->
 
 <!-- SECTION:WHATS_CHANGED -->
-## What Changed Since v11A1
+## What Changed Since v12R1
 
-`v11S` continues the v11 development cycle.
+### Fixed
 
-The focus of this milestone is not broad feature expansion. The focus is
-making the transformer execution path more real, more testable, and less
-dependent on demo-level graph mutation.
-
-### Added
-
-- Dedicated transformer runtime support:
-  - `include/lancius/lancius_transformer.h`
-  - `src/runtime/lancius_transformer.c`
-
-- A real **KV-cache runtime object**
-  - maximum sequence length
-  - active sequence length
-  - head count
-  - head dimension
-  - K/V buffer management
-  - cache reset / append / query operations
-
-- Cache-aware attention execution
-  - attention execution can consult cache state
-  - single-token generation can run against an active KV-cache
-  - reduces reliance on mutating IR shapes during generation
-
-- Explicit prefill and generation flow
-  - prompt prefill via full causal attention
-  - prompt K/V append into the cache
-  - single-token generation against the active cache
-
-- RoPE position contract
-  - cache active sequence length is used as the position source
-  - RoPE helper validates cache state and head dimension parity
-
-- First-class 3D transformer tensor construction
-  - added `lancius_input_3d()`
-  - reduces manual `ndim` and shape patching in examples
-
-- Transformer known-answer audit
-  - LayerNorm
-  - RMSNorm
-  - GELU
-  - SwiGLU
-  - RoPE
-  - full causal attention
-  - KV-cache step parity
-  - prefill + generation parity
-  - grouped-query attention, GQA
-
-- FP32 execution foundation
-  - FP32 runtime buffer support
-  - FP32 tensor ownership helpers
-  - FP32 matmul kernel
-  - scheduler dispatch for FP32 matmul
-  - FP32 path audit
-
-- FP32 serialization support
-  - v2 save path can write FP32 weights
-  - v2 load path can accept FP32 tensors
-  - FP32 roundtrip validation
-
-- Stronger v2 loader validation
-  - reject invalid dtype
-  - reject malformed weight length
-  - reject impossible tensor shapes
-  - reject malformed model structure more cleanly
+- N-dimensional broadcast `ADD`/`SUB`/`MUL` in scheduler, IR shape inference,
+  and bytecode VM (was flat-loop wrong + OOB).
+- Softmax zero-sum guard in scheduler and VM.
+- v2 loader: CRC required by default, O(1) duplicate detection, sparse-ID
+  bounds, streaming weight skip, sticky-error clearing.
+- Attention cache/heads/dim validation; single-token-without-cache rejected;
+  GQA shape validation; RMSNorm gamma/divisibility checks.
+- INT8 `int64` accumulators; real overflow guards; OOM error reporting in
+  kernels, arena, and thread-local paths.
+- Aborting element/byte counters replaced with `_checked` + error returns on
+  all execution, planning, and copy paths; `FLATTEN`/`RESHAPE` verify
+  element-count equality.
+- ONNX: Reshape `0`/`-1`, Gemm clone-on-write + `alpha`/`beta`/`transA`
+  rejection, symmetric-only Conv/Pool, symbolic-dim rejection.
+- Training: `[-1,1]` CIFAR normalization, He init on MNIST, identity-based
+  parameter binding, per-batch grad zeroing, identity-tracked eval logits,
+  raw-vs-clamped loss logging, static ONNX export.
+- Stable API: widened error codes; `dtype_size`/`product_shape` fail loud.
+- False-green audits now exit non-zero on divergence.
 
 ### Improved
 
-- Transformer execution is less demo-like
-  - static graph shapes are preferred
-  - sequence state lives in runtime objects
-  - examples are closer to real runtime usage
-
-- Scheduler buffer lifecycle is more explicit
-  - FP32 buffers are handled separately
-  - repeated execution hygiene is improved
-  - pool and arena ownership behavior is clearer
-
-- Validation coverage is stronger
-  - transformer math is checked against known answers
-  - KV-cache step parity is validated
-  - FP32 execution is validated
-  - malformed model loading is tested
+- Arena failures carry error codes for downstream diagnosis.
+- Bytecode VM validates registers, guards `rows*cols` overflow, and rejects
+  unbroadcastable binary shapes instead of miscomputing.
+- Parity scripts fail CI on divergence.
 
 ### Deferred
 
 The following remain intentionally deferred:
 
-- full FP32 operator coverage
+- full FP32 operator coverage (LLM ops are FP64-only)
 - FP32 KV-cache storage
-- general ONNX converter usability
+- general ONNX converter usability beyond LeNet-class graphs
 - dynamic shape execution
 - GPU acceleration
 - production LLM serving
 - final binary compatibility guarantees
-
-`v11S` is the first stable release of the 1.1 cycle.
 <!-- /SECTION:WHATS_CHANGED -->
 
 <!-- SECTION:BUILDING -->
@@ -272,7 +251,7 @@ python3 -m pip install onnx onnxruntime numpy
 <!-- SECTION:VALIDATION -->
 ## Validation
 
-Lancius `v11S` uses a layered validation suite.
+Lancius `v12A2` uses a layered validation suite.
 
 The minimum development gate is:
 
@@ -310,6 +289,10 @@ This runs the primary regression and correctness suite, including:
 - regression hardening audit
 - transformer known-answer audit
 - FP32 path audit
+- fault-injection audit
+
+Every audit in the gate propagates failures through its exit code: a green
+`make check` means every check passed, not just that binaries ran.
 
 ### Long Validation
 
@@ -384,40 +367,40 @@ python3 audit_pytorch_parity.py
 <!-- SECTION:FEATURE_STATUS -->
 ## Feature Status
 
-Lancius `v11S` is a stable release.
+Lancius `v12A2` is a development milestone.
 
 The following table describes the current status of major subsystems.
 
 | Area | Status | Notes |
 |---|---|---|
-| Core tensor ops | Development | Add, Sub, Mul, MatMul, ReLU, Softmax, Sum, Broadcast, Transpose |
-| Vision ops | Development | Conv2D, MaxPool2D, Flatten, fused Conv2D+ReLU |
-| Training ops | Experimental | CrossEntropy backward, Conv backward, MaxPool backward |
-| Transformer kernels | Experimental | LayerNorm, RMSNorm, GELU, RoPE, Attention, KV-cache attention, SwiGLU, GQA |
-| KV-cache runtime | Experimental | Stateful cache object introduced in v11A2, FP64-only for now |
-| Prefill / generation flow | Experimental | Explicit prefill and generation paths introduced in v11A2 |
-| FP32 execution | Experimental | FP32 matmul kernel, scheduler dispatch, and serialization support |
-| Stable C API | Partial | Opaque handles and limited graph builders; not full runtime coverage yet |
-| Model format v2 | Stable | Frozen format; binary compatibility guaranteed for v11S+ models |
-| ONNX conversion | Experimental | Validated primarily against LeNet-class graphs |
+| Core tensor ops | Development | Add/Sub/Mul (N-dim broadcast-correct), MatMul, ReLU, Softmax (zero-sum guarded), Sum, Broadcast, Transpose |
+| Vision ops | Development | Conv2D, MaxPool2D, Flatten, fused Conv2D+ReLU; `FLATTEN`/`RESHAPE` verify element equality |
+| Training ops | Experimental | CrossEntropy backward, Conv backward, MaxPool backward; He init, `[-1,1]` CIFAR norm |
+| Transformer kernels | Experimental | LayerNorm, RMSNorm, GELU, RoPE, Attention, KV-cache attention, SwiGLU, GQA (validated shapes) |
+| KV-cache runtime | Experimental | Stateful cache object, FP64-only for now |
+| Prefill / generation flow | Experimental | Explicit prefill; single-token decode requires a bound cache |
+| FP32 execution | Experimental | FP32 matmul kernel (FP64 accumulation), scheduler dispatch, serialization; no FP32 LLM path |
+| Stable C API | Partial | Opaque handles, widened error codes (`GRAPH_CYCLE`/`OVERFLOW`/`NUMERICAL`/`INVALID_HANDLE`); builders still cover core inference only; `read_output` FP64-only |
+| Model format v2 | Development | CRC required by default (`LANCIUS_ALLOW_LEGACY_UNVERIFIED=1` opts into legacy); sparse-ID bounds |
+| ONNX conversion | Experimental | Strict LeNet-class path: correct Reshape/Gemm semantics, symmetric Conv/Pool only, static batch |
 | Memory planner | Development | Linear-scan liveness planning and static flat-buffer execution |
 | Threadpool execution | Development | Wave-parallel execution with parity validation |
 | GPU acceleration | Not supported | CPU-only runtime |
 | Dynamic shapes | Not supported | Static graph execution only |
 | Production LLM serving | Not supported | Research and development milestone only |
 
-> v11S is intended for edge deployment, bare-metal inference, and stable API consumers.
+> v12A2 targets honest numerics and strict boundaries, not expanded scope.
 <!-- /SECTION:FEATURE_STATUS -->
 
 <!-- SECTION:KNOWN_LIMITATIONS -->
 ## Known Limitations
 
-Lancius `v11S` is a stable release.
+Lancius `v12A2` is a development milestone.
 
 Its limitations are intentional boundaries. They define what this release is
 not claiming to be.
 
-> `v11S` is a stable release. The limitations below define its supported scope.
+> `v12A2` is a development milestone. The limitations below define its supported scope.
 
 ### Production Status
 
@@ -434,16 +417,22 @@ not claiming to be.
 - Static graph execution only
 - No dynamic shape execution
 - No general runtime shape mutation contract
+- Single-token attention decode requires a bound KV-cache; cache-less
+  decode of a longer context is rejected rather than executed over garbage
 
 ### Transformer Limitations
 
 Transformer support is experimental.
 
 - Transformer inference is experimental
-- Transformer backward passes are not supported
+- Transformer backward passes are not supported (autodiff fails loud)
+- Batched-matmul backward is not supported (autodiff fails loud)
 - KV-cache runtime is FP64-only for now
-- FP32 execution is currently scoped primarily to matmul
-- FP32 KV-cache storage is not supported
+- FP32 execution is currently scoped to matmul; there is no FP32 LLM path
+- The `ROPE` graph opcode has no public builder; use `kernel_rope()` or
+  `lancius_transformer_apply_rope_token()` for position handling
+- `EMBEDDING`, `KV_CACHE_READ`, and `KV_CACHE_WRITE` opcodes are reserved
+  and unimplemented; graphs using them fail loud
 - This is not a full LLM serving runtime
 
 ### Model Format Limitations
@@ -452,19 +441,28 @@ The active model format is v2.
 
 However:
 
-- The v2 format is **frozen** as of v11S
+- The v2 format is **frozen** as of v11S for compatible writers
 - Binary compatibility is guaranteed for v2 models written by v11S+
-- Models produced by `v11A1`, `v11A2`, or `v11S` should be treated as development artifacts
+- Models produced by `v11A1` or `v11A2` should be treated as development artifacts
+- `checksum == 0` files are rejected by default; set
+  `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1` to load legacy unverified files
 - Legacy v1 loading remains available as a fallback, but v1 is not the active format
 
 ### ONNX Interoperability Limitations
 
-ONNX conversion is experimental.
+ONNX conversion is experimental and deliberately strict.
 
-- Operator coverage is limited
-- The converter is validated primarily against LeNet-class graphs
-- Broader ONNX usability is not guaranteed in `v11S`
-- Unsupported ONNX behavior should be treated as experimental, not stable
+- Operator coverage is limited to `Conv`, `Relu`, `MaxPool`, `Flatten`,
+  `MatMul`, `Add`, `Reshape`, `Gemm`, `Transpose`
+- Validated primarily against LeNet-class graphs
+- `Reshape` supports rank 2 and rank 4 targets with `0`-copy and single-`-1`
+  inference only
+- Conv requires symmetric pads/strides expressible as a single pad/stride;
+  MaxPool requires square kernels
+- `Gemm` requires `transA == 0` and `alpha == beta == 1.0`
+- Symbolic (dynamic) dimensions are rejected; export static batches
+- The converter is currently FP64-oriented
+- Unsupported ONNX graphs fail conversion instead of producing partial models
 
 ### API Limitations
 
@@ -472,18 +470,19 @@ The stable C API covers the core inference workflow.
 - Model loading and saving via `lancius_graph_load_stable` / `lancius_graph_save_stable`
 - Graph construction (input, matmul, relu)
 - Data binding and execution
-- Output reading with truncation protection
+- Output reading with truncation protection (FP64 outputs only)
 - Tensor introspection (element count, dtype)
-- Opaque handles and thread-local error states
-- Transformer ops, conv2d builders, and advanced ops remain internal-only for v11S
+- Opaque handles and thread-local error states (widened codes)
+- Transformer ops, conv2d builders, and advanced ops remain internal-only
 
 ### Training Limitations
 
-Training-related code exists in the repository, but `v11S` is inference-first.
+Training-related code exists in the repository, but `v12A2` is inference-first.
 
 - Training components are experimental
 - Training workflows are not production-grade
-- Training is not part of the stable release contract
+- Evaluated on MNIST/CIFAR-10 style graphs only
+- Training is not part of any stable release contract
 
 ### Platform Support
 
@@ -493,16 +492,17 @@ Primary supported environment:
 - x86_64 CPU
 
 Other architectures may work, but they require additional validation.
+The Makefile targets AVX2/FMA; non-x86 builds need flag adjustments.
 
 ### Hardening Status
 
-`v11S` includes validation and testing, but it is not fully hardened.
+`v12A2` includes the hostile correctness batch described above, but it is not
+a frozen release.
 
-The next milestone, `v11S`, is intended to focus on:
+The next milestone is intended to focus on:
 
-- feature freeze
-- loader hardening
-- model-format hardening
+- feature decisions for the remainder of the v12 cycle
+- continued loader and format hardening
 - sanitizer and fuzz validation
 - release-candidate preparation
 <!-- /SECTION:KNOWN_LIMITATIONS -->
@@ -514,20 +514,25 @@ The active model format is **v2**.
 
 v2 improves on v1 by using:
 
-- explicit magic
-- explicit version
+- explicit magic (`0x32434E41`)
+- explicit version (`2`)
 - fixed-width fields
 - little-endian encoding
 - explicit header flags
 - stronger loader validation
-- CRC32 body integrity check (v11S)
+- mandatory CRC32 body integrity check (v12A2; opt-out only via
+  `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1`)
+
+Loader defenses include duplicate-ID rejection, forward-reference rejection,
+weight-length-vs-shape agreement, sparse-ID bounds, reserved-flag rejection,
+and `EXTERNAL_WEIGHTS` rejection.
 
 Legacy v1 loading remains available as a deprecated fallback.
 
 However:
 
 > Binary compatibility is **guaranteed** for v2 models written by v11S and later.
-> The v2 format is frozen. CRC32 integrity verification is active.
+> The v2 format is frozen. CRC32 integrity verification is required by default.
 <!-- /SECTION:MODEL_FORMAT -->
 
 <!-- SECTION:ONNX_INTEROPERABILITY -->
@@ -540,9 +545,9 @@ The current path is:
 ```text
 PyTorch / ONNX model
         ↓
-ONNX export
+ONNX export (static batch)
         ↓
-onnx_to_lancius.py
+onnx_to_lancius.py (strict)
         ↓
 Lancius binary model
         ↓
@@ -557,7 +562,7 @@ It is not a general-purpose ONNX runtime.
 
 ONNX support is:
 
-- experimental
+- experimental and strict: violations raise instead of degrading silently
 - validated primarily against LeNet-class convolutional graphs
 - limited in operator coverage
 - not guaranteed to handle arbitrary ONNX models
@@ -568,15 +573,15 @@ The converter currently writes Lancius v2 binary models.
 
 The ONNX converter currently handles a small operator set:
 
-- `Conv`
+- `Conv` (symmetric pads/strides only)
 - `Relu`
-- `MaxPool`
+- `MaxPool` (square kernels only)
 - `Flatten`
 - `MatMul`
 - `Add`
-- `Reshape`
-- `Gemm`
-- `Transpose`
+- `Reshape` (rank 2/4, `0`-copy, single-`-1`)
+- `Gemm` (`transA == 0`, `alpha == beta == 1.0`, per-use transpose clones)
+- `Transpose` (`[1,0]` / `[1,0,2,3]` only)
 
 Other ONNX operators are not part of the validated conversion path.
 
@@ -600,7 +605,7 @@ Generate a pure ONNX model:
 python3 build_pure_onnx.py
 ```
 
-or export a PyTorch LeNet-style model:
+or export a PyTorch LeNet-style model (static batch):
 
 ```bash
 python3 export_pytorch_onnx.py
@@ -612,7 +617,7 @@ Convert the ONNX model to a Lancius binary:
 python3 onnx_to_lancius.py pytorch_lenet.onnx pytorch_lenet.lancius
 ```
 
-Run parity validation against ONNX Runtime:
+Run parity validation against ONNX Runtime (fails non-zero on divergence):
 
 ```bash
 python3 audit_pytorch_parity.py
@@ -620,12 +625,12 @@ python3 audit_pytorch_parity.py
 
 ### Important Limitations
 
-- Dynamic shapes are not supported.
+- Dynamic shapes are not supported; export static batches.
 - Operator coverage is limited.
-- Attribute handling is simplified.
+- Conv/Pool attribute handling is symmetric-only by design.
 - The converter is currently FP64-oriented.
 - FP32 ONNX export is deferred.
-- Unsupported ONNX graphs may fail conversion or produce incomplete models.
+- Unsupported ONNX graphs fail conversion instead of producing partial models.
 
 > ONNX support should be treated as an experimental interoperability path,
 > not a stable model import guarantee.
@@ -646,12 +651,13 @@ Relevant documents in this tree:
 - `docs/releases/v11S/GITHUB_RELEASE_v11S.md` — v11S release notes
 - `KNOWN_LIMITATIONS.md` — explicit limitations and non-goals
 - `SECURITY.md` — security reporting policy
-- `CHANGELOG.md` — changelog
+- `CHANGELOG.md` — changelog (see the `v12A2` entry for this milestone)
+- `STATUS.md` — current milestone status
 
 > Some documents may still reference `v11A1` or `v11A2`.
 >
 > Where that happens, treat them as historical unless they explicitly describe
-> current (`v12R1`) behavior.
+> current (`v12A2`) behavior.
 <!-- /SECTION:DOCUMENTATION -->
 
 <!-- SECTION:ROADMAP -->
@@ -673,32 +679,30 @@ For public GitHub releases, internal milestones are mapped as follows:
 | `v11A2`            | `V1.1-AlphaRC2`      | Transformer runtime usability        |
 | `v11A3`            | `V1.1-AlphaRC3`      | Freeze, hardening, and bug hunting   |
 | `v11S`             | `V1.1`               | Stable release                       |
-| `v12R1`            | `TBD`                | Current development milestone        |
+| `v12R1`            | `TBD`                | First v12 development milestone      |
+| `v12A2`            | `TBD`                | Current development milestone: numerical correctness |
 
 ### Current Milestone
 
 This release is:
 
 ```text
-v12R1
+v12A2
 ```
 
 Its theme is:
 
-> Development milestone (R1).
+> Numerical correctness: hostile audit of every math path, with each
+> confirmed defect fixed and re-proven.
 
-Previous stable: v11S / V1.1, the first stable release of the 1.1 cycle.
-It represents the completion of the v11A3 hardening gate.
+Previous milestones: v11S / V1.1 (stable), then v12R1 (first v12 snapshot).
 
 ### Next Milestone
 
-The next milestone is:
+The next milestone is the v12 freeze, hardening, and bug-hunting phase
+(R3), followed by the `v12S` stable release candidate.
 
-```text
-v12R2
-```
-
-The v12 cycle will focus on FP32 operator expansion, FP32 KV-cache
+Candidate v12 work (not committed): FP32 operator expansion, FP32 KV-cache
 storage, broader ONNX coverage, and dynamic shape exploration.
 
 ### Stable Release
@@ -712,7 +716,7 @@ cycle completes its hardening gate.
 <!-- SECTION:SECURITY -->
 ## Security
 
-Lancius `v11S` is a stable release.
+Lancius `v12A2` is a development milestone, not a hardened release.
 
 Security issues should be reported privately before public disclosure.
 
@@ -724,9 +728,12 @@ Security-relevant concerns include:
 - arbitrary execution risks
 - dependency vulnerabilities
 
-Models loaded from untrusted sources should still be validated before
-use. The v2 format includes CRC32 integrity verification, but loading
-arbitrary untrusted binaries is not recommended.
+Model handling notes:
+
+- v2 CRC32 integrity verification is required by default; files with a zero
+  checksum are rejected unless `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1` is set.
+- Models loaded from untrusted sources should still be validated before
+  use. Loading arbitrary untrusted binaries is not recommended.
 
 For the current reporting policy, see:
 

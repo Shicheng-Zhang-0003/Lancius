@@ -1,6 +1,6 @@
-# Lancius v12R1 Known Limitations
+# Lancius v12A2 Known Limitations
 
-This document defines the explicit boundaries of the v12R1
+This document defines the explicit boundaries of the v12A2
 development milestone.
 
 A development milestone is not defined by having every feature. It is defined
@@ -28,10 +28,10 @@ The following areas are intentionally not considered stable:
 
 ## Training Status
 
-Lancius v12R1 is inference-first.
+Lancius v12A2 is inference-first.
 
-Training-related components may exist in the codebase but should not be
-considered development preview.
+Training-related components may exist in the codebase but should be
+considered experimental development preview, not production-grade.
 
 ## Backend Support
 
@@ -67,8 +67,9 @@ and do NOT abort.
 -   Quantizer: 4D FP64 conv weights only; all-zero weights stay FP64.
 -   `lancius_read_output` (stable API): FP64 outputs only; FP32/INT8
     outputs report `UNSUPPORTED_OP`.
--   v2 models always carry non-zero CRC32; `checksum == 0` means legacy
-    pre-hardening file, accepted without verification.
+-   v2 models always carry non-zero CRC32; files with `checksum == 0`
+    are rejected by default (set `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1` to
+    load legacy pre-hardening files).
 
 ## Philosophy
 
