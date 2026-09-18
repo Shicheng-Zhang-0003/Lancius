@@ -20,7 +20,7 @@ static inline size_t lancius_dtype_size(lancius_dtype dtype) {
         case LANCIUS_DTYPE_FP64:  return sizeof(double);
         case LANCIUS_DTYPE_INT8:  return sizeof(int8_t);
         case LANCIUS_DTYPE_INT32: return sizeof(int32_t);
-        default:                  return sizeof(double);
+        default:                  return 0;
     }
 }
 
