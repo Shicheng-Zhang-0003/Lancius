@@ -62,7 +62,8 @@ void lancius_execute_vision_op(lancius_node* n) {
             n->stride, n->pad);
 
         if (n->op == LANCIUS_OP_CONV2D_RELU_FUSED) {
-            size_t elems = lancius_node_elements(n);
+            size_t elems = 0;
+            if (!lancius_node_elements_checked(n, &elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
             for (size_t i = 0; i < elems; i++) {
                 if (n->runtime_data[i] < 0.0) n->runtime_data[i] = 0.0;
             }
@@ -144,8 +145,10 @@ void lancius_execute_vision_op(lancius_node* n) {
     else if (n->op == LANCIUS_OP_FLATTEN) {
         double* in = n->inputs[0]->runtime_data;
         if (!in) return;
-        size_t elems = 0;
+        size_t elems = 0, in_elems = 0;
         if (!lancius_node_elements_checked(n, &elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
+        if (!lancius_node_elements_checked(n->inputs[0], &in_elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
+        if (elems != in_elems) { lancius_set_error(LANCIUS_ERROR_RESHAPE_MISMATCH); return; }
         if (elems > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
         memcpy(n->runtime_data, in, elems * sizeof(double));
     }
@@ -153,8 +156,10 @@ void lancius_execute_vision_op(lancius_node* n) {
         // V9 Fix: Route RESHAPE backward pass (Flatten gradient)
         double* in = n->inputs[0]->runtime_data;
         if (!in) return;
-        size_t elems = 0;
+        size_t elems = 0, in_elems = 0;
         if (!lancius_node_elements_checked(n, &elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
+        if (!lancius_node_elements_checked(n->inputs[0], &in_elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
+        if (elems != in_elems) { lancius_set_error(LANCIUS_ERROR_RESHAPE_MISMATCH); return; }
         if (elems > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
         memcpy(n->runtime_data, in, elems * sizeof(double));
     }

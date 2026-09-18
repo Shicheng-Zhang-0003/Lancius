@@ -12,8 +12,10 @@ static inline size_t align32(size_t sz) {
 // Helper to get byte size.
 static size_t get_node_bytes(const lancius_node* n) {
     if (!n) return 0;
-    /* A3: dtype-aware node byte sizing */
-    return align32(lancius_node_bytes(n));
+    /* A3: dtype-aware node byte sizing, checked (never abort on corrupt shape) */
+    size_t b = 0;
+    if (!lancius_node_bytes_checked(n, &b)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return 0; }
+    return align32(b);
 }
 
 typedef struct {

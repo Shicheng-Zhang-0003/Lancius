@@ -169,7 +169,8 @@ static void execute_node_math(lancius_node* n) {
         return;
     }
 
-    size_t elements = lancius_node_elements(n); (void)elements;
+    size_t elements = 0;
+    if (!lancius_node_elements_checked(n, &elements)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
 
     // CRITICAL FIX: Execute Cross-Entropy BEFORE the Vision Ops router hijacks it
     if (n->op == LANCIUS_OP_CROSS_ENTROPY) {
@@ -234,7 +235,8 @@ static void execute_node_math(lancius_node* n) {
          * the leading batch dimension.
          */
         size_t batch = n->shape[0];
-        size_t total = lancius_node_elements(n);
+        size_t total = 0;
+        if (!lancius_node_elements_checked(n, &total)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
         size_t hidden = (batch ? total / batch : 0);
 
         kernel_layernorm(n->runtime_data, in, gamma, beta, batch, hidden, 1e-5);
@@ -278,6 +280,13 @@ static void execute_node_math(lancius_node* n) {
             const double* v_cache = (const double*)lancius_kv_cache_v_buffer(cache, NULL);
 
             if (!k_cache || !v_cache || active_seq == 0) {
+                lancius_set_error(LANCIUS_ERROR_NULL_PTR);
+                return;
+            }
+            // Hostile fix: cache heads/dim must match query, else OOB read in kernel
+            if (lancius_kv_cache_n_heads(cache) != n_heads ||
+                lancius_kv_cache_head_dim(cache) != head_dim) {
+                lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH);
                 return;
             }
 
@@ -296,12 +305,16 @@ static void execute_node_math(lancius_node* n) {
         double* k = k_node ? k_node->runtime_data : NULL;
         double* v = v_node ? v_node->runtime_data : NULL;
         if (!k || !v) return;
+        // Hostile fix: validate K/V heads/dim match Q before kernel
+        if (k_node->shape[1] != n_heads || k_node->shape[2] != head_dim ||
+            v_node->shape[1] != n_heads || v_node->shape[2] != head_dim) {
+            lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH);
+            return;
+        }
 
         size_t kv_seq = k_node->shape[0];
 
-        if (q_seq == 1 && kv_seq >= 1) {
-            kernel_attention_kv_cache(n->runtime_data, q, k, v, kv_seq, n_heads, head_dim);
-        } else if (q_seq == kv_seq) {
+        if (q_seq == kv_seq) {
             kernel_attention(n->runtime_data, q, k, v, q_seq, n_heads, head_dim);
         } else {
             fprintf(stderr, "[LANCIUS EXEC FATAL] unsupported attention shape: q_seq=%zu kv_seq=%zu\n", q_seq, kv_seq);
@@ -316,9 +329,16 @@ static void execute_node_math(lancius_node* n) {
             if(!in || !gamma) return;
             /* Same contract as LayerNorm above: norm domain is everything after batch dim. */
             size_t batch = n->shape[0];
-            size_t total = lancius_node_elements(n);
+            size_t total = 0;
+            if (!lancius_node_elements_checked(n, &total)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
             size_t hidden = (batch ? total / batch : 0);
             if (hidden == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+            // Validate gamma matches hidden and total divisible (prevents silent truncation)
+            {
+                size_t ge = 0;
+                if (!lancius_node_elements_checked(n->inputs[1], &ge) || ge != hidden) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+                if (batch == 0 || total % batch != 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+            }
             kernel_rmsnorm(n->runtime_data, in, gamma, batch, hidden, 1e-5);
         }
         else if (n->op == LANCIUS_OP_SWIGLU) {
@@ -332,6 +352,18 @@ static void execute_node_math(lancius_node* n) {
             double* k = n->inputs[1]->runtime_data;
             double* v = n->inputs[2]->runtime_data;
             if(!q || !k || !v) return;
+            // Hostile fix: validate Q/K/V shapes match declared heads/dim before kernel (prevents OOB)
+            {
+                const lancius_node* qn = n->inputs[0];
+                const lancius_node* kn = n->inputs[1];
+                const lancius_node* vn = n->inputs[2];
+                size_t seq = n->shape[0], hq = n->kernel_h, hk = n->kernel_w, dim = n->shape[2];
+                if (qn->ndim != 3 || kn->ndim != 3 || vn->ndim != 3) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
+                if (qn->shape[0] != seq || qn->shape[1] != hq || qn->shape[2] != dim) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+                if (kn->shape[0] != seq || kn->shape[1] != hk || kn->shape[2] != dim) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+                if (vn->shape[0] != seq || vn->shape[1] != hk || vn->shape[2] != dim) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+                if (hq % (hk ? hk : 1) != 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+            }
             kernel_gqa(n->runtime_data, q, k, v, n->shape[0], n->kernel_h, n->kernel_w, n->shape[2]);
         }
 else if (n->op == LANCIUS_OP_ROPE) {
