@@ -71,10 +71,10 @@ def main():
     print("\n================================================================")
     if relative_error < 1e-5:
         print("  ✅ PARITY VERIFIED: Lancius C Engine matches PyTorch exactly!")
-        print("  🏆 The Autodiff, Conv2D, and MatMul kernels are mathematically flawless.")
         print(f"     (Relative error {relative_error:.2e} is well within FP64 precision limits).")
     else:
         print(f"  ❌ DIVERGENCE DETECTED: Relative error {relative_error:.2e} exceeds 1e-5 threshold.")
+        sys.exit(1)
     print("================================================================")
 
 if __name__ == "__main__":

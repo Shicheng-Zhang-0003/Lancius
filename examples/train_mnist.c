@@ -49,10 +49,13 @@ uint8_t* load_labels(const char* path, int* num) {
     return data;
 }
 
-void xavier_init(double* w, size_t rows, size_t cols) {
-    double limit = sqrt(6.0 / (rows + cols));
-    for(size_t i=0; i<rows*cols; i++) {
-        w[i] = ((double)rand() / RAND_MAX * 2.0 - 1.0) * limit;
+void he_init(double* w, size_t total_elements, size_t fan_in) {
+    double std_dev = sqrt(2.0 / fan_in);
+    for(size_t i=0; i<total_elements; i++) {
+        double u1 = ((double)rand() + 1.0) / ((double)RAND_MAX + 2.0);
+        double u2 = ((double)rand() + 1.0) / ((double)RAND_MAX + 2.0);
+        double z = sqrt(-2.0 * log(u1)) * cos(2.0 * M_PI * u2);
+        w[i] = z * std_dev;
     }
 }
 
@@ -102,9 +105,9 @@ int main() {
 
     double* x_batch = (double*)calloc(BATCH_SIZE * 784, sizeof(double));
     double* y_batch = (double*)calloc(BATCH_SIZE * 10, sizeof(double));
-    double* w1 = (double*)calloc(784 * 128, sizeof(double)); xavier_init(w1, 784, 128);
+    double* w1 = (double*)calloc(784 * 128, sizeof(double)); he_init(w1, 784*128, 784);
     double* b1_d = (double*)calloc(1 * 128, sizeof(double));
-    double* w2 = (double*)calloc(128 * 10, sizeof(double)); xavier_init(w2, 128, 10);
+    double* w2 = (double*)calloc(128 * 10, sizeof(double)); he_init(w2, 128*10, 128);
     double* b2_d = (double*)calloc(1 * 10, sizeof(double));
 
     double* m_w1 = (double*)calloc(784*128, sizeof(double)); double* v_w1 = (double*)calloc(784*128, sizeof(double));
@@ -118,15 +121,40 @@ int main() {
     double* grad_b2 = (double*)calloc(1*10, sizeof(double));
 
     lancius_node *nW1=NULL, *nW2=NULL, *nb1=NULL, *nb2=NULL;
+    // Hostile fix: bind by buffer identity (forward copies share runtime_data with originals),
+    // not by shape-sniffing (breaks if two params share a shape).
+    for(uint32_t i=0; i<tg->graph->node_count; i++) {
+        lancius_node* n = tg->graph->nodes[i];
+        if(n->op == LANCIUS_OP_INPUT && n->runtime_data) {
+            if(n->runtime_data == (double*)x_batch) continue;
+            else if(n->runtime_data == (double*)y_batch) continue;
+            else if(n->runtime_data == w1) nW1 = n;
+            else if(n->runtime_data == b1_d) nb1 = n;
+            else if(n->runtime_data == w2) nW2 = n;
+            else if(n->runtime_data == b2_d) nb2 = n;
+        }
+    }
+    // Fallback to shape-sniffing only if identity failed (should not happen)
+    if(!nW1 || !nW2 || !nb1 || !nb2) {
     for(uint32_t i=0; i<tg->graph->node_count; i++) {
         lancius_node* n = tg->graph->nodes[i];
         if(n->op == LANCIUS_OP_INPUT) {
             if(n->shape[0] == BATCH_SIZE && n->shape[1] == 784) n->runtime_data = x_batch;
             else if(n->shape[0] == BATCH_SIZE && n->shape[1] == 10) n->runtime_data = y_batch;
-            else if(n->shape[0] == 784 && n->shape[1] == 128) { n->runtime_data = w1; nW1 = n; }
-            else if(n->shape[0] == 1 && n->shape[1] == 128) { n->runtime_data = b1_d; nb1 = n; }
-            else if(n->shape[0] == 128 && n->shape[1] == 10) { n->runtime_data = w2; nW2 = n; }
-            else if(n->shape[0] == 1 && n->shape[1] == 10) { n->runtime_data = b2_d; nb2 = n; }
+            else if(n->shape[0] == 784 && n->shape[1] == 128) { if(!nW1){ n->runtime_data = w1; nW1 = n; } }
+            else if(n->shape[0] == 1 && n->shape[1] == 128) { if(!nb1){ n->runtime_data = b1_d; nb1 = n; } }
+            else if(n->shape[0] == 128 && n->shape[1] == 10) { if(!nW2){ n->runtime_data = w2; nW2 = n; } }
+            else if(n->shape[0] == 1 && n->shape[1] == 10) { if(!nb2){ n->runtime_data = b2_d; nb2 = n; } }
+        }
+    }
+    } else {
+        // Identity path already bound; ensure x/y bound (they are distinct buffers, bind by shape)
+        for(uint32_t i=0; i<tg->graph->node_count; i++) {
+            lancius_node* n = tg->graph->nodes[i];
+            if(n->op == LANCIUS_OP_INPUT && !n->runtime_data) {
+                if(n->shape[0] == BATCH_SIZE && n->shape[1] == 784) n->runtime_data = x_batch;
+                else if(n->shape[0] == BATCH_SIZE && n->shape[1] == 10) n->runtime_data = y_batch;
+            }
         }
     }
 
@@ -158,7 +186,10 @@ int main() {
             lancius_schedule_execute(sched, scratch);
             step++;
 
-            // Extract gradients (Autodiff already scaled them by 1/640 via the IR graph!)
+            // Hostile fix: zero grad buffers per batch (a missing grad must not reuse last batch).
+            memset(grad_w1, 0, 784*128*sizeof(double)); memset(grad_b1, 0, 1*128*sizeof(double));
+            memset(grad_w2, 0, 128*10*sizeof(double)); memset(grad_b2, 0, 1*10*sizeof(double));
+            // Extract gradients (Autodiff scales by 1/R = 1/64 via CE-mean, not 1/640)
             if(tg->grad_nodes[nW1->id] && tg->grad_nodes[nW1->id]->runtime_data) memcpy(grad_w1, tg->grad_nodes[nW1->id]->runtime_data, 784*128*sizeof(double));
             if(tg->grad_nodes[nb1->id] && tg->grad_nodes[nb1->id]->runtime_data) memcpy(grad_b1, tg->grad_nodes[nb1->id]->runtime_data, 1*128*sizeof(double));
             if(tg->grad_nodes[nW2->id] && tg->grad_nodes[nW2->id]->runtime_data) memcpy(grad_w2, tg->grad_nodes[nW2->id]->runtime_data, 128*10*sizeof(double));
