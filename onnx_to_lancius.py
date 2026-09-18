@@ -21,10 +21,16 @@ def get_shape(tensor_type):
     for dim in tensor_type.shape.dim:
         if dim.dim_value > 0:
             shape.append(dim.dim_value)
+        elif dim.dim_param:
+            # Hostile fix: symbolic dim (e.g. dynamic batch) was silently frozen to 1.
+            # Fail loud instead of emitting a silently wrong static shape.
+            raise ValueError(f"Symbolic dim '{dim.dim_param}' requires explicit batch resolution; refusing silent freeze to 1.")
         else:
             shape.append(1)
     while len(shape) < 4:
         shape.append(1)
+    if len(tensor_type.shape.dim) > 4:
+        raise ValueError(f"Rank {len(tensor_type.shape.dim)} > 4 not supported; refusing silent truncation.")
     return shape[:4]
 
 def convert(onnx_path, lancius_path):
@@ -107,17 +113,59 @@ def convert(onnx_path, lancius_path):
                 target_dims = initializer_map[shape_tensor_name].tolist()
 
             if target_dims is not None:
+                # Hostile fix: ONNX semantics — 0 means copy input dim, -1 means infer.
+                # Previous code conflated both as infer (d<=0 -> resolved_neg). Correct:
+                if node.input[0] not in name_to_id:
+                    raise ValueError(f"Reshape '{node.output[0]}' input not mapped; cannot resolve copy dims.")
+                in_id = name_to_id[node.input[0]]
+                in_shape_full = None
+                for n in nodes:
+                    if n['id'] == in_id:
+                        in_shape_full = list(n['shape'])
+                        break
+                # total_known over positive dims only; -1 inferred; 0 copied
                 resolved_dims = []
                 total_known = 1
-                has_neg = False
+                neg_count = 0
                 for d in target_dims:
                     if d > 0:
                         total_known *= d
+                    elif d == -1:
+                        neg_count += 1
+                    elif d == 0:
+                        pass
                     else:
-                        has_neg = True
-
+                        raise ValueError(f"Reshape '{node.output[0]}' has illegal dim {d}.")
+                if neg_count > 1:
+                    raise ValueError(f"Reshape '{node.output[0]}' has {neg_count} infer dims; at most one -1 allowed.")
+                # resolve copy dims first
+                tmp_dims = []
+                for idx, d in enumerate(target_dims):
+                    if d == 0:
+                        # copy input dim at same rank position (right-aligned if ranks differ)
+                        # For converter's 4-padded shapes, map via trailing alignment
+                        rank_in = len([s for s in in_shape_full if s > 0]) if in_shape_full else 0
+                        # simplest correct for supported ranks 2/4: copy from input's corresponding dim
+                        # Use positional copy when ranks match, else fail loud
+                        if in_shape_full is None or idx >= len(target_dims):
+                            raise ValueError(f"Reshape copy-dim failed for '{node.output[0]}'.")
+                        # input dims in converter are 4-padded; target rank may be 2 or 4
+                        # Align: for rank-2 target [d0,d1], d0 copies in_shape_full[0] if present
+                        src = None
+                        if len(target_dims) == 2:
+                            src = [in_shape_full[0], in_shape_full[1]][idx] if idx < 2 else None
+                        elif len(target_dims) == 4:
+                            src = in_shape_full[idx] if idx < 4 else None
+                        if src is None or src <= 0:
+                            raise ValueError(f"Reshape copy-dim 0 at pos {idx} unresolvable for '{node.output[0]}'.")
+                        tmp_dims.append(src)
+                        total_known *= src
+                    elif d == -1:
+                        tmp_dims.append(-1)
+                    else:
+                        tmp_dims.append(d)
                 resolved_neg = None
-                if has_neg and node.input[0] in name_to_id:
+                if neg_count == 1 and node.input[0] in name_to_id:
                     in_id = name_to_id[node.input[0]]
                     for n in nodes:
                         if n['id'] == in_id:
@@ -127,14 +175,9 @@ def convert(onnx_path, lancius_path):
                             if total_known > 0 and total_in % total_known == 0:
                                 resolved_neg = total_in // total_known
                             break
-                if has_neg and resolved_neg is None:
+                if neg_count == 1 and resolved_neg is None:
                     raise ValueError(f"Reshape '{node.output[0]}' has dynamic dim {target_dims} that cannot be resolved from input.")
-
-                for d in target_dims:
-                    if d <= 0:
-                        resolved_dims.append(resolved_neg)
-                    else:
-                        resolved_dims.append(d)
+                resolved_dims = [resolved_neg if d == -1 else d for d in tmp_dims]
 
                 if len(resolved_dims) == 2:
                     out_shape = [1, resolved_dims[1], 1, 1]
@@ -155,24 +198,52 @@ def convert(onnx_path, lancius_path):
         if node.op_type == 'Conv':
             for attr in node.attribute:
                 if attr.name == 'kernel_shape':
+                    if len(attr.ints) != 2:
+                        raise ValueError(f"Conv '{node.output[0]}' kernel_shape rank {len(attr.ints)} != 2.")
                     meta[0], meta[1] = attr.ints[0], attr.ints[1]
                 if attr.name == 'strides':
+                    if len(attr.ints) >= 2 and attr.ints[0] != attr.ints[1]:
+                        raise ValueError(f"Conv '{node.output[0]}' asymmetric strides {list(attr.ints)} not supported; refusing silent [0]-only.")
                     meta[2] = attr.ints[0]
                 if attr.name == 'pads':
-                    meta[3] = attr.ints[0]
+                    # ONNX pads = [begin_h,begin_w,...,end_h,end_w] or [h,w]; require symmetric
+                    pads = list(attr.ints)
+                    if len(pads) == 4 and not (pads[0] == pads[2] and pads[1] == pads[3]):
+                        raise ValueError(f"Conv '{node.output[0]}' asymmetric pads {pads} not supported.")
+                    if len(pads) >= 2 and pads[0] != pads[1] and len(pads) == 2:
+                        # 2-elem pads [h,w] may differ per axis; C supports single pad -> require equal
+                        raise ValueError(f"Conv '{node.output[0]}' asymmetric pads {pads} need single pad.")
+                    meta[3] = pads[0]
         elif node.op_type == 'MaxPool':
             for attr in node.attribute:
                 if attr.name == 'kernel_shape':
-                    meta[0], meta[2] = attr.ints[0], attr.ints[0]
+                    if len(attr.ints) != 2 or attr.ints[0] != attr.ints[1]:
+                        raise ValueError(f"MaxPool '{node.output[0]}' non-square kernel {list(attr.ints)} not supported.")
+                    meta[0], meta[1] = attr.ints[0], attr.ints[1]
                 if attr.name == 'strides':
+                    if len(attr.ints) >= 2 and attr.ints[0] != attr.ints[1]:
+                        raise ValueError(f"MaxPool '{node.output[0]}' asymmetric strides {list(attr.ints)}.")
                     meta[2] = attr.ints[0]
 
         # Decompose Gemm into MatMul + Add(bias) with Transpose support
         if node.op_type == 'Gemm' and len(node.input) >= 2:
             transB = 0
+            alpha = 1.0
+            beta = 1.0
+            transA = 0
             for attr in node.attribute:
                 if attr.name == 'transB':
                     transB = attr.i
+                if attr.name == 'transA':
+                    transA = attr.i
+                if attr.name == 'alpha':
+                    alpha = attr.f
+                if attr.name == 'beta':
+                    beta = attr.f
+            if transA != 0:
+                raise ValueError(f"Gemm '{node.output[0]}' transA=1 not supported; refusing silent wrong math.")
+            if abs(alpha - 1.0) > 1e-12 or abs(beta - 1.0) > 1e-12:
+                raise ValueError(f"Gemm '{node.output[0]}' alpha={alpha} beta={beta} != 1; refusing silent scale drop.")
 
             matmul_inputs = [name_to_id[i] for i in node.input[:2]]
             if len(matmul_inputs) != 2:
@@ -181,16 +252,47 @@ def convert(onnx_path, lancius_path):
             if transB == 1 and len(matmul_inputs) >= 2:
                 w_name = node.input[1]
                 w_id = name_to_id[w_name]
+                # Hostile fix: clone-on-write. Mutating shared initializer corrupts earlier uses.
+                # If weight already used (transposed or not), clone a fresh node for this use.
+                w_node = None
                 for n in nodes:
                     if n['id'] == w_id:
-                        old_shape = n['shape']
-                        n['shape'] = [old_shape[1], old_shape[0], 1, 1]
-                        n['ndim'] = 2
-                        if n['weights']:
-                            data = np.frombuffer(n['weights'], dtype=np.float64).reshape(old_shape[0], old_shape[1])
-                            data_T = np.ascontiguousarray(data.T)
-                            n['weights'] = data_T.tobytes()
+                        w_node = n
                         break
+                if w_node is None:
+                    raise ValueError(f"Gemm '{node.output[0]}' weight '{w_name}' not found.")
+                if w_node.get('_transposed_for') is not None or w_node.get('_used', False):
+                    import copy as _copy
+                    nn = _copy.deepcopy(w_node)
+                    # deep-copied weights bytes are immutable; safe to share buffer copy
+                    nn['id'] = next_id
+                    next_id += 1
+                    # transpose the clone
+                    old_shape = list(nn['shape'])
+                    nn['shape'] = [old_shape[1], old_shape[0], 1, 1]
+                    nn['ndim'] = 2
+                    if nn['weights']:
+                        data = np.frombuffer(nn['weights'], dtype=np.float64).reshape(old_shape[0], old_shape[1])
+                        nn['weights'] = np.ascontiguousarray(data.T).tobytes()
+                    nn['_transposed_for'] = node.output[0]
+                    nn['_used'] = True
+                    nodes.append(nn)
+                    matmul_inputs[1] = nn['id']
+                    name_to_id[w_name + f"__T_{node.output[0]}"] = nn['id']
+                else:
+                    old_shape = w_node['shape']
+                    w_node['shape'] = [old_shape[1], old_shape[0], 1, 1]
+                    w_node['ndim'] = 2
+                    if w_node['weights']:
+                        data = np.frombuffer(w_node['weights'], dtype=np.float64).reshape(old_shape[0], old_shape[1])
+                        data_T = np.ascontiguousarray(data.T)
+                        w_node['weights'] = data_T.tobytes()
+                    w_node['_transposed_for'] = node.output[0]
+                    w_node['_used'] = True
+                # mark all weight nodes used to trigger clone on next reuse
+                for n in nodes:
+                    if n['id'] == w_id:
+                        n['_used'] = True
 
             nodes.append({
                 'id': next_id, 'op': 6, 'ndim': len([s for s in out_shape if s > 0]) if node.op_type != 'Gemm' else 2, 'shape': out_shape,
