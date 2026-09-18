@@ -46,10 +46,11 @@ def main():
 
     net.eval()
     dummy_input = torch.randn(1, 3, 32, 32)
+    # Hostile fix: static batch export. Dynamic batch was silently frozen to 1 by the
+    # converter (symbolic dim -> 1) producing a silently wrong model. Export static.
     torch.onnx.export(net, dummy_input, "trained_lenet.onnx",
                       input_names=['input'], output_names=['output'],
-                      opset_version=17, do_constant_folding=True,
-                      dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
+                      opset_version=17, do_constant_folding=True)
     print("✅ Exported trained model to trained_lenet.onnx")
 
 if __name__ == "__main__":
