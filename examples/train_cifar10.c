@@ -172,7 +172,9 @@ int main() {
             memset(y_batch, 0, BATCH_SIZE * 10 * sizeof(double));
             for(int b=0; b<BATCH_SIZE; b++) {
                 int idx = indices[i+b];
-                for(int p=0; p<3072; p++) x_batch[b*3072 + p] = (tr_X[idx*3072 + p] / 255.0) - 0.5;
+                // Hostile fix: align with train_1_epoch.py Normalize((0.5,),(0.5,)) => (x-0.5)/0.5 in [-1,1].
+                // Was (x/255-0.5) in [-0.5,0.5] (half scale, LR mistransfer + parity gap).
+                for(int p=0; p<3072; p++) x_batch[b*3072 + p] = ((tr_X[idx*3072 + p] / 255.0) - 0.5) / 0.5;
 
                 if (rand() % 2 == 0) {
                     for(int ch=0; ch<3; ch++) {
@@ -244,8 +246,10 @@ int main() {
             adam_step(b2_d, grad_b2, m_b2, v_b2, 10, lr, 0.9, 0.999, 1e-8, step);
 
             if (tg->loss_node && tg->loss_node->runtime_data) {
-                double l = tg->loss_node->runtime_data[0];
+                double l_raw = tg->loss_node->runtime_data[0];
+                double l = l_raw;
                 if (l < 0.0 || isnan(l) || l > 1000.0) l = 2.3025;
+                if (l != l_raw) fprintf(stderr, "[TRAIN] clamped loss raw=%g -> %g\n", l_raw, l);
                 epoch_loss += l;
             }
             batches++;
@@ -267,11 +271,14 @@ int main() {
 
     printf("\n[5/5] Evaluating on 10,000 Test Images...\n");
     int correct = 0;
+    // Hostile fix: track A2 (logits) by pointer identity via loss inputs[0].
+    // A2 is fwd_to_full[orig A2 id]; loss_node is full CE; its inputs[0] is full A2.
+    lancius_node* A2_full = (tg->loss_node && tg->loss_node->input_count > 0) ? (lancius_node*)tg->loss_node->inputs[0] : NULL;
     for(int i=0; i<=NUM_TEST - BATCH_SIZE; i+=BATCH_SIZE) {
         memset(y_batch, 0, BATCH_SIZE * 10 * sizeof(double));
         for(int b=0; b<BATCH_SIZE; b++) {
             int idx = i+b;
-            for(int p=0; p<3072; p++) x_batch[b*3072 + p] = (te_X[idx*3072 + p] / 255.0) - 0.5;
+            for(int p=0; p<3072; p++) x_batch[b*3072 + p] = ((te_X[idx*3072 + p] / 255.0) - 0.5) / 0.5;
         }
         for(uint32_t w=0; w<sched->wave_count; w++) {
             for(uint32_t k=0; k<sched->waves[w].node_count; k++) {
@@ -281,14 +288,12 @@ int main() {
         }
         lancius_schedule_execute(sched, scratch);
 
-        lancius_node* P_node = NULL;
-        for(uint32_t k=0; k<tg->graph->node_count; k++) {
-            if(tg->graph->nodes[k]->op == LANCIUS_OP_ADD && tg->graph->nodes[k]->shape[1] == 10) { P_node = tg->graph->nodes[k]; break; }
-        }
+        lancius_node* P_node = A2_full;
 
         for(int b=0; b<BATCH_SIZE; b++) {
             int pred = 0; double max_logit = -1e9;
             for(int c=0; c<10; c++) {
+                if(!P_node || !P_node->runtime_data) break;
                 if(P_node->runtime_data[b*10 + c] > max_logit) { max_logit = P_node->runtime_data[b*10 + c]; pred = c; }
             }
             if(pred == te_Y[i+b]) correct++;
