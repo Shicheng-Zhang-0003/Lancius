@@ -74,11 +74,12 @@ int main() {
         printf("\n  ❌ DIVERGENCE DETECTED: Threadpool caused race conditions!\n");
     }
 
+    int _rc = (max_diff1 == 0.0 && max_diff2 == 0.0) ? 0 : 1;
     free(seq_out1); free(seq_out2);
     free(in1->runtime_data); free(in2->runtime_data); free(in3->runtime_data);
     lancius_schedule_destroy(sched);
     lancius_arena_destroy(scratch);
     lancius_graph_destroy(g);
 
-    return 0;
+    return _rc;
 }

@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 int main() {
+    int _failures = 0;
     printf("================================================================\n");
     printf("  LANCIUS v10S: PRODUCTION FFI & API AUDIT                     \n");
     printf("================================================================\n\n");
@@ -78,7 +79,7 @@ if (lancius_get_last_error() == LANCIUS_ERR_SHAPE_MISMATCH) {
     printf("  ✅ FFI correctly caught Shape Mismatch.\n");
     printf("  🛡️ Error String: \"%s\"\n", lancius_get_error_string(lancius_get_last_error()));
 } else {
-    printf("  ❌ FFI FAILED to catch Shape Mismatch!\n");
+    printf("  ❌ FFI FAILED to catch Shape Mismatch!\n"); _failures++;
 }
 
 lancius_graph_destroy_stable(g);
@@ -87,5 +88,5 @@ lancius_graph_destroy_stable(g);
     printf("\n================================================================\n");
     printf("  V1.0 PRODUCTION API VERIFIED. READY FOR GITHUB RELEASE.      \n");
     printf("================================================================\n");
-    return 0;
+    return _failures ? 1 : 0;
 }

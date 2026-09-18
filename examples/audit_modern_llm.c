@@ -96,7 +96,11 @@ int main() {
     lancius_arena_destroy(scratch);
 
     printf("\n================================================================\n");
+    if (rms_pass && swiglu_pass) {
     printf("  MODERN LLM PARITY VERIFIED. READY FOR v10S STABLE.           \n");
+    } else {
+    printf("  MODERN LLM PARITY FAILED.                                   \n");
+    }
     printf("================================================================\n");
-    return 0;
+    return (rms_pass && swiglu_pass) ? 0 : 1;
 }
