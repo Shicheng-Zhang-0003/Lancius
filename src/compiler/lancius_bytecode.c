@@ -106,8 +106,12 @@ int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lanc
         bool is_unary = (op == LANCIUS_BC_RELU || op == LANCIUS_BC_BROADCAST || op == LANCIUS_BC_SOFTMAX || op == LANCIUS_BC_SUM);
         if (!is_unary) r_b = prog->code[pc++];
 
-        size_t elements = prog->rows[r_out] * prog->cols[r_out];
-        regs[r_out] = (double*)lancius_arena_alloc(scratch, elements * sizeof(double), 32);
+        if (r_out >= prog->num_regs || r_a >= prog->num_regs || (!is_unary && r_b >= prog->num_regs)) return -1;
+        size_t elements = 0;
+        if (prog->rows[r_out] && prog->cols[r_out] > SIZE_MAX / prog->rows[r_out]) return -1;
+        elements = prog->rows[r_out] * prog->cols[r_out];
+        if (elements && elements > SIZE_MAX / sizeof(double)) return -1;
+        regs[r_out] = (double*)lancius_arena_alloc(scratch, elements ? elements * sizeof(double) : 32, 32);
         if (!regs[r_out]) return -1; /* v11S C1 fix: OOM is fatal, not silent */
 
         double* a = regs[r_a];
@@ -165,6 +169,7 @@ int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lanc
                 for(size_t c=1; c<C; c++) if(a[r*C+c] > max_val) max_val = a[r*C+c];
                 double sum = 0.0;
                 for(size_t c=0; c<C; c++) { o[r*C+c] = exp(a[r*C+c] - max_val); sum += o[r*C+c]; }
+                if (!(sum > 0.0) || sum != sum) return -1;
                 for(size_t c=0; c<C; c++) o[r*C+c] /= sum;
             }
         } else if (op == LANCIUS_BC_SUM) {

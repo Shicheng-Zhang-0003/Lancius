@@ -1,4 +1,5 @@
 #include "lancius/lancius_kernels.h"
+#include "lancius/lancius_error.h"
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -128,7 +129,8 @@ void kernel_conv2d_bwd_w(double* out, const double* grad, const double* in,
     #pragma omp parallel
     {
         double* local_w = (double*)calloc(w_elems, sizeof(double));
-        if(local_w) {
+        if(!local_w) { lancius_set_error(LANCIUS_ERROR_OOM); }
+        else {
             #pragma omp for collapse(2) schedule(static)
             for(size_t ni=0; ni<N; ni++) {
                 for(size_t co=0; co<C_out; co++) {
@@ -234,7 +236,7 @@ void kernel_conv2d_int8_fwd(double* out, const int8_t* in, const int8_t* w, doub
         for(size_t co=0; co<C_out; co++) {
             for(size_t ho=0; ho<H_out; ho++) {
                 for(size_t wo=0; wo<W_out; wo++) {
-                    int32_t sum = 0; // 32-bit accumulator prevents overflow
+                    int64_t sum = 0; // 64-bit accumulator: int32 overflows at 132104 terms (K*C*Kh*Kw can exceed for LLM GEMM)
                     for(size_t ci=0; ci<C_in; ci++) {
                         for(size_t kh=0; kh<K_h; kh++) {
                             for(size_t kw=0; kw<K_w; kw++) {
@@ -243,7 +245,7 @@ void kernel_conv2d_int8_fwd(double* out, const int8_t* in, const int8_t* w, doub
                                 if(ih >= 0 && ih < (int)H_in && iw >= 0 && iw < (int)W_in) {
                                     size_t in_idx = ni*(C_in*H_in*W_in) + ci*(H_in*W_in) + ih*W_in + iw;
                                     size_t w_idx = co*(C_in*K_h*K_w) + ci*(K_h*K_w) + kh*K_w + kw;
-                                    sum += (int32_t)in[in_idx] * (int32_t)w[w_idx];
+                                    sum += (int64_t)in[in_idx] * (int64_t)w[w_idx];
                                 }
                             }
                         }
@@ -336,7 +338,8 @@ void kernel_attention(double* out, const double* q, const double* k, const doubl
     {
         double* o_i = (double*)calloc(head_dim, sizeof(double));
         double scale = 1.0 / sqrt((double)head_dim);
-    if (o_i) { /* v11S C2 fix: OOM guard */
+    if (!o_i) { lancius_set_error(LANCIUS_ERROR_OOM); }
+    else { /* v11S C2 fix: OOM guard now reports */
 
         #pragma omp for collapse(2) schedule(static)
         for (size_t i = 0; i < seq_len; i++) {
@@ -479,7 +482,8 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
     #pragma omp parallel
     {
         double* o_i = (double*)calloc(head_dim, sizeof(double));
-    if (o_i) { /* v11S C2 fix: OOM guard */
+    if (!o_i) { lancius_set_error(LANCIUS_ERROR_OOM); }
+    else { /* OOM now reported */
     #pragma omp for collapse(2) schedule(static)
         for (size_t i = 0; i < seq_len; i++) {
             for (size_t hq = 0; hq < n_heads_q; hq++) {

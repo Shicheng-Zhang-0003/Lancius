@@ -381,7 +381,6 @@ else if (n->op == LANCIUS_OP_ROPE) {
         // V10S ONNX Mixed-Precision Add (Biases)
         if (b_int8 && a) {
             double scale_b = n->inputs[1]->scale;
-            size_t elements = lancius_node_elements(n); (void)elements;
             size_t cols = n->shape[1];
             size_t rows = n->shape[0];
             for(size_t r=0; r<rows; r++) {
@@ -437,9 +436,9 @@ else if (n->op == LANCIUS_OP_ROPE) {
         if (b_int8 && a) {
             size_t M = n->inputs[0]->shape[0]; size_t K = n->inputs[0]->shape[1]; size_t N = n->inputs[1]->shape[1];
             if (M == 0 || K == 0 || N == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
-            if (K > SIZE_MAX / N && 0) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
-            if (M > SIZE_MAX / K) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
-            if (M > SIZE_MAX / N) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+            if (K > SIZE_MAX / (N ? N : 1)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+            if (M > SIZE_MAX / (K ? K : 1)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+            if (N && M > SIZE_MAX / N) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
             if (M * N > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
             double scale_b = n->inputs[1]->scale;
             double max_a = 0.0;
@@ -460,9 +459,9 @@ else if (n->op == LANCIUS_OP_ROPE) {
             double final_scale = scale_a * scale_b;
             for(size_t r=0; r<M; r++) {
                 for(size_t c=0; c<N; c++) {
-                    int32_t sum = 0;
+                    int64_t sum = 0;
                     for(size_t k=0; k<K; k++) {
-                        sum += (int32_t)a_int8[r*K + k] * (int32_t)b_int8[k*N + c];
+                        sum += (int64_t)a_int8[r*K + k] * (int64_t)b_int8[k*N + c];
                     }
                     n->runtime_data[r*N + c] = (double)sum * final_scale;
                 }
@@ -573,6 +572,7 @@ else if (n->op == LANCIUS_OP_ROPE) {
             for(size_t c=1; c<C; c++) if(a[r*C+c] > max_val) max_val = a[r*C+c];
             double sum = 0.0;
             for(size_t c=0; c<C; c++) { n->runtime_data[r*C+c] = exp(a[r*C+c] - max_val); sum += n->runtime_data[r*C+c]; }
+            if (!(sum > 0.0) || sum != sum) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
             for(size_t c=0; c<C; c++) n->runtime_data[r*C+c] /= sum;
         }
     }
