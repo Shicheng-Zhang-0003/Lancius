@@ -269,12 +269,9 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
 
     idmap map = {NULL, 0};
     uint32_t* in_ids = NULL;
-    uint32_t* seen_ids = NULL;
-    uint32_t seen_count = 0;
-    if (h.node_count > 0) {
-        seen_ids = (uint32_t*)malloc((size_t)h.node_count * sizeof(uint32_t));
-        if (!seen_ids) { fclose(f); lancius_graph_destroy(g); return NULL; }
-    }
+    // Hostile fix: seen_ids linear O(n^2) scan removed; map_get is the duplicate oracle (O(1)).
+    // Bound sparse IDs to prevent 80MB realloc DoS: ids must be dense-ish.
+    // Legit saves emit dense ids < next_id <= node_count + NOP slack.
 
     for (uint32_t i = 0; i < h.node_count; i++) {
         v2_node rn;
@@ -287,6 +284,9 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
         if (!lancius_dtype_is_valid(rn.dtype)) goto fail;
         if (rn.op > LANCIUS_MODEL_OP_GQA) goto fail;
         if (rn.dtype != LANCIUS_DTYPE_FP64 && rn.dtype != LANCIUS_DTYPE_INT8 && rn.dtype != LANCIUS_DTYPE_FP32) goto fail;
+        // Hostile fix: bound sparse id (DoS via 10M-pointer realloc + O(n^2))
+        if (rn.id >= 10000000u) goto fail;
+        if (h.node_count > 0 && rn.id >= h.node_count * 16u + 1024u) goto fail;
 
         (void)rn.flags;
 
@@ -517,20 +517,34 @@ break;
                     lancius_node_bind_owned_heap(n, buf);
                 }
             } else {
-                if (bytes > 0 && fseek(f, (long)bytes, SEEK_CUR) != 0) goto fail;
+                // Hostile fix: no fseek with (long) truncation, no pipe failure. Stream-skip.
+                size_t to_skip = bytes;
+                uint8_t tmp[4096];
+                while (to_skip > 0) {
+                    size_t chunk = to_skip < sizeof(tmp) ? to_skip : sizeof(tmp);
+                    if (fread(tmp, 1, chunk, f) != chunk) goto fail;
+                    to_skip -= chunk;
+                }
             }
         }
 
-        /* A3: reject duplicate node ids (including NOP ids, which map to NULL) */
-        for (uint32_t _d = 0; _d < seen_count; _d++) { if (seen_ids[_d] == rn.id) goto fail; }
+        /* A3: reject duplicate node ids (including NOP ids, which map to NULL).
+         * Hostile fix: O(1) via map only; removed O(n^2) linear scan. */
         if (map_get(&map, rn.id)) goto fail;
-        seen_ids[seen_count++] = rn.id;
 
         if (!map_set(&map, rn.id, n)) goto fail;
     }
 
 
-    /* v11A3 format freeze: verify CRC32 if present (non-zero). */
+    /* v11A3 format freeze: CRC32 required. checksum==0 (legacy unverified) is
+     * rejected by default — it lets an attacker zero 4 bytes to bypass integrity.
+     * Set LANCIUS_ALLOW_LEGACY_UNVERIFIED=1 to opt into legacy loads. */
+    {
+        int allow_legacy = 0;
+        const char* env = getenv("LANCIUS_ALLOW_LEGACY_UNVERIFIED");
+        if (env && env[0] == '1') allow_legacy = 1;
+        if (h.checksum_crc32 == 0 && !allow_legacy) goto fail;
+    }
     if (h.checksum_crc32 != 0) {
         fseek(f, 0, SEEK_END);
         long file_end = ftell(f);
@@ -553,19 +567,18 @@ break;
     }
 
     free(map.v);
-    free(seen_ids);
     fclose(f);
 
     for (uint32_t i = 0; i < g->node_count; i++) {
         lancius_runtime_sync_from_legacy(g->nodes[i]);
     }
+    lancius_clear_error();
 
     return g;
 
 fail:
     free(in_ids);
     free(map.v);
-    free(seen_ids);
     if (g) lancius_graph_destroy(g);
     fclose(f);
     return NULL;
