@@ -1,5 +1,38 @@
 # Lancius Changelog
 
+## v12A2 (unreleased) — numerical correctness batch
+
+Hostile audit of every numeric path; each confirmed defect fixed and
+re-proven by independent execution (no format / stable-ABI break beyond
+additive error codes):
+
+- Scheduler/IR/VM: N-dim broadcast `ADD`/`SUB`/`MUL` (IR emits
+  `max`-per-dim output shape; scheduler + VM execute strided broadcast;
+  was flat-loop wrong + OOB); softmax zero-sum guard in scheduler and VM.
+- Persistence: v2 CRC required by default (`LANCIUS_ALLOW_LEGACY_UNVERIFIED=1`
+  opts into legacy unverified loads); O(1) duplicate-ID detection;
+  sparse-ID bounds; streaming weight skip; sticky-error clearing on success.
+- Runtime: attention cache/heads/dim validation, cache-less long-context
+  decode rejected, GQA Q/K/V shape checks, RMSNorm gamma/divisibility
+  checks, `_checked` counters on execution/planning/copy paths,
+  `FLATTEN`/`RESHAPE` element-equality verification.
+- Kernels: INT8 `int64` accumulators (conv + mixed-precision matmul), real
+  overflow guards (dead `&& 0` removed), OOM error reporting for
+  thread-local and Flash/GQA scratch buffers.
+- Core: arena failures carry error codes; `dtype_size(invalid) = 0` with
+  `bytes_checked` rejection; `checked_product_shape(NULL)` fails.
+- Stable API: additive error codes `GRAPH_CYCLE`/`OVERFLOW`/`NUMERICAL`/
+  `INVALID_HANDLE` replace lossy collapsing.
+- ONNX: Reshape `0`-copy vs `-1`-infer, Gemm `transA`/`alpha`/`beta`
+  rejection + transpose clone-on-write, symmetric-only Conv pads/strides
+  and square-only MaxPool, symbolic-dim rejection, static-batch export.
+- Training: CIFAR-10 `[-1,1]` normalization matching PyTorch reference,
+  He init on MNIST, identity-based parameter binding, per-batch grad
+  zeroing, identity-tracked eval logits, raw-vs-clamped loss logging.
+- Audits: `audit_modern_llm`, `audit_flash_attention`,
+  `audit_threadpool_parity`, `audit_ffi`, `audit_pytorch_parity.py` now
+  propagate failures via exit codes.
+
 ## v12R1 (unreleased) — hardening batch — 2026-09-12
 
 Bottom-up correctness pass over all layers (no format / stable-ABI break):
