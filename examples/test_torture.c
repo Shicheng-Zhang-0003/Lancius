@@ -57,8 +57,28 @@ int test_arena_invariants() {
 
 int test_cyclic_graph() {
     printf("[TORTURE] Testing Cyclic Graph Scheduling...\n");
-    printf("  ✅ PASS: Cyclic graphs are structurally prevented by immutable SSA API.\n");
-    return 1;
+    /* Despot honesty: previously a printf-stub. Now prove scheduler rejects
+       a genuinely disconnected/cyclic structure instead of claiming SSA prevents it. */
+    lancius_graph* g = lancius_graph_create();
+    if (!g) { printf("  ❌ FAIL: graph create OOM.\n"); return 0; }
+    lancius_node* a = lancius_input(g, 2, 2);
+    lancius_node* b = lancius_relu(g, a);
+    if (!a || !b) { printf("  ❌ FAIL: builder rejected valid chain.\n"); lancius_graph_destroy(g); return 0; }
+    /* Corrupt connectivity: point b back at itself to simulate a cycle. */
+    const lancius_node* saved = b->inputs[0];
+    b->inputs[0] = b;
+    lancius_schedule* s = lancius_ir_schedule(g);
+    b->inputs[0] = saved;
+    if (s == NULL) {
+        printf("  ✅ PASS: scheduler refused cyclic/disconnected graph.\n");
+        lancius_graph_destroy(g);
+        return 1;
+    }
+    /* If scheduler accepted, it must still execute without crashing; but that is a FAIL. */
+    printf("  ❌ FAIL: scheduler accepted a cyclic graph.\n");
+    lancius_schedule_destroy(s);
+    lancius_graph_destroy(g);
+    return 0;
 }
 
 int main() {
@@ -76,5 +96,5 @@ int main() {
     printf("  TORTURE SUITE COMPLETE: %d PASSED | %d FAILED\n", pass, 3 - pass);
     printf("================================================================\n");
 
-    return 0;
+    return (pass == 3) ? 0 : 1;
 }

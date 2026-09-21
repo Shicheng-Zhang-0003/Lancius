@@ -87,7 +87,17 @@ int main() {
     lancius_schedule* sched3 = lancius_ir_schedule(g3);
     lancius_schedule_execute(sched3, scratch);
 
-    printf("  ✅ GQA Executed Successfully (Heads: %zu Q, %zu KV)\n", hq, hk);
+    /* Despot truth: GQA with uniform 1.0 inputs must yield 1.0 outputs
+       (equal softmax 0.5/0.5 over two identical V rows). Execution alone is not parity. */
+    int gqa_pass = 1;
+    if (!gqa || !gqa->runtime_data) gqa_pass = 0;
+    else {
+        for (size_t i = 0; i < seq * hq * dim; i++) {
+            if (fabs(gqa->runtime_data[i] - 1.0) > 1e-9) { gqa_pass = 0; break; }
+        }
+    }
+    if (gqa_pass) printf("  ✅ GQA Values Verified (uniform-1.0 -> 1.0, Heads: %zu Q, %zu KV)\n", hq, hk);
+    else printf("  ❌ GQA Values Wrong (expected all 1.0)\n");
 
     lancius_schedule_destroy(sched3);
     lancius_graph_destroy(g3);
@@ -96,11 +106,11 @@ int main() {
     lancius_arena_destroy(scratch);
 
     printf("\n================================================================\n");
-    if (rms_pass && swiglu_pass) {
+    if (rms_pass && swiglu_pass && gqa_pass) {
     printf("  MODERN LLM PARITY VERIFIED. READY FOR v10S STABLE.           \n");
     } else {
     printf("  MODERN LLM PARITY FAILED.                                   \n");
     }
     printf("================================================================\n");
-    return (rms_pass && swiglu_pass) ? 0 : 1;
+    return (rms_pass && swiglu_pass && gqa_pass) ? 0 : 1;
 }
