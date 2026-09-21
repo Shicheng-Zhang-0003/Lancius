@@ -1,10 +1,39 @@
 # Lancius Changelog
 
-## v12A2 (unreleased) — numerical correctness batch
+## v12R1 — 2026-09-21 — hardening plus numerical correctness
 
-Hostile audit of every numeric path; each confirmed defect fixed and
-re-proven by independent execution (no format / stable-ABI break beyond
-additive error codes):
+First development milestone of the v12 cycle (R1 phase), built on the v11S
+stable baseline. Three batches, no format / stable-ABI break beyond additive
+error codes:
+
+Hardening batch:
+
+- Scheduler: broadcast column/identity fix, RMSNorm 3D hidden fix,
+  parallel FP32 dispatch + FP32 reset hygiene, cycle returns NULL +
+  GRAPH_CYCLE, matmul overflow guards, XEnt-bwd numerical guard,
+  ROPE even-dim check, permute/batched validation, pool offset bounds
+  (`plan->max_id`), parallel/CONST OOM errors.
+- Bytecode VM fails loud on unsupported ops; VM input/dim checks.
+- `onnx_to_lancius.py`: strict (unknown op / unmapped input / bad perm /
+  unresolvable Reshape raise), real CRC32 in header.
+- Arena/IR: create/alloc/track/realloc guards; builders validate shapes
+  (attention, layernorm/rmsnorm gamma, swiglu, broadcast); fixed
+  `bind_external_int8`, `set_owner`, `release_owned` FP32 leak.
+- Kernels: null/zero/overflow guards everywhere; attention/GQA
+  `-INFINITY` causal sentinel; GELU clamp removed; RoPE odd-dim refuse;
+  KV-cache zero-len guards; MaxPool `-INFINITY` + NaN propagate;
+  INT8 zero-scale is now a loud error; quantizer clamp + skip-if-INT8.
+- Planner/threadpool: all allocs checked, id bounds, overflow-safe
+  offsets, threadpool create/teardown hardening.
+- Persistence: v2 save CRC fail-closed + `w+b` read-back fix (was silent
+  crc=0), v1 loader ndim/duplicate-id/unknown-op hardening, v2 header
+  reserved-field + duplicate-NOP rejection, stable API error-map
+  completion + FP64-only `read_output` honesty + checked counts.
+- Audits updated to `-INFINITY` / unclamped GELU references.
+- Removed 15 stale `*.bak*` / `*backup*` files.
+
+Numerical-correctness batch (hostile audit of every numeric path; each
+confirmed defect fixed and re-proven by independent execution):
 
 - Scheduler/IR/VM: N-dim broadcast `ADD`/`SUB`/`MUL` (IR emits
   `max`-per-dim output shape; scheduler + VM execute strided broadcast;
@@ -33,33 +62,32 @@ additive error codes):
   `audit_threadpool_parity`, `audit_ffi`, `audit_pytorch_parity.py` now
   propagate failures via exit codes.
 
-## v12R1 (unreleased) — hardening batch — 2026-09-12
+Despot truth batch (every remaining lie found and implemented):
 
-Bottom-up correctness pass over all layers (no format / stable-ABI break):
-
-- Scheduler: broadcast column/identity fix, RMSNorm 3D hidden fix,
-  parallel FP32 dispatch + FP32 reset hygiene, cycle returns NULL +
-  GRAPH_CYCLE, matmul overflow guards, XEnt-bwd numerical guard,
-  ROPE even-dim check, permute/batched validation, pool offset bounds
-  (`plan->max_id`), parallel/CONST OOM errors.
-- Bytecode VM fails loud on unsupported ops; VM input/dim checks.
-- `onnx_to_lancius.py`: strict (unknown op / unmapped input / bad perm /
-  unresolvable Reshape raise), real CRC32 in header.
-- Arena/IR: create/alloc/track/realloc guards; builders validate shapes
-  (attention, layernorm/rmsnorm gamma, swiglu, broadcast); fixed
-  `bind_external_int8`, `set_owner`, `release_owned` FP32 leak.
-- Kernels: null/zero/overflow guards everywhere; attention/GQA
-  `-INFINITY` causal sentinel; GELU clamp removed; RoPE odd-dim refuse;
-  KV-cache OOM + zero-len guards; MaxPool `-INFINITY` + NaN propagate;
-  INT8 zero-scale is now a loud error; quantizer clamp + skip-if-INT8.
-- Planner/threadpool: all allocs checked, id bounds, overflow-safe
-  offsets, threadpool create/teardown hardening.
-- Persistence: v2 save CRC fail-closed + `w+b` read-back fix (was silent
-  crc=0), v1 loader ndim/duplicate-id/unknown-op hardening, v2 header
-  reserved-field + duplicate-NOP rejection, stable API error-map
-  completion + FP64-only `read_output` honesty + checked counts.
-- Audits updated to `-INFINITY` / unclamped GELU references.
-- Removed 15 stale `*.bak*` / `*backup*` files.
+- Planner records freed offsets: diamond-graph reuse no longer overlaps
+  live tensors (was silent corruption on second reuse).
+- Broadcast upgraded to trailing-rank (NumPy) semantics in validator, IR
+  builders, and scheduler, with per-dim compat guards and bounds checks;
+  incompatible shapes rejected, never read out of bounds.
+- Conv index math in `int64` (was `int` truncation); KV-cache attention OOM
+  reports instead of emitting zeros; cross-entropy forward degenerate
+  denominator is `NUMERICAL`, matching backward (was `1e30` sentinel).
+- Autodiff: scalar-reduction OOB fixed, 4D `CONST` cloning preserved,
+  incompatible accumulation fails loud instead of dropping gradients.
+- Scheduler fail-closed on wave-cap overflow; static executor uses
+  `_checked` sizing with FP32 binding and NOP skipping; sanitizer gate
+  restores a clean build afterwards.
+- Audits: `audit_nan_injection`, `audit_memory_pool`, `test_grad_check`,
+  `test_path_bg`, `test_torture` (real cycle test), `fuzz_lancius`
+  (safe-rejects separated), `audit_internals` (softmax normalization),
+  `audit_modern_llm` (GQA values) all propagate failures; new
+  `audit_despot_probe` pins broadcast/planner/CE truth in `make check`.
+- ONNX: Gemm always clones on transpose (never mutates the shared
+  initializer — was order-dependent double-transpose); Reshape preserves
+  the batch dim (was forced to 1); `audit_trained_reality.py` exits
+  nonzero below 95/100.
+- Stable API oversized-input hole proven closed by `audit_fault_injection`
+  (11/11).
 
 ## v11S / V1.1 — Stable Release
 
