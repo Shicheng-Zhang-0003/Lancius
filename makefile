@@ -21,7 +21,9 @@ src/core/lancius_validate.c \
 src/compiler/lancius_quantize.c
 
 OBJS = $(SRCS:.c=.o)
-all: liblancius.a audit_internals stress_test test_torture generate_text run_llm train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_despot_probe
+all: liblancius.a lancius audit_internals stress_test test_torture generate_text run_llm train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_despot_probe train_verifier_head distill_prm800k
+lancius: examples/lancius_cli.c liblancius.a
+	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 liblancius.a: $(OBJS)
 	ar rcs $@ $(OBJS)
 train_mnist: examples/train_mnist.c liblancius.a
@@ -38,7 +40,7 @@ clean:
 	rm -f parity_runner run_trained_batch
 	rm -f audit_regression_13c regression_roundtrip.lancius regression_bad_*.lancius regression_trunc_*.lancius regression_huge_*.lancius
 	rm -f audit_known_answer audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_flash_attention
-	rm -f audit_despot_probe
+	rm -f audit_despot_probe train_verifier_head distill_prm800k lancius
 .PHONY: all clean check check-long check-sanitizers
 train_cifar10: examples/train_cifar10.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp
@@ -152,6 +154,10 @@ check: all
 	./audit_fp32_path
 	./audit_fault_injection
 	./audit_despot_probe
+	./train_verifier_head
+	./distill_prm800k --selftest
+	./lancius info test_model.lancius
+	./lancius run test_model.lancius --mode static --fill zero
 	@echo "v12R1 check complete."
 
 check-long: check
@@ -191,6 +197,14 @@ audit_fp32_path: examples/audit_fp32_path.c liblancius.a
 # --- v12R1: despot probe pins the P0 fixes (broadcast, planner, CE truth) ---
 audit_despot_probe: examples/audit_despot_probe.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
+
+# --- v12R2: verifier-head training example (models-side, tanh + MSE) ---
+train_verifier_head: examples/train_verifier_head.c liblancius.a
+	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
+
+# --- v12R2: PRM800k step distiller in C (retires distill_prm800k.py) ---
+distill_prm800k: examples/distill_prm800k.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 audit_fault_injection: examples/audit_fault_injection.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread

@@ -5,6 +5,7 @@
 *.dylib
 
 # Executables
+/lancius
 train_mnist
 train_cifar10
 fuzz_lancius
@@ -30,6 +31,8 @@ test_diamond_memory
 soak_fuzz
 parity_runner
 run_trained_batch
+train_verifier_head
+distill_prm800k
 
 # Binaries and Artifacts
 *.lancius
