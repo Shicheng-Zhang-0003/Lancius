@@ -2,7 +2,7 @@
 # Lancius v12R1
 
 > **Internal milestone:** `v12R1`
-> **Public release:** `TBD`
+> **Public release:** `V1.2RC1`
 > **Status:** Development milestone (R1 — first v12 milestone)
 
 Lancius is a lightweight C machine-learning compiler and runtime focused on
@@ -26,7 +26,7 @@ fixed and re-proven by independent execution.
 
 | Internal Version | Public Version       | Release Type      |
 |------------------|----------------------|-------------------|
-| `v12R1`          | `TBD`      | Development Milestone    |
+| `v12R1`          | `V1.2RC1`      | Development Milestone    |
 
 Lancius uses the following internal milestone progression:
 
@@ -688,8 +688,8 @@ For public GitHub releases, internal milestones are mapped as follows:
 | `v11A2`            | `V1.1-AlphaRC2`      | Transformer runtime usability        |
 | `v11A3`            | `V1.1-AlphaRC3`      | Freeze, hardening, and bug hunting   |
 | `v11S`             | `V1.1`               | Stable release                       |
-| `v12R1`            | `TBD`                | Current development milestone: hardening plus numerical correctness |
-| `v12R2`            | `TBD`                | Next development milestone (R2 phase) |
+| `v12R1`            | `V1.2RC1`            | Current development milestone: hardening plus numerical correctness |
+| `v12R2`            | `V1.2RC2`            | Next development milestone (R2 phase) |
 
 ### Current Milestone
 
@@ -709,9 +709,9 @@ Previous milestone: v11S / V1.1 (stable).
 
 ### Next Milestone
 
-The next milestone is `v12R2` (the R2 phase), followed by the v12 freeze,
+The next milestone is `v12R2` (the R2 phase, public `V1.2RC2`), followed by the v12 freeze,
 hardening, and bug-hunting phase (R3) and the `v12S` stable release
-candidate.
+candidate (public `V1.2`).
 
 Candidate v12 work (not committed): FP32 operator expansion, FP32 KV-cache
 storage, broader ONNX coverage, and dynamic shape exploration.
@@ -720,7 +720,7 @@ storage, broader ONNX coverage, and dynamic shape exploration.
 
 `v11S` **is** the stable release.
 
-The next stable release will be `v12S`, cut after the v12 development
+The next stable release will be `v12S` (public `V1.2`), cut after the v12 development
 cycle completes its hardening gate.
 <!-- /SECTION:ROADMAP -->
 

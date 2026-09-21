@@ -1,7 +1,7 @@
 # Lancius v12R1 — Development Milestone
 
 **Tag:** `v12R1`
-**Public version:** TBD
+**Public version:** V1.2RC1
 **License:** GPL-3.0-or-later
 
 ---

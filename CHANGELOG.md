@@ -1,6 +1,6 @@
 # Lancius Changelog
 
-## v12R1 — 2026-09-21 — hardening plus numerical correctness
+## v12R1 / V1.2RC1 — 2026-09-21 — hardening plus numerical correctness
 
 First development milestone of the v12 cycle (R1 phase), built on the v11S
 stable baseline. Three batches, no format / stable-ABI break beyond additive
