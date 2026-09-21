@@ -123,5 +123,6 @@ int main() {
     else printf("  ❌ FAIL\n");
     printf("================================================================\n");
 
-    return 0;
+    int ok = (max_err_w1 < TOL) && (max_err_w2 < TOL);
+    return ok ? 0 : 1;
 }

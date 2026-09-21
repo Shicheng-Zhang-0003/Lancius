@@ -61,5 +61,6 @@ int main() {
     free(in_data);
     free(w_data);
 
-    return 0;
+    /* Despot honesty: swallowing NaN is failure, not green. */
+    return (nan_count > 0) ? 0 : 1;
 }

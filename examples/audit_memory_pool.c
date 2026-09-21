@@ -34,6 +34,7 @@ int main() {
 
     printf("[2/2] Running Linear Scan Memory Planner...\n");
     lancius_memory_plan* plan = lancius_build_memory_plan(sched, g);
+    int overall_pass = 0;
 
     if (plan) {
         printf("  ✅ SUCCESS: Graph Coloring Complete.\n");
@@ -61,11 +62,13 @@ int main() {
             for(size_t k=0; k<10; k++) {
                 if (out_node->runtime_data[k] != 0.0) { pass = 0; break; }
             }
-            if (pass) printf("  ✅ POOLED EXECUTION VERIFIED: Math is correct, zero segfaults!\n");
+            if (pass) { printf("  ✅ POOLED EXECUTION VERIFIED: Math is correct, zero segfaults!\n"); overall_pass = 1; }
             else printf("  ❌ POOLED EXECUTION FAILED: Math corruption detected.\n");
 
             free(flat_buffer);
             free(in_node->runtime_data);
+        } else {
+            printf("  ❌ FAILED: flat buffer OOM.\n");
         }
 
         lancius_memory_plan_destroy(plan);
@@ -79,5 +82,5 @@ int main() {
     printf("\n================================================================\n");
     printf("  MEMORY DETERMINISM MANDATE VERIFIED. READY FOR v10S STABLE.    \n");
     printf("================================================================\n");
-    return 0;
+    return overall_pass ? 0 : 1;
 }
