@@ -86,11 +86,16 @@ lancius_error lancius_validate_stride_nonzero(uint32_t stride) {
 
 lancius_error lancius_validate_binary_broadcast(const lancius_node* a, const lancius_node* b) {
     if (!a || !b) return LANCIUS_ERROR_NULL_PTR;
-    if (a->ndim != b->ndim) return LANCIUS_ERROR_SHAPE_MISMATCH;
-    for (uint8_t i = 0; i < a->ndim; i++) {
-        if (a->shape[i] != b->shape[i] && a->shape[i] != 1 && b->shape[i] != 1) {
-            return LANCIUS_ERROR_SHAPE_MISMATCH;
-        }
+    if (a->ndim == 0 || a->ndim > 4 || b->ndim == 0 || b->ndim > 4) return LANCIUS_ERROR_INVALID_RANK;
+    /* NumPy trailing-rank semantics: leading missing dims are 1. */
+    uint8_t nd = (a->ndim > b->ndim) ? a->ndim : b->ndim;
+    for (uint8_t i = 0; i < nd; i++) {
+        int ai = (int)i - ((int)nd - (int)a->ndim);
+        int bi = (int)i - ((int)nd - (int)b->ndim);
+        size_t da = (ai < 0) ? 1 : a->shape[ai];
+        size_t db = (bi < 0) ? 1 : b->shape[bi];
+        if (da != 1 && db != 1 && da != db) return LANCIUS_ERROR_SHAPE_MISMATCH;
+        if (da == 0 || db == 0) return LANCIUS_ERROR_INVALID_SHAPE;
     }
     return LANCIUS_ERROR_OK;
 }
