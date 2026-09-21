@@ -22,6 +22,10 @@ audit_modern_llm
 audit_ffi
 audit_threadpool_parity
 audit_nan_injection
+audit_fault_injection
+audit_fp32_path
+audit_transformer_known_answer
+audit_despot_probe
 test_diamond_memory
 soak_fuzz
 parity_runner
@@ -34,3 +38,8 @@ run_trained_batch
 *.bin
 audit_known_answer
 audit_regression_13c
+
+# Repair harness droppings (dev tooling, never part of a release)
+repair/repair.log
+__pycache__/
+*.pyc
