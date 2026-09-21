@@ -145,14 +145,11 @@ int main(void) {
     printf("\n[4/4] Stable API Boundary\n");
     lancius_context ctx = lancius_create_context();
     lancius_graph_handle gh = lancius_graph_create_stable(ctx);
-    /* The stable API uses the same constructors, so the 202 fixes protect it */
+    /* The stable API uses the same constructors, so the 202 fixes protect it.
+       Phase 205 closed the oversized-input hole: 400M x 1 exceeds the element
+       limit, so this must be NULL (no abort, no corrupt tensor). */
     lancius_tensor_handle t_bad = lancius_add_input(gh, 400000000, 1);
-    /* Note: lancius_add_input doesn't validate element count yet (that's a later phase),
-       but we verify the API doesn't crash when we try to query it. */
-    if (t_bad) {
-        /* If it was created, querying it might abort in v11S.
-           In v12R1, we'll fix this. For now, just verify context lifecycle. */
-    }
+    EXPECT_NULL(t_bad, "stable API rejects 400M x 1 oversized input");
     lancius_graph_destroy_stable(gh);
     lancius_destroy_context(ctx);
     printf("  ✅ PASS: Stable API lifecycle survived\n");
