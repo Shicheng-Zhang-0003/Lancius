@@ -31,10 +31,15 @@ static void accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_i
         if (sum_node) {
             if (full_input->ndim == 2) {
                 new_grad = sum_node;
-            } else {
+            } else if (full_input->ndim >= 1 && full_input->ndim <= 4) {
+                /* Safe: only read valid dims, pad remainder with 1. */
+                size_t s[4] = {1,1,1,1};
+                for (uint8_t i = 0; i < full_input->ndim; i++) s[i] = full_input->shape[i];
                 new_grad = lancius_reshape(g, sum_node, full_input->ndim,
-                                           full_input->shape[0], full_input->shape[1],
-                                           full_input->shape[2], full_input->shape[3]);
+                                           s[0], s[1], s[2], s[3]);
+            } else {
+                lancius_set_error(LANCIUS_ERROR_INVALID_RANK);
+                return;
             }
         }
     } else if (new_grad->ndim == 2 && full_input->ndim == 2) {
@@ -54,7 +59,16 @@ static void accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_i
 
     if (!new_grad) return;
     if (grad_map[fwd_input_id] == NULL) grad_map[fwd_input_id] = new_grad;
-    else grad_map[fwd_input_id] = lancius_add(g, grad_map[fwd_input_id], new_grad);
+    else {
+        lancius_node* acc = lancius_add(g, grad_map[fwd_input_id], new_grad);
+        if (!acc) {
+            /* Broadcast-incompatible accumulation is a real shape error:
+               do not silently drop the gradient. */
+            lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH);
+            return;
+        }
+        grad_map[fwd_input_id] = acc;
+    }
 }
 
 lancius_training_graph* lancius_ir_autodiff(lancius_graph* fwd_g, lancius_node* loss_node) {
@@ -85,7 +99,17 @@ else if (old->ndim == 3) n = lancius_input_3d(tg->graph, old->shape[0], old->sha
 else n = lancius_input(tg->graph, old->shape[0], old->shape[1]);
 if(n) { n->runtime_data = old->runtime_data; lancius_runtime_sync_from_legacy(n); }
 break;
-            case LANCIUS_OP_CONST: n = lancius_const(tg->graph, old->attr_val, old->shape[0], old->shape[1]); break;
+            case LANCIUS_OP_CONST: {
+                if (old->ndim == 2) n = lancius_const(tg->graph, old->attr_val, old->shape[0], old->shape[1]);
+                else if (old->ndim >= 1 && old->ndim <= 4) {
+                    n = lancius_const_scalar(tg->graph, old->attr_val, old->ndim);
+                    if (n) {
+                        for (uint8_t _i = 0; _i < old->ndim; _i++) n->shape[_i] = old->shape[_i];
+                        n->dtype = old->dtype; n->scale = old->scale;
+                    }
+                } else n = NULL;
+                break;
+            }
             case LANCIUS_OP_ADD: n = lancius_add(tg->graph, in0, in1); break;
             case LANCIUS_OP_SUB: n = lancius_sub(tg->graph, in0, in1); break;
             case LANCIUS_OP_MUL: n = lancius_mul(tg->graph, in0, in1); break;
