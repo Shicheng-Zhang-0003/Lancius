@@ -180,9 +180,9 @@ def convert(onnx_path, lancius_path):
                 resolved_dims = [resolved_neg if d == -1 else d for d in tmp_dims]
 
                 if len(resolved_dims) == 2:
-                    out_shape = [1, resolved_dims[1], 1, 1]
+                    out_shape = [resolved_dims[0], resolved_dims[1], 1, 1]
                 elif len(resolved_dims) == 4:
-                    out_shape = [1, resolved_dims[1], resolved_dims[2], resolved_dims[3]]
+                    out_shape = [resolved_dims[0], resolved_dims[1], resolved_dims[2], resolved_dims[3]]
                 else:
                     raise ValueError(f"Reshape '{node.output[0]}' resolved to unsupported rank {len(resolved_dims)}: {resolved_dims}.")
             else:
@@ -252,8 +252,8 @@ def convert(onnx_path, lancius_path):
             if transB == 1 and len(matmul_inputs) >= 2:
                 w_name = node.input[1]
                 w_id = name_to_id[w_name]
-                # Hostile fix: clone-on-write. Mutating shared initializer corrupts earlier uses.
-                # If weight already used (transposed or not), clone a fresh node for this use.
+                # Despot truth: NEVER mutate the shared initializer in place.
+                # Always transpose a fresh clone so N Gemm uses of one weight stay correct.
                 w_node = None
                 for n in nodes:
                     if n['id'] == w_id:
@@ -261,38 +261,23 @@ def convert(onnx_path, lancius_path):
                         break
                 if w_node is None:
                     raise ValueError(f"Gemm '{node.output[0]}' weight '{w_name}' not found.")
-                if w_node.get('_transposed_for') is not None or w_node.get('_used', False):
-                    import copy as _copy
-                    nn = _copy.deepcopy(w_node)
-                    # deep-copied weights bytes are immutable; safe to share buffer copy
-                    nn['id'] = next_id
-                    next_id += 1
-                    # transpose the clone
-                    old_shape = list(nn['shape'])
-                    nn['shape'] = [old_shape[1], old_shape[0], 1, 1]
-                    nn['ndim'] = 2
-                    if nn['weights']:
-                        data = np.frombuffer(nn['weights'], dtype=np.float64).reshape(old_shape[0], old_shape[1])
-                        nn['weights'] = np.ascontiguousarray(data.T).tobytes()
-                    nn['_transposed_for'] = node.output[0]
-                    nn['_used'] = True
-                    nodes.append(nn)
-                    matmul_inputs[1] = nn['id']
-                    name_to_id[w_name + f"__T_{node.output[0]}"] = nn['id']
-                else:
-                    old_shape = w_node['shape']
-                    w_node['shape'] = [old_shape[1], old_shape[0], 1, 1]
-                    w_node['ndim'] = 2
-                    if w_node['weights']:
-                        data = np.frombuffer(w_node['weights'], dtype=np.float64).reshape(old_shape[0], old_shape[1])
-                        data_T = np.ascontiguousarray(data.T)
-                        w_node['weights'] = data_T.tobytes()
-                    w_node['_transposed_for'] = node.output[0]
-                    w_node['_used'] = True
-                # mark all weight nodes used to trigger clone on next reuse
-                for n in nodes:
-                    if n['id'] == w_id:
-                        n['_used'] = True
+                import copy as _copy
+                nn = _copy.deepcopy(w_node)
+                nn['id'] = next_id
+                next_id += 1
+                # transpose the clone from the ORIGINAL orientation every time
+                orig_shape = list(w_node['shape'])
+                # original initializer shape is [R,C,1,1] padded; transpose first two dims
+                nn['shape'] = [orig_shape[1], orig_shape[0], 1, 1]
+                nn['ndim'] = 2
+                if nn['weights']:
+                    data = np.frombuffer(w_node['weights'], dtype=np.float64).reshape(orig_shape[0], orig_shape[1])
+                    nn['weights'] = np.ascontiguousarray(data.T).tobytes()
+                nn['_transposed_for'] = node.output[0]
+                nn['_used'] = True
+                nodes.append(nn)
+                matmul_inputs[1] = nn['id']
+                name_to_id[w_name + f"__T_{node.output[0]}"] = nn['id']
 
             nodes.append({
                 'id': next_id, 'op': 6, 'ndim': len([s for s in out_shape if s > 0]) if node.op_type != 'Gemm' else 2, 'shape': out_shape,
