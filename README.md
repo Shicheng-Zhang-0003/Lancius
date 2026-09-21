@@ -1,9 +1,9 @@
 <!-- SECTION:HEADER -->
-# Lancius v12A2
+# Lancius v12R1
 
-> **Internal milestone:** `v12A2`
+> **Internal milestone:** `v12R1`
 > **Public release:** `TBD`
-> **Status:** Development milestone (A2 — second v12 milestone, R2 phase)
+> **Status:** Development milestone (R1 — first v12 milestone)
 
 Lancius is a lightweight C machine-learning compiler and runtime focused on
 bare-metal inference, static graph execution, memory planning, and low-level
@@ -14,8 +14,9 @@ It represents the completion of the v11A3 hardening gate:
 feature freeze, loader hardening, model-format freeze with CRC32 integrity,
 sanitizer and fuzz validation, and full regression defense.
 
-`v12A2` builds on the `v11S` stable baseline and the `v12R1` development
-snapshot. Its theme is **mathematical correctness**: a hostile,
+`v12R1` builds on the `v11S` stable baseline.
+Its themes are **hardening** (loader integrity, execution contracts, stability
+guards) and **mathematical correctness**: a hostile,
 formula-by-formula audit of every numeric path, with each confirmed defect
 fixed and re-proven by independent execution.
 <!-- /SECTION:HEADER -->
@@ -25,7 +26,7 @@ fixed and re-proven by independent execution.
 
 | Internal Version | Public Version       | Release Type      |
 |------------------|----------------------|-------------------|
-| `v12A2`          | `TBD`      | Development Milestone    |
+| `v12R1`          | `TBD`      | Development Milestone    |
 
 Lancius uses the following internal milestone progression:
 
@@ -41,17 +42,17 @@ Where:
 - `R3` is the freeze, hardening, and bug-hunting milestone
 - the next `S` is the stable release candidate
 
-`v12A2` is the second development milestone of the v12 cycle (the R2 phase
-in R-series numbering), following `v12R1`.
+`v12R1` is the first development milestone of the v12 cycle (the R1 phase
+in R-series numbering), built on the `v11S` stable baseline.
 
 > This is a development milestone.
 > Binary compatibility is guaranteed for v2 models written by v11S+.
 <!-- /SECTION:RELEASE_IDENTITY -->
 
 <!-- SECTION:HIGHLIGHTS -->
-## v12A2 Highlights
+## v12R1 Highlights
 
-`v12A2` makes Lancius numerically honest: every kernel, executor, gradient,
+`v12R1` makes Lancius numerically honest: every kernel, executor, gradient,
 shape formula, serializer field, and converter mapping was independently
 re-derived and re-executed. Plausible outputs were not accepted as proof.
 
@@ -123,7 +124,7 @@ The converter now fails loud instead of emitting silently wrong graphs:
 - `lancius_dtype_size()` returns 0 on invalid codes and
   `checked_product_shape(NULL)` fails instead of masking caller bugs.
 
-### Inherited Baseline (v11S / v12R1)
+### Inherited Baseline (v11S)
 
 - Dedicated **KV-cache runtime object** with explicit **prefill** and
   **generation** flows, `lancius_input_3d()`, and a 265-check transformer
@@ -141,7 +142,7 @@ Binary compatibility is **guaranteed** for v2 models written by v11S and later.
 <!-- /SECTION:HIGHLIGHTS -->
 
 <!-- SECTION:WHATS_CHANGED -->
-## What Changed Since v12R1
+## What Changed Since v11S
 
 ### Fixed
 
@@ -251,7 +252,7 @@ python3 -m pip install onnx onnxruntime numpy
 <!-- SECTION:VALIDATION -->
 ## Validation
 
-Lancius `v12A2` uses a layered validation suite.
+Lancius `v12R1` uses a layered validation suite.
 
 The minimum development gate is:
 
@@ -290,6 +291,9 @@ This runs the primary regression and correctness suite, including:
 - transformer known-answer audit
 - FP32 path audit
 - fault-injection audit
+- despot truth probe (broadcast values, cross-rank broadcast, diamond
+  pooled parity, cross-entropy NUMERICAL contract)
+- internal x-ray audit (mini-CNN execution, softmax normalization)
 
 Every audit in the gate propagates failures through its exit code: a green
 `make check` means every check passed, not just that binaries ran.
@@ -315,6 +319,9 @@ This rebuilds selected stress binaries with sanitizer instrumentation and runs:
 
 - AddressSanitizer
 - UndefinedBehaviorSanitizer
+
+The gate restores a clean non-instrumented build afterwards
+(`make -B all`), so a stale sanitized binary can never leak into `make check`.
 
 ### Targeted Audits
 
@@ -367,7 +374,7 @@ python3 audit_pytorch_parity.py
 <!-- SECTION:FEATURE_STATUS -->
 ## Feature Status
 
-Lancius `v12A2` is a development milestone.
+Lancius `v12R1` is a development milestone.
 
 The following table describes the current status of major subsystems.
 
@@ -389,18 +396,18 @@ The following table describes the current status of major subsystems.
 | Dynamic shapes | Not supported | Static graph execution only |
 | Production LLM serving | Not supported | Research and development milestone only |
 
-> v12A2 targets honest numerics and strict boundaries, not expanded scope.
+> v12R1 targets honest numerics and strict boundaries, not expanded scope.
 <!-- /SECTION:FEATURE_STATUS -->
 
 <!-- SECTION:KNOWN_LIMITATIONS -->
 ## Known Limitations
 
-Lancius `v12A2` is a development milestone.
+Lancius `v12R1` is a development milestone.
 
 Its limitations are intentional boundaries. They define what this release is
 not claiming to be.
 
-> `v12A2` is a development milestone. The limitations below define its supported scope.
+> `v12R1` is a development milestone. The limitations below define its supported scope.
 
 ### Production Status
 
@@ -477,7 +484,7 @@ The stable C API covers the core inference workflow.
 
 ### Training Limitations
 
-Training-related code exists in the repository, but `v12A2` is inference-first.
+Training-related code exists in the repository, but `v12R1` is inference-first.
 
 - Training components are experimental
 - Training workflows are not production-grade
@@ -496,10 +503,11 @@ The Makefile targets AVX2/FMA; non-x86 builds need flag adjustments.
 
 ### Hardening Status
 
-`v12A2` includes the hostile correctness batch described above, but it is not
-a frozen release.
+`v12R1` includes the hardening, numerical-correctness, and despot truth
+batches described above. It is a development milestone, not a frozen
+release.
 
-The next milestone is intended to focus on:
+The next milestone (`v12R2`) is intended to focus on:
 
 - feature decisions for the remainder of the v12 cycle
 - continued loader and format hardening
@@ -520,7 +528,7 @@ v2 improves on v1 by using:
 - little-endian encoding
 - explicit header flags
 - stronger loader validation
-- mandatory CRC32 body integrity check (v12A2; opt-out only via
+- mandatory CRC32 body integrity check (v12R1; opt-out only via
   `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1`)
 
 Loader defenses include duplicate-ID rejection, forward-reference rejection,
@@ -649,15 +657,16 @@ Relevant documents in this tree:
 - `docs/ARCHITECTURE.md` — high-level architecture overview
 - `docs/releases/v10S/RELEASE_NOTES_v10S.md` — historical v10S release notes
 - `docs/releases/v11S/GITHUB_RELEASE_v11S.md` — v11S release notes
+- `docs/releases/v12R1/GITHUB_RELEASE_v12R1.md` — v12R1 release notes
 - `KNOWN_LIMITATIONS.md` — explicit limitations and non-goals
 - `SECURITY.md` — security reporting policy
-- `CHANGELOG.md` — changelog (see the `v12A2` entry for this milestone)
+- `CHANGELOG.md` — changelog (see the `v12R1` entry for this milestone)
 - `STATUS.md` — current milestone status
 
 > Some documents may still reference `v11A1` or `v11A2`.
 >
 > Where that happens, treat them as historical unless they explicitly describe
-> current (`v12A2`) behavior.
+> current (`v12R1`) behavior.
 <!-- /SECTION:DOCUMENTATION -->
 
 <!-- SECTION:ROADMAP -->
@@ -679,28 +688,30 @@ For public GitHub releases, internal milestones are mapped as follows:
 | `v11A2`            | `V1.1-AlphaRC2`      | Transformer runtime usability        |
 | `v11A3`            | `V1.1-AlphaRC3`      | Freeze, hardening, and bug hunting   |
 | `v11S`             | `V1.1`               | Stable release                       |
-| `v12R1`            | `TBD`                | First v12 development milestone      |
-| `v12A2`            | `TBD`                | Current development milestone: numerical correctness |
+| `v12R1`            | `TBD`                | Current development milestone: hardening plus numerical correctness |
+| `v12R2`            | `TBD`                | Next development milestone (R2 phase) |
 
 ### Current Milestone
 
 This release is:
 
 ```text
-v12A2
+v12R1
 ```
 
 Its theme is:
 
-> Numerical correctness: hostile audit of every math path, with each
+> Hardening and numerical correctness: loader integrity, execution
+> contracts, and a hostile audit of every math path, with each
 > confirmed defect fixed and re-proven.
 
-Previous milestones: v11S / V1.1 (stable), then v12R1 (first v12 snapshot).
+Previous milestone: v11S / V1.1 (stable).
 
 ### Next Milestone
 
-The next milestone is the v12 freeze, hardening, and bug-hunting phase
-(R3), followed by the `v12S` stable release candidate.
+The next milestone is `v12R2` (the R2 phase), followed by the v12 freeze,
+hardening, and bug-hunting phase (R3) and the `v12S` stable release
+candidate.
 
 Candidate v12 work (not committed): FP32 operator expansion, FP32 KV-cache
 storage, broader ONNX coverage, and dynamic shape exploration.
@@ -716,7 +727,7 @@ cycle completes its hardening gate.
 <!-- SECTION:SECURITY -->
 ## Security
 
-Lancius `v12A2` is a development milestone, not a hardened release.
+Lancius `v12R1` is a development milestone, not a hardened release.
 
 Security issues should be reported privately before public disclosure.
 

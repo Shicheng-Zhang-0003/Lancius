@@ -1,15 +1,15 @@
 # Lancius Current Status
 
-Current internal milestone: **v12A2**
-Previous internal milestone: **v12R1**
+Current internal milestone: **v12R1**
+Previous internal milestone: **v11S**
 Public equivalent: **TBD**
-Release line: **12 A2 development**
+Release line: **12 R1 development**
 
 ## Phase
 
-v12A2 is the second development milestone of the v12 cycle
-(progression `S → R1 → R2 → R3 → S`; v12A2 is the R2 phase),
-built on the v11S stable baseline and the v12R1 snapshot.
+v12R1 is the first development milestone of the v12 cycle
+(progression `S → R1 → R2 → R3 → S`; v12R1 is the R1 phase),
+built on the v11S stable baseline.
 
 The v11A3 hardening gate is complete:
 - `make check` green
@@ -20,9 +20,10 @@ The v11A3 hardening gate is complete:
 - model format v2 frozen with CRC32 integrity
 - stable C API covers core inference workflow
 
-## v12A2 theme: numerical correctness
+## v12R1 theme: hardening plus numerical correctness
 
-Hostile, formula-by-formula audit of every numeric path. Each confirmed
+Bottom-up correctness pass over all layers, then a hostile,
+formula-by-formula audit of every numeric path. Each confirmed
 defect fixed and re-proven by independent execution (see CHANGELOG):
 - N-dimensional broadcast `ADD`/`SUB`/`MUL` correct in scheduler, IR shape
   inference, and bytecode VM (was flat-loop wrong + OOB)
@@ -39,6 +40,10 @@ defect fixed and re-proven by independent execution (see CHANGELOG):
 - Training alignment (`[-1,1]` CIFAR norm, He init, identity binding,
   identity-tracked eval logits)
 - Widened stable FFI error codes; false-green audits propagate failures
+- Despot truth batch: planner offsets recorded (diamond reuse sound),
+  trailing-rank cross-rank broadcast with compat guards, int64 conv indices,
+  KV-cache OOM reporting, CE degenerate is NUMERICAL, Gemm always-clone,
+  Reshape preserves batch, torture cycle test is real, GQA values verified
 
 ## Feature freeze
 
@@ -48,12 +53,14 @@ v11S inherits the v11A3 feature freeze:
 - no new training features
 - no new model-format changes
 
-Only critical bug fixes are accepted post-release. v12A2 adds no scope,
+Only critical bug fixes are accepted post-release. v12R1 adds no scope,
 only correctness within existing scope.
 
-## Validation batch — v12A2
+## Validation batch — v12R1
 
 Build clean under `-Wall -Wextra -Werror`; `audit_regression_13c` 49/49,
 `audit_known_answer` 67/67, `audit_transformer_known_answer` 265/265,
-`audit_fp32_path` 19/19 green; `make check` green with failure-propagating
-exit codes; broadcast/CRC/softmax fixes verified by dedicated probes.
+`audit_fp32_path` 19/19, `audit_fault_injection` 11/11 green;
+`make check`, `make check-long`, and `make check-sanitizers` green with
+failure-propagating exit codes; broadcast/planner/softmax/CE fixes verified
+by the despot probe (`audit_despot_probe`, in the `make check` gate).

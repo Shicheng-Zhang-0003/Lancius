@@ -44,11 +44,20 @@ count.
 ### Memory Awareness
 
 Memory planning is a core subsystem responsible for reducing unnecessary
-allocations.
+allocations. The linear-scan planner assigns every intermediate tensor a
+recorded flat-buffer offset with wave-liveness reuse; pooled execution is
+verified value-identical to direct execution on diamond graphs.
+
+### Numerical Honesty
+
+v12R1 executes N-dimensional trailing-rank broadcast, max-subtracted
+softmax with zero-sum guards, int64 INT8 accumulation, and fail-loud
+autodiff. Loaders enforce v2 CRC32 integrity; corrupt shapes return
+errors, never silent values.
 
 ## Future Direction
 
-v11 development may expand:
+v12 development may expand:
 
 -   backend support
 -   optimization passes
