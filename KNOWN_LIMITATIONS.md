@@ -1,6 +1,6 @@
-# Lancius v12A2 Known Limitations
+# Lancius v12R1 Known Limitations
 
-This document defines the explicit boundaries of the v12A2
+This document defines the explicit boundaries of the v12R1
 development milestone.
 
 A development milestone is not defined by having every feature. It is defined
@@ -28,7 +28,7 @@ The following areas are intentionally not considered stable:
 
 ## Training Status
 
-Lancius v12A2 is inference-first.
+Lancius v12R1 is inference-first.
 
 Training-related components may exist in the codebase but should be
 considered experimental development preview, not production-grade.
@@ -70,6 +70,10 @@ and do NOT abort.
 -   v2 models always carry non-zero CRC32; files with `checksum == 0`
     are rejected by default (set `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1` to
     load legacy pre-hardening files).
+-   Degenerate denominators fail loud: all-`-inf` softmax rows and
+    cross-entropy rows return `NUMERICAL` instead of values.
+-   Broadcast follows trailing-rank (NumPy) semantics for `ADD`/`SUB`/`MUL`;
+    incompatible shapes are rejected, never read out of bounds.
 
 ## Philosophy
 
