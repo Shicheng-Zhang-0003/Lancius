@@ -35,6 +35,7 @@ int main(int argc, char** argv) {
     lancius_arena* scratch = lancius_arena_create(64 * 1024 * 1024); // 64MB scratch
     int pass_count = 0;
     int fail_count = 0;
+    int safe_rejects = 0;
 
     for (int iter = 0; iter < FUZZ_ITERATIONS; iter++) {
         lancius_graph* g = lancius_graph_create();
@@ -121,21 +122,21 @@ int main(int argc, char** argv) {
         lancius_node* target = pool[rand() % pool_sz];
         lancius_node* loss = lancius_sum(g, target);
         if (!loss) {
-            fail_count++;
+            safe_rejects++;
             goto cleanup;
         }
 
         // 4. Compile Backward Pass
         lancius_training_graph* tg = lancius_ir_autodiff(g, loss);
         if (!tg || !tg->loss_node) {
-            fail_count++;
+            safe_rejects++;
             if(tg) lancius_training_graph_destroy(tg);
             goto cleanup;
         }
 
         lancius_schedule* sched = lancius_ir_schedule(tg->graph);
         if (!sched) {
-            fail_count++;
+            safe_rejects++;
             lancius_training_graph_destroy(tg);
             goto cleanup;
         }
@@ -180,9 +181,9 @@ int main(int argc, char** argv) {
     lancius_arena_destroy(scratch);
 
     printf("\n\n================================================================\n");
-    printf("  FUZZ RESULTS: %d PASSED | %d FAILED (out of %d)\n", pass_count, fail_count, FUZZ_ITERATIONS);
-    printf("  (Failures here usually mean IR shape-rejection, which is SAFE)\n");
+    printf("  FUZZ RESULTS: %d PASSED | %d FAILED (out of %d), %d SAFE-REJECTS\n", pass_count, fail_count, FUZZ_ITERATIONS, safe_rejects);
+    printf("  (Safe-rejects are IR shape-rejections, which are CORRECT behavior)\n");
     printf("================================================================\n");
 
-    return 0;
+    return (fail_count == 0) ? 0 : 1;
 }

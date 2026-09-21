@@ -38,8 +38,9 @@ int main() {
     lancius_schedule_execute(sched_perm, scratch);
 
     /* v11A1 Task 5: verify permute values, not just allocation */
+    int perm_pass = 0;
     if (perm->runtime_data != NULL) {
-        int perm_pass = 1;
+        perm_pass = 1;
 
         for (size_t pn = 0; pn < 2 && perm_pass; pn++) {
             for (size_t ph = 0; ph < 4 && perm_pass; ph++) {
@@ -61,6 +62,8 @@ int main() {
         } else {
             printf("  ❌ Permute values corrupted.\n");
         }
+    } else {
+        printf("  ❌ Permute Failed (NULL output)!\n");
     }
 
     if (perm->runtime_data != NULL) {
@@ -100,6 +103,7 @@ int main() {
     printf("  Loading graph from 'test_model.lancius'...\n");
     lancius_graph* g_load = lancius_graph_load("test_model.lancius");
 
+    int serial_pass = 0;
     if (g_load && g_load->node_count == 4) {
         printf("  ✅ Serialization Success! Loaded %u nodes.\n", g_load->node_count);
 
@@ -107,6 +111,7 @@ int main() {
         lancius_node* loaded_W = g_load->nodes[1]; // Should be W
         if (loaded_W && loaded_W->runtime_data && loaded_W->runtime_data[0] == 0.42) {
             printf("  ✅ Weights perfectly preserved! (W[0] = %f)\n", loaded_W->runtime_data[0]);
+            serial_pass = 1;
         } else {
             printf("  ❌ Weights corrupted or missing!\n");
         }
@@ -115,11 +120,12 @@ int main() {
         lancius_graph_destroy(g_load);
     } else {
         printf("  ❌ Serialization Failed!\n");
+        if (g_load) lancius_graph_destroy(g_load);
     }
 
     lancius_arena_destroy(scratch);
     printf("\n================================================================\n");
     printf("  PATH B & G VERIFICATION COMPLETE.\n");
     printf("================================================================\n");
-    return 0;
+    return (perm_pass && serial_pass) ? 0 : 1;
 }
