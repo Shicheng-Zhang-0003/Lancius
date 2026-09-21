@@ -214,6 +214,15 @@ def convert(onnx_path, lancius_path):
                         # 2-elem pads [h,w] may differ per axis; C supports single pad -> require equal
                         raise ValueError(f"Conv '{node.output[0]}' asymmetric pads {pads} need single pad.")
                     meta[3] = pads[0]
+            if (meta[0] <= 0 or meta[1] <= 0) and len(node.input) >= 2 and node.input[1] in initializer_map:
+                # Torch-slim exports may omit kernel_shape; recover from weight [Cout,Cin,Kh,Kw].
+                w = initializer_map[node.input[1]]
+                if len(w.shape) == 4 and w.shape[2] > 0 and w.shape[3] > 0:
+                    meta[0], meta[1] = int(w.shape[2]), int(w.shape[3])
+            if meta[0] <= 0 or meta[1] <= 0:
+                raise ValueError(f"Conv '{node.output[0]}' has no kernel_shape and it cannot be recovered from weights; refusing zero-kernel.")
+            if meta[2] <= 0:
+                meta[2] = 1  # ONNX default stride when the attribute is omitted
         elif node.op_type == 'MaxPool':
             for attr in node.attribute:
                 if attr.name == 'kernel_shape':
@@ -279,8 +288,21 @@ def convert(onnx_path, lancius_path):
                 matmul_inputs[1] = nn['id']
                 name_to_id[w_name + f"__T_{node.output[0]}"] = nn['id']
 
+            # Gemm out shape: value_info is often absent for torch Gemm outputs
+            # (would silently store [1,1,1,1]). Recover from A rows x B cols.
+            a_shape = w_shape = None
+            for n in nodes:
+                if n['id'] == matmul_inputs[0]:
+                    a_shape = list(n['shape'])
+                if n['id'] == matmul_inputs[1]:
+                    w_shape = list(n['shape'])
+            if a_shape is not None and w_shape is not None and a_shape[0] > 0 and w_shape[1] > 0:
+                out_shape = [a_shape[0], w_shape[1], 1, 1]
+            elif out_shape == [1, 1, 1, 1]:
+                raise ValueError(f"Gemm '{node.output[0]}' output shape unresolvable (no value_info, inputs unclear); refusing [1,1] guess.")
+
             nodes.append({
-                'id': next_id, 'op': 6, 'ndim': len([s for s in out_shape if s > 0]) if node.op_type != 'Gemm' else 2, 'shape': out_shape,
+                'id': next_id, 'op': 6, 'ndim': 2, 'shape': out_shape,
                 'inputs': matmul_inputs, 'attr': 0.0, 'meta': [0,0,0,0], 'axes': [0,0,0,0],
                 'weights': None, 'dtype': 0, 'scale': 1.0
             })
