@@ -158,6 +158,7 @@ lancius_memory_plan* lancius_build_memory_plan(lancius_schedule* sched, lancius_
             if (curr_fb->size >= curr->size_bytes) {
                 if (curr_fb->offset > SIZE_MAX - curr->size_bytes) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); break; }
                 plan->offsets[curr->node_id] = curr_fb->offset;
+                curr->offset = curr_fb->offset;
                 plan->is_pooled[curr->node_id] = 1;
 
                 size_t end_addr = curr_fb->offset + curr->size_bytes;
@@ -182,6 +183,7 @@ lancius_memory_plan* lancius_build_memory_plan(lancius_schedule* sched, lancius_
         if (!found) {
             if (peak_memory > SIZE_MAX - curr->size_bytes) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); continue; }
             plan->offsets[curr->node_id] = peak_memory;
+            curr->offset = peak_memory;
             plan->is_pooled[curr->node_id] = 1;
             peak_memory += curr->size_bytes;
         }
