@@ -35,7 +35,7 @@ void kernel_conv2d_int8_fwd(double* out, const int8_t* in, const int8_t* w, doub
 
 
 // V13 Transformer Kernels
-void kernel_layernorm(double* out, const double* in, const double* gamma, const double* beta, size_t batch_size, size_t hidden_size, double eps);
+void kernel_layernorm(double* out, const double* in, const double* gamma, const double* beta, size_t num_instances, size_t hidden_size, double eps);
 void kernel_gelu(double* out, const double* in, size_t elements);
 void kernel_rope(double* q, double* k, size_t batch_size, size_t seq_len, size_t n_heads, size_t head_dim, int pos_offset);
 
@@ -46,7 +46,7 @@ void kernel_attention(double* out, const double* q, const double* k, const doubl
 void kernel_attention_kv_cache(double* out, const double* q, const double* k_cache, const double* v_cache, size_t seq_len, size_t n_heads, size_t head_dim);
 
 
-void kernel_rmsnorm(double* out, const double* in, const double* gamma, size_t seq_len, size_t hidden_size, double eps);
+void kernel_rmsnorm(double* out, const double* in, const double* gamma, size_t num_instances, size_t hidden_size, double eps);
 void kernel_swiglu(double* out, const double* gate, const double* up, size_t elements);
 void kernel_gqa(double* out, const double* q, const double* k, const double* v, size_t seq_len, size_t n_heads_q, size_t n_heads_kv, size_t head_dim);
 

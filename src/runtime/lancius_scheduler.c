@@ -187,7 +187,8 @@ static void execute_node_math(lancius_node* n) {
             if (sum_exp <= 0.0 || sum_exp != sum_exp) { total_loss += 1e30; continue; }
             double log_sum_exp = log(sum_exp) + max_val;
             for(size_t c=0; c<C; c++) {
-                if (y[r*C+c] == 1.0) total_loss -= (x[r*C+c] - log_sum_exp);
+                double yc = y[r*C+c];
+                if (yc > 0.0) total_loss -= yc * (x[r*C+c] - log_sum_exp);
             }
         }
         n->runtime_data[0] = total_loss / R;
@@ -223,23 +224,15 @@ static void execute_node_math(lancius_node* n) {
         double* beta = n->inputs[2]->runtime_data;
         if(!in || !gamma || !beta) return;
 
-        /*
-         * v11A2 transformer fix:
-         *
-         * LayerNorm may receive:
-         *   [batch, hidden]
-         * or:
-         *   [batch, heads, dim]
-         *
-         * In both cases the normalization domain is all elements after
-         * the leading batch dimension.
-         */
-        size_t batch = n->shape[0];
+        size_t hidden = 0;
+        if (!lancius_node_elements_checked(n->inputs[1], &hidden) || hidden == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        size_t be = 0;
+        if (!lancius_node_elements_checked(n->inputs[2], &be) || be != hidden) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
         size_t total = 0;
-        if (!lancius_node_elements_checked(n, &total)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
-        size_t hidden = (batch ? total / batch : 0);
+        if (!lancius_node_elements_checked(n, &total) || total % hidden != 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        size_t num_instances = total / hidden;
 
-        kernel_layernorm(n->runtime_data, in, gamma, beta, batch, hidden, 1e-5);
+        kernel_layernorm(n->runtime_data, in, gamma, beta, num_instances, hidden, 1e-5);
     }
     else if (n->op == LANCIUS_OP_GELU) {
         double* in = n->inputs[0]->runtime_data;
@@ -324,23 +317,18 @@ static void execute_node_math(lancius_node* n) {
     }
 
     else if (n->op == LANCIUS_OP_RMSNORM) {
-            double* in = n->inputs[0]->runtime_data;
-            double* gamma = n->inputs[1]->runtime_data;
-            if(!in || !gamma) return;
-            /* Same contract as LayerNorm above: norm domain is everything after batch dim. */
-            size_t batch = n->shape[0];
-            size_t total = 0;
-            if (!lancius_node_elements_checked(n, &total)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
-            size_t hidden = (batch ? total / batch : 0);
-            if (hidden == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
-            // Validate gamma matches hidden and total divisible (prevents silent truncation)
-            {
-                size_t ge = 0;
-                if (!lancius_node_elements_checked(n->inputs[1], &ge) || ge != hidden) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
-                if (batch == 0 || total % batch != 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
-            }
-            kernel_rmsnorm(n->runtime_data, in, gamma, batch, hidden, 1e-5);
-        }
+        double* in = n->inputs[0]->runtime_data;
+        double* gamma = n->inputs[1]->runtime_data;
+        if(!in || !gamma) return;
+
+        size_t hidden = 0;
+        if (!lancius_node_elements_checked(n->inputs[1], &hidden) || hidden == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        size_t total = 0;
+        if (!lancius_node_elements_checked(n, &total) || total % hidden != 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        size_t num_instances = total / hidden;
+
+        kernel_rmsnorm(n->runtime_data, in, gamma, num_instances, hidden, 1e-5);
+    }
         else if (n->op == LANCIUS_OP_SWIGLU) {
             double* gate = n->inputs[0]->runtime_data;
             double* up = n->inputs[1]->runtime_data;
@@ -366,7 +354,7 @@ static void execute_node_math(lancius_node* n) {
             }
             kernel_gqa(n->runtime_data, q, k, v, n->shape[0], n->kernel_h, n->kernel_w, n->shape[2]);
         }
-else if (n->op == LANCIUS_OP_ROPE) {
+    else if (n->op == LANCIUS_OP_ROPE) {
         double* qk = n->inputs[0]->runtime_data;
         if(!qk) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         size_t seq_len = n->shape[0];
@@ -375,13 +363,20 @@ else if (n->op == LANCIUS_OP_ROPE) {
         if (seq_len == 0 || n_heads == 0 || head_dim_x2 == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
         if (head_dim_x2 % 2 != 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
         size_t head_dim = head_dim_x2 / 2;
+        if (head_dim % 2 != 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
         size_t elems = 0;
         if (!lancius_node_elements_checked(n, &elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
         if (elems > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
         memcpy(n->runtime_data, qk, elems * sizeof(double)); // Preserve SSA
-        double* q = n->runtime_data;
-        double* k = n->runtime_data + (seq_len * n_heads * head_dim);
-        kernel_rope(q, k, 1, seq_len, n_heads, head_dim, 0);
+
+        for (size_t s = 0; s < seq_len; s++) {
+            for (size_t h = 0; h < n_heads; h++) {
+                double* head_base = n->runtime_data + s * (n_heads * head_dim_x2) + h * head_dim_x2;
+                double* q = head_base;
+                double* k = head_base + head_dim;
+                kernel_rope(q, k, 1, 1, 1, head_dim, (int)s);
+            }
+        }
     }
 
     else if (n->op == LANCIUS_OP_PERMUTE) {
@@ -569,25 +564,57 @@ else if (n->op == LANCIUS_OP_ROPE) {
     }
     else if (n->op == LANCIUS_OP_BROADCAST) {
         double* a = n->inputs[0]->runtime_data; if (!a) return;
-        size_t in_elems = lancius_node_elements(n->inputs[0]);
+        size_t in_elems = 0;
+        if (!lancius_node_elements_checked(n->inputs[0], &in_elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
         if (in_elems == 1) {
             double val = a[0];
             for(size_t k=0; k<elements; k++) n->runtime_data[k] = val;
         } else {
-            /* Output is 2D [R,C]; input may be [1,C] row, [R,1] column, or [R,C] identity. */
-            size_t R = n->shape[0];
-            size_t cols = n->shape[1];
-            size_t in_R = n->inputs[0]->shape[0];
-            size_t in_C = n->inputs[0]->shape[1];
-            if (in_R == 1 && in_C == cols) {
-                for(size_t r=0; r<R; r++) for(size_t c=0; c<cols; c++) n->runtime_data[r*cols + c] = a[c];
-            } else if (in_C == 1 && in_R == R) {
-                for(size_t r=0; r<R; r++) for(size_t c=0; c<cols; c++) n->runtime_data[r*cols + c] = a[r];
-            } else if (in_R == R && in_C == cols) {
-                for(size_t k=0; k<elements; k++) n->runtime_data[k] = a[k];
-            } else {
-                lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH);
-                return;
+            uint8_t out_ndim = n->ndim;
+            uint8_t in_ndim = n->inputs[0]->ndim;
+            if (in_ndim > out_ndim || out_ndim == 0 || out_ndim > 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
+
+            size_t in_strides_raw[4] = {0};
+            in_strides_raw[in_ndim - 1] = 1;
+            for (int i = (int)in_ndim - 2; i >= 0; i--) {
+                in_strides_raw[i] = in_strides_raw[i + 1] * n->inputs[0]->shape[i + 1];
+            }
+
+            size_t out_strides[4] = {0};
+            out_strides[out_ndim - 1] = 1;
+            for (int i = (int)out_ndim - 2; i >= 0; i--) {
+                out_strides[i] = out_strides[i + 1] * n->shape[i + 1];
+            }
+
+            size_t effective_in_stride[4] = {0};
+            int offset = (int)out_ndim - (int)in_ndim;
+            for (uint8_t k = 0; k < out_ndim; k++) {
+                if ((int)k < offset) {
+                    effective_in_stride[k] = 0;
+                } else {
+                    uint8_t in_k = k - offset;
+                    size_t in_dim = n->inputs[0]->shape[in_k];
+                    size_t out_dim = n->shape[k];
+                    if (in_dim == out_dim) {
+                        effective_in_stride[k] = in_strides_raw[in_k];
+                    } else if (in_dim == 1) {
+                        effective_in_stride[k] = 0;
+                    } else {
+                        lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH);
+                        return;
+                    }
+                }
+            }
+
+            for (size_t k = 0; k < elements; k++) {
+                size_t rem = k;
+                size_t in_idx = 0;
+                for (uint8_t d = 0; d < out_ndim; d++) {
+                    size_t coord = rem / out_strides[d];
+                    rem %= out_strides[d];
+                    in_idx += coord * effective_in_stride[d];
+                }
+                n->runtime_data[k] = a[in_idx];
             }
         }
     }

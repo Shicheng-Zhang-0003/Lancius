@@ -264,10 +264,11 @@ void kernel_conv2d_int8_fwd(double* out, const int8_t* in, const int8_t* w, doub
 // =====================================================================
 
 void kernel_layernorm(double* out, const double* in, const double* gamma, const double* beta,
-                      size_t batch_size, size_t hidden_size, double eps) {
+                      size_t num_instances, size_t hidden_size, double eps) {
     if (!out || !in || !gamma || !beta) return;
-    if (batch_size == 0 || hidden_size == 0) return;
-    for(size_t b=0; b<batch_size; b++) {
+    if (num_instances == 0 || hidden_size == 0) return;
+    #pragma omp parallel for schedule(static)
+    for(size_t b=0; b<num_instances; b++) {
         const double* x = in + b * hidden_size;
         double* y = out + b * hidden_size;
 
@@ -279,7 +280,12 @@ void kernel_layernorm(double* out, const double* in, const double* gamma, const 
         for(size_t i=0; i<hidden_size; i++) var += (x[i] - mean) * (x[i] - mean);
         var /= hidden_size;
 
-        double inv_std = 1.0 / sqrt(var + eps);
+        double denom = sqrt(var + eps);
+        if (denom <= 0.0 || denom != denom) {
+            for(size_t i=0; i<hidden_size; i++) y[i] = beta[i];
+            continue;
+        }
+        double inv_std = 1.0 / denom;
         for(size_t i=0; i<hidden_size; i++) {
             y[i] = (x[i] - mean) * inv_std * gamma[i] + beta[i];
         }
@@ -289,10 +295,17 @@ void kernel_layernorm(double* out, const double* in, const double* gamma, const 
 void kernel_gelu(double* out, const double* in, size_t elements) {
     if (!out || !in) return;
     const double sqrt_2_over_pi = 0.7978845608028654;
+    #pragma omp parallel for simd schedule(static)
     for(size_t i=0; i<elements; i++) {
         double x = in[i];
-        /* No clamp: tanh has no overflow; true GELU x->x for large x. */
-        out[i] = 0.5 * x * (1.0 + tanh(sqrt_2_over_pi * (x + 0.044715 * x * x * x)));
+        if (x != x) { out[i] = x; continue; }
+        if (x > 10.0) {
+            out[i] = x;
+        } else if (x < -10.0) {
+            out[i] = 0.0;
+        } else {
+            out[i] = 0.5 * x * (1.0 + tanh(sqrt_2_over_pi * (x + 0.044715 * x * x * x)));
+        }
     }
 }
 
@@ -378,10 +391,14 @@ void kernel_attention(double* out, const double* q, const double* k, const doubl
                 }
 
                 double* out_row = out + (i * n_heads * head_dim) + (h * head_dim);
-                double inv_l = 1.0 / l_i;
-                #pragma omp simd
-                for (size_t d = 0; d < head_dim; d++) {
-                    out_row[d] = o_i[d] * inv_l;
+                if (l_i > 0.0 && l_i == l_i) {
+                    double inv_l = 1.0 / l_i;
+                    #pragma omp simd
+                    for (size_t d = 0; d < head_dim; d++) {
+                        out_row[d] = o_i[d] * inv_l;
+                    }
+                } else {
+                    memset(out_row, 0, head_dim * sizeof(double));
                 }
             }
         }
@@ -421,12 +438,21 @@ void kernel_attention_kv_cache(double* out, const double* q, const double* k_cac
         }
 
         // 2. Softmax
+        if (max_val == -INFINITY || max_val != max_val) {
+            for (size_t d = 0; d < head_dim; d++) out[h * head_dim + d] = 0.0;
+            continue;
+        }
         double sum_exp = 0.0;
         for(size_t j=0; j<seq_len; j++) {
             scores[j] = exp(scores[j] - max_val);
             sum_exp += scores[j];
         }
-        for(size_t j=0; j<seq_len; j++) scores[j] /= sum_exp;
+        if (sum_exp > 0.0 && sum_exp == sum_exp) {
+            for(size_t j=0; j<seq_len; j++) scores[j] /= sum_exp;
+        } else {
+            for (size_t d = 0; d < head_dim; d++) out[h * head_dim + d] = 0.0;
+            continue;
+        }
 
         // 3. Scores (1 x seq_len) * V_cache (seq_len x head_dim)
         for(size_t d=0; d<head_dim; d++) {
@@ -441,19 +467,23 @@ void kernel_attention_kv_cache(double* out, const double* q, const double* k_cac
     free(scores);
 }
 
-void kernel_rmsnorm(double* out, const double* in, const double* gamma, size_t seq_len, size_t hidden_size, double eps) {
+void kernel_rmsnorm(double* out, const double* in, const double* gamma, size_t num_instances, size_t hidden_size, double eps) {
     if (!out || !in || !gamma) return;
-    if (seq_len == 0 || hidden_size == 0) return;
+    if (num_instances == 0 || hidden_size == 0) return;
     #pragma omp parallel for schedule(static)
-    for (size_t i = 0; i < seq_len; i++) {
+    for (size_t i = 0; i < num_instances; i++) {
         double sq_sum = 0.0;
         const double* row = in + i * hidden_size;
         for (size_t j = 0; j < hidden_size; j++) {
             sq_sum += row[j] * row[j];
         }
         double rms = sqrt(sq_sum / hidden_size + eps);
-        double inv_rms = 1.0 / rms;
         double* out_row = out + i * hidden_size;
+        if (rms <= 0.0 || rms != rms) {
+            for (size_t j = 0; j < hidden_size; j++) out_row[j] = 0.0;
+            continue;
+        }
+        double inv_rms = 1.0 / rms;
         for (size_t j = 0; j < hidden_size; j++) {
             out_row[j] = (row[j] * inv_rms) * gamma[j];
         }
@@ -465,7 +495,17 @@ void kernel_swiglu(double* out, const double* gate, const double* up, size_t ele
     #pragma omp parallel for simd schedule(static)
     for (size_t i = 0; i < elements; i++) {
         double g = gate[i];
-        double silu = g / (1.0 + exp(-g));
+        double silu;
+        if (g != g) {
+            silu = g;
+        } else if (g >= 0.0) {
+            silu = g / (1.0 + exp(-g));
+        } else if (g < -500.0) {
+            silu = 0.0;
+        } else {
+            double eg = exp(g);
+            silu = (g * eg) / (1.0 + eg);
+        }
         out[i] = silu * up[i];
     }
 }
@@ -509,9 +549,13 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
                     m_i = m_new;
                 }
                 double* out_row = out + (i * hidden_size_q) + (hq * head_dim);
-                double inv_l = 1.0 / l_i;
-                #pragma omp simd
-                for (size_t d = 0; d < head_dim; d++) out_row[d] = o_i[d] * inv_l;
+                if (l_i > 0.0 && l_i == l_i) {
+                    double inv_l = 1.0 / l_i;
+                    #pragma omp simd
+                    for (size_t d = 0; d < head_dim; d++) out_row[d] = o_i[d] * inv_l;
+                } else {
+                    memset(out_row, 0, head_dim * sizeof(double));
+                }
             }
         }
         } /* v11S C2 fix: end OOM guard */
@@ -532,6 +576,9 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
 void kernel_matmul_f32(float* out, const float* a, const float* b, size_t M, size_t K, size_t N) {
     if (!out || !a || !b) return;
     if (M == 0 || K == 0 || N == 0) return;
+    if (M > SIZE_MAX / N) return;
+    if (M * N > SIZE_MAX / sizeof(float)) return;
+    memset(out, 0, M * N * sizeof(float));
 #pragma omp parallel for collapse(2) schedule(static)
     for (size_t r = 0; r < M; r++) {
         for (size_t c = 0; c < N; c++) {
