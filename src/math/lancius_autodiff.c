@@ -22,7 +22,22 @@ static void accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_i
         return;
     }
 
-    if (new_grad->ndim == 2 && full_input->ndim == 2) {
+    size_t in_elems = 0, grad_elems = 0;
+    bool has_in_elems = lancius_node_elements_checked(full_input, &in_elems);
+    bool has_grad_elems = lancius_node_elements_checked(new_grad, &grad_elems);
+
+    if (has_in_elems && has_grad_elems && in_elems == 1 && grad_elems > 1) {
+        lancius_node* sum_node = lancius_sum(g, new_grad);
+        if (sum_node) {
+            if (full_input->ndim == 2) {
+                new_grad = sum_node;
+            } else {
+                new_grad = lancius_reshape(g, sum_node, full_input->ndim,
+                                           full_input->shape[0], full_input->shape[1],
+                                           full_input->shape[2], full_input->shape[3]);
+            }
+        }
+    } else if (new_grad->ndim == 2 && full_input->ndim == 2) {
         if (new_grad->shape[0] == 1 && new_grad->shape[1] == 1 && (full_input->shape[0] > 1 || full_input->shape[1] > 1)) {
             new_grad = lancius_broadcast(g, new_grad, full_input->shape[0], full_input->shape[1]);
         }
@@ -37,6 +52,7 @@ static void accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_i
         }
     }
 
+    if (!new_grad) return;
     if (grad_map[fwd_input_id] == NULL) grad_map[fwd_input_id] = new_grad;
     else grad_map[fwd_input_id] = lancius_add(g, grad_map[fwd_input_id], new_grad);
 }
@@ -140,7 +156,7 @@ break;
             accum_grad(tg->graph, grad_map, fwd_n->inputs[1]->id, grad_out, fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_SUB) {
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, grad_out, fwd_to_full);
-            lancius_node* neg = lancius_const(tg->graph, -1.0, 1, 1);
+            lancius_node* neg = lancius_const_scalar(tg->graph, -1.0, grad_out ? grad_out->ndim : 2);
             lancius_node* prod = (neg && grad_out) ? lancius_mul(tg->graph, grad_out, neg) : NULL;
             accum_grad(tg->graph, grad_map, fwd_n->inputs[1]->id, prod, fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_MUL) {
