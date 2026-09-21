@@ -61,6 +61,8 @@ def main():
     else:
         print(f"\n  ❌ DIVERGENCE DETECTED: Only {matches}% Argmax match.")
     print("="*60)
+    if matches < 95:
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
