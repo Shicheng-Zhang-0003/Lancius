@@ -218,6 +218,8 @@ lancius_node* lancius_gelu(lancius_graph* g, const lancius_node* in);
 lancius_node* lancius_rmsnorm(lancius_graph* g, const lancius_node* in, const lancius_node* gamma);
 lancius_node* lancius_swiglu(lancius_graph* g, const lancius_node* gate, const lancius_node* up);
 lancius_node* lancius_gqa(lancius_graph* g, const lancius_node* q, const lancius_node* k, const lancius_node* v, uint32_t n_heads_q, uint32_t n_heads_kv);
+lancius_node* lancius_rope(lancius_graph* g, const lancius_node* qk, size_t seq_len, size_t n_heads, size_t head_dim);
+lancius_node* lancius_const_scalar(lancius_graph* g, double val, uint8_t ndim);
 
 /* A1: runtime state API */
 lancius_runtime_state* lancius_graph_runtime(lancius_graph* g, uint32_t node_id);
