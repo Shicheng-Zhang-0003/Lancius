@@ -3,7 +3,7 @@
 ## v12R1 Milestone (development, 2026-09-21)
 
 v12R1 is the first development milestone of the v12 cycle, not a stable
-release. It inherits the v11S contract below, with the following additions:
+release. Public github tag: `V1.2RC1`. It inherits the v11S contract below, with the following additions:
 
 - v2 model format unchanged: files written by v11S+ load with mandatory
   CRC32 body integrity (`LANCIUS_ALLOW_LEGACY_UNVERIFIED=1` opts into
