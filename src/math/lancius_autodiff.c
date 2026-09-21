@@ -123,6 +123,8 @@ break;
                 break;
             case LANCIUS_OP_SOFTMAX: n = lancius_softmax(tg->graph, in0); break;
             case LANCIUS_OP_CROSS_ENTROPY: n = lancius_cross_entropy(tg->graph, in0, in1); break;
+            case LANCIUS_OP_TANH: n = lancius_tanh(tg->graph, in0); break;
+            case LANCIUS_OP_MSE: n = lancius_mse(tg->graph, in0, in1); break;
             case LANCIUS_OP_PERMUTE: n = lancius_permute(tg->graph, in0, old->axes[0], old->axes[1], old->axes[2], old->axes[3]); break;
             case LANCIUS_OP_MATMUL_BATCHED: n = lancius_matmul_batched(tg->graph, in0, in1); break;
             case LANCIUS_OP_CONV2D: n = lancius_conv2d(tg->graph, in0, in1, old->stride, old->pad); break;
@@ -253,6 +255,12 @@ break;
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_cross_entropy_bwd(tg->graph, A, Y, grad_out), fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_SOFTMAX) {
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_softmax_bwd(tg->graph, grad_out, fwd_to_full[fwd_n->id]), fwd_to_full);
+        } else if (fwd_n->op == LANCIUS_OP_TANH) {
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_tanh_bwd(tg->graph, grad_out, fwd_to_full[fwd_n->id]), fwd_to_full);
+        } else if (fwd_n->op == LANCIUS_OP_MSE) {
+            lancius_node* P = fwd_to_full[fwd_n->inputs[0]->id];
+            lancius_node* T = fwd_to_full[fwd_n->inputs[1]->id];
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_mse_bwd(tg->graph, P, T, grad_out), fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_FLATTEN) {
             lancius_node* A = fwd_to_full[fwd_n->inputs[0]->id];
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_reshape(tg->graph, grad_out, A->ndim, A->shape[0], A->shape[1], A->shape[2], A->shape[3]), fwd_to_full);

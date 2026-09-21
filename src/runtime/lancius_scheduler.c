@@ -427,6 +427,43 @@ static void execute_node_math(lancius_node* n) {
         return;
     }
 
+    /* v12R2 generic trainable primitives. New ids sort after CONV2D, so like
+     * CROSS_ENTROPY they must be handled before the vision-op router below.
+     * Framework only: bounded activation + regression loss, no truth semantics. */
+    if (n->op == LANCIUS_OP_TANH) {
+        if (!n->inputs || n->input_count < 1 || !n->inputs[0]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
+        double* a = n->inputs[0]->runtime_data;
+        if (!a || !n->runtime_data) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+        for (size_t k = 0; k < elements; k++) n->runtime_data[k] = tanh(a[k]);
+        return;
+    } else if (n->op == LANCIUS_OP_TANH_BWD) {
+        if (!n->inputs || n->input_count < 2 || !n->inputs[0] || !n->inputs[1]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
+        double* g = n->inputs[0]->runtime_data; double* y = n->inputs[1]->runtime_data;
+        if (!g || !y || !n->runtime_data) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+        for (size_t k = 0; k < elements; k++) { double d = 1.0 - y[k] * y[k]; n->runtime_data[k] = g[k] * d; }
+        return;
+    } else if (n->op == LANCIUS_OP_MSE) {
+        if (!n->inputs || n->input_count < 2 || !n->inputs[0] || !n->inputs[1]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
+        double* p = n->inputs[0]->runtime_data; double* t = n->inputs[1]->runtime_data;
+        if (!p || !t || !n->runtime_data) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+        size_t pe = 0, te = 0;
+        if (!lancius_node_elements_checked(n->inputs[0], &pe) || !lancius_node_elements_checked(n->inputs[1], &te) || pe != te || pe == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        double acc = 0.0;
+        for (size_t k = 0; k < pe; k++) { double d = p[k] - t[k]; acc += d * d; }
+        n->runtime_data[0] = acc / (double)pe;
+        return;
+    } else if (n->op == LANCIUS_OP_MSE_BWD) {
+        if (!n->inputs || n->input_count < 3 || !n->inputs[0] || !n->inputs[1] || !n->inputs[2]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
+        double* p = n->inputs[0]->runtime_data; double* t = n->inputs[1]->runtime_data; double* g = n->inputs[2]->runtime_data;
+        if (!p || !t || !g || !n->runtime_data) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+        size_t pe = 0, te = 0, ge = 0;
+        if (!lancius_node_elements_checked(n->inputs[0], &pe) || !lancius_node_elements_checked(n->inputs[1], &te) || pe != te || pe == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        if (!lancius_node_elements_checked(n->inputs[2], &ge) || ge != 1) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        double scale = (2.0 * g[0]) / (double)pe;
+        for (size_t k = 0; k < pe; k++) n->runtime_data[k] = scale * (p[k] - t[k]);
+        return;
+    }
+
     if (n->op >= LANCIUS_OP_CONV2D) { lancius_execute_vision_op(n); return; }
 
     if (n->op == LANCIUS_OP_ADD) {

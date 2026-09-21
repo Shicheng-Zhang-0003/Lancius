@@ -282,7 +282,7 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
         if (rn.input_count > 16u) goto fail;
         if (rn.weight_elems > 100000000ull) goto fail;
         if (!lancius_dtype_is_valid(rn.dtype)) goto fail;
-        if (rn.op > LANCIUS_MODEL_OP_GQA) goto fail;
+        if (rn.op > LANCIUS_MODEL_OP_MSE_BWD) goto fail;
         if (rn.dtype != LANCIUS_DTYPE_FP64 && rn.dtype != LANCIUS_DTYPE_INT8 && rn.dtype != LANCIUS_DTYPE_FP32) goto fail;
         // Hostile fix: bound sparse id (DoS via 10M-pointer realloc + O(n^2))
         if (rn.id >= 10000000u) goto fail;
@@ -442,6 +442,16 @@ break;
 
             case LANCIUS_MODEL_OP_GQA:
                 n = lancius_gqa(g, in0, in1, in2, rn.meta[0], rn.meta[1]);
+                break;
+
+            /* v12R2 generic primitives, forward only: training graphs with
+             * _BWD nodes are execution artifacts, never persisted. */
+            case LANCIUS_MODEL_OP_TANH:
+                n = lancius_tanh(g, in0);
+                break;
+
+            case LANCIUS_MODEL_OP_MSE:
+                n = lancius_mse(g, in0, in1);
                 break;
 
             default:

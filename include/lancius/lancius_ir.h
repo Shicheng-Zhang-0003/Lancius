@@ -28,7 +28,14 @@ typedef enum {
     LANCIUS_OP_ATTENTION, LANCIUS_OP_KV_CACHE_READ, LANCIUS_OP_KV_CACHE_WRITE,
     LANCIUS_OP_RMSNORM,
     LANCIUS_OP_SWIGLU,
-    LANCIUS_OP_GQA
+    LANCIUS_OP_GQA,
+    /* v12R2: generic trainable primitives (verifier heads, regression).
+     * Appended at the end so all previously assigned ids are unchanged.
+     * These are framework primitives only; truth semantics live in models. */
+    LANCIUS_OP_TANH,
+    LANCIUS_OP_TANH_BWD,
+    LANCIUS_OP_MSE,
+    LANCIUS_OP_MSE_BWD
 } lancius_opcode;
 
 typedef struct lancius_node {
@@ -192,6 +199,11 @@ lancius_node* lancius_flatten(lancius_graph* g, const lancius_node* in);
 
 lancius_node* lancius_relu_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* fwd_a);
 lancius_node* lancius_softmax_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* fwd_y);
+/* v12R2 generic trainable primitives (bounded activation + regression loss) */
+lancius_node* lancius_tanh(lancius_graph* g, const lancius_node* a);
+lancius_node* lancius_tanh_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* fwd_y);
+lancius_node* lancius_mse(lancius_graph* g, const lancius_node* pred, const lancius_node* target);
+lancius_node* lancius_mse_bwd(lancius_graph* g, const lancius_node* pred, const lancius_node* target, const lancius_node* grad);
 lancius_node* lancius_sum_axis0(lancius_graph* g, const lancius_node* a);
 lancius_node* lancius_sum_axis1(lancius_graph* g, const lancius_node* a);
 lancius_node* lancius_cross_entropy(lancius_graph* g, const lancius_node* logits, const lancius_node* targets);
