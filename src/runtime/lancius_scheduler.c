@@ -12,10 +12,11 @@
 #include <stdbool.h>
 
 lancius_schedule* lancius_ir_schedule(lancius_graph* g) {
-    if (!g || g->node_count == 0) return NULL;
+    if (!g || g->node_count == 0) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return NULL; }
     lancius_schedule* sched = (lancius_schedule*)calloc(1, sizeof(lancius_schedule));
     if (!sched) { lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
     if (g->next_id == 0 || !g->nodes) { free(sched); lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return NULL; }
+    if (g->next_id > LANCIUS_MAX_TENSOR_ELEMS) { free(sched); lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
     uint32_t* in_degree = (uint32_t*)calloc(g->next_id, sizeof(uint32_t));
     lancius_node** queue = (lancius_node**)malloc(sizeof(lancius_node*) * (size_t)g->node_count);
     if (!in_degree || !queue) { free(in_degree); free(queue); free(sched); lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
@@ -48,7 +49,13 @@ lancius_schedule* lancius_ir_schedule(lancius_graph* g) {
             return NULL;
         }
         if (sched->wave_count >= wave_cap) {
-            if (wave_cap > UINT32_MAX / 2) { lancius_set_error(LANCIUS_ERROR_OOM); break; }
+            if (wave_cap > UINT32_MAX / 2) {
+                lancius_set_error(LANCIUS_ERROR_OOM);
+                for (uint32_t w = 0; w < sched->wave_count; w++) free(sched->waves[w].nodes);
+                free(sched->waves); free(sched);
+                free(in_degree); free(queue);
+                return NULL;
+            }
             wave_cap *= 2;
             lancius_wave* nw = (lancius_wave*)realloc(sched->waves, sizeof(lancius_wave) * (size_t)wave_cap);
             if (!nw) {
@@ -97,17 +104,33 @@ static void execute_matmul_batched(lancius_node* n);
  * shapes differ with a 1-dim (e.g. [2,2] vs [1,2]). Correct math:
  * out[I] = A[bcast(I)] OP B[bcast(I)], where bcast maps dim->0 if input dim==1. */
 static void execute_broadcast_binary(lancius_node* n, int op) {
+    if (!n || n->input_count < 2 || !n->inputs) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
     const lancius_node* A = n->inputs[0];
     const lancius_node* B = n->inputs[1];
+    if (!A || !B) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
     double* a = A->runtime_data; double* b = B->runtime_data; double* o = n->runtime_data;
     if (!a || !b || !o) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
     uint8_t nd = n->ndim;
     if (nd == 0 || nd > 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
+    if (op < 0 || op > 2) { lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP); return; }
+    if (A->ndim > nd || B->ndim > nd) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+    if (A->ndim == 0 || A->ndim > 4 || B->ndim == 0 || B->ndim > 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
+    /* Trailing-rank alignment (NumPy semantics): leading missing dims are 1. */
     size_t out_shape[4] = {1,1,1,1}, a_shape[4] = {1,1,1,1}, b_shape[4] = {1,1,1,1};
     for (uint8_t i = 0; i < nd && i < 4; i++) {
         out_shape[i] = n->shape[i];
-        a_shape[i] = A->shape[i];
-        b_shape[i] = B->shape[i];
+    }
+    {
+        uint8_t a_off = nd - A->ndim, b_off = nd - B->ndim;
+        for (uint8_t i = 0; i < A->ndim; i++) a_shape[a_off + i] = A->shape[i];
+        for (uint8_t i = 0; i < B->ndim; i++) b_shape[b_off + i] = B->shape[i];
+    }
+    /* Compatibility: each dim must satisfy a==1 || b==1 || a==b, and out==max(a,b). */
+    for (uint8_t i = 0; i < nd; i++) {
+        size_t da = a_shape[i], db = b_shape[i], dout = out_shape[i];
+        if (da != 1 && db != 1 && da != db) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        size_t expect = (da > db) ? da : db;
+        if (dout != expect) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
     }
     size_t a_stride[4] = {0,0,0,0}, b_stride[4] = {0,0,0,0};
     a_stride[nd-1] = 1; b_stride[nd-1] = 1;
@@ -125,6 +148,9 @@ static void execute_broadcast_binary(lancius_node* n, int op) {
         if (out_shape[i] && total > SIZE_MAX / out_shape[i]) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
         total *= out_shape[i];
     }
+    size_t a_elems = 0, b_elems = 0;
+    if (!lancius_node_elements_checked(A, &a_elems) || !lancius_node_elements_checked(B, &b_elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
+    if (a_elems == 0 || b_elems == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
     size_t idx[4] = {0,0,0,0};
     for (size_t lin = 0; lin < total; lin++) {
         size_t rem = lin;
@@ -141,6 +167,7 @@ static void execute_broadcast_binary(lancius_node* n, int op) {
             ai += a_c * a_stride[d];
             bi += b_c * b_stride[d];
         }
+        if (ai >= a_elems || bi >= b_elems) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
         double av = a[ai], bv = b[bi];
         if (op == 0) o[lin] = av + bv;
         else if (op == 1) o[lin] = av - bv;
@@ -183,8 +210,9 @@ static void execute_node_math(lancius_node* n) {
             for(size_t c=1; c<C; c++) if(x[r*C+c] > max_val) max_val = x[r*C+c];
             double sum_exp = 0.0;
             for(size_t c=0; c<C; c++) sum_exp += exp(x[r*C+c] - max_val);
-            /* v11S H3 fix: guard against degenerate logits */
-            if (sum_exp <= 0.0 || sum_exp != sum_exp) { total_loss += 1e30; continue; }
+            /* Despot truth: degenerate softmax denominator is NUMERICAL, not 1e30.
+               Must match BWD which fails loud — no silent masking. */
+            if (sum_exp <= 0.0 || sum_exp != sum_exp) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
             double log_sum_exp = log(sum_exp) + max_val;
             for(size_t c=0; c<C; c++) {
                 double yc = y[r*C+c];
@@ -989,21 +1017,34 @@ void lancius_schedule_execute_static(lancius_schedule* schedule, void* flat_buff
         // 1. Assign memory to all intermediate nodes in this wave
         for (uint32_t i = 0; i < wave->node_count; i++) {
             lancius_node* n = wave->nodes[i];
-            if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST) continue;
+            if (!n) continue;
+            if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST || n->op == LANCIUS_OP_NOP) continue;
 
-            size_t elements = lancius_node_elements(n); (void)elements; /* A3 static */
-            size_t size = lancius_node_bytes(n); /* A3 static */
+            size_t size = 0;
+            if (!lancius_node_bytes_checked(n, &size)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
 
             // Align to 32 bytes for AVX2/SIMD
-            offset = (offset + 31) & ~(size_t)31;
+            size_t aligned = (offset + 31) & ~(size_t)31;
+            if (aligned < offset) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+            offset = aligned;
             if (size > SIZE_MAX - offset) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
 
             // Assign the flat buffer pointer directly to the node
+            if (n->dtype == LANCIUS_DTYPE_FP32) {
+                n->runtime_data_f32 = (float*)((char*)flat_buffer + offset);
+                n->runtime_data = NULL;
+            } else {
                 n->runtime_data = (double*)((char*)flat_buffer + offset);
+            }
 
                 /* A1: mirror static pool buffer into runtime state */
                 if (n->rt) {
-                    n->rt->buffer = n->runtime_data;
+                    if (n->dtype == LANCIUS_DTYPE_FP32) {
+                        n->rt->buffer = NULL;
+                        n->rt->buffer_f32 = n->runtime_data_f32;
+                    } else {
+                        n->rt->buffer = n->runtime_data;
+                    }
                     n->rt->offset = offset;
                 }
                 lancius_node_set_owner(n, LANCIUS_MEMORY_POOL); /* A2 static */
@@ -1014,8 +1055,10 @@ void lancius_schedule_execute_static(lancius_schedule* schedule, void* flat_buff
         // 2. Execute the math for the wave
         for (uint32_t i = 0; i < wave->node_count; i++) {
             lancius_node* n = wave->nodes[i];
-            if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST) continue;
-            if (!n->runtime_data) continue;
+            if (!n) continue;
+            if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST || n->op == LANCIUS_OP_NOP) continue;
+            if (n->dtype == LANCIUS_DTYPE_FP32) { if (!n->runtime_data_f32) continue; }
+            else { if (!n->runtime_data) continue; }
 
             // Reuse the exact same math router from the standard executor
             execute_node_math(n);
