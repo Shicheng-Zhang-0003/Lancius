@@ -56,10 +56,10 @@ void kernel_conv2d_fwd(double* out, const double* in, const double* w,
                     for(size_t ci=0; ci<C_in; ci++) {
                         for(size_t kh=0; kh<K_h; kh++) {
                             for(size_t kw=0; kw<K_w; kw++) {
-                                int ih = (int)(ho*stride) - (int)pad + (int)kh;
-                                int iw = (int)(wo*stride) - (int)pad + (int)kw;
-                                if(ih >= 0 && ih < (int)H_in && iw >= 0 && iw < (int)W_in) {
-                                    size_t in_idx = ni*(C_in*H_in*W_in) + ci*(H_in*W_in) + ih*W_in + iw;
+                                int64_t ih = (int64_t)ho * (int64_t)stride - (int64_t)pad + (int64_t)kh;
+                                int64_t iw = (int64_t)wo * (int64_t)stride - (int64_t)pad + (int64_t)kw;
+                                if(ih >= 0 && (uint64_t)ih < (uint64_t)H_in && iw >= 0 && (uint64_t)iw < (uint64_t)W_in) {
+                                    size_t in_idx = ni*(C_in*H_in*W_in) + ci*(H_in*W_in) + ((size_t)ih)*W_in + ((size_t)iw);
                                     size_t w_idx = co*(C_in*K_h*K_w) + ci*(K_h*K_w) + kh*K_w + kw;
                                     sum += in[in_idx] * w[w_idx];
                                 }
@@ -96,10 +96,10 @@ void kernel_conv2d_bwd_in(double* out, const double* grad, const double* w,
                     for(size_t ci=0; ci<C_in; ci++) {
                         for(size_t kh=0; kh<K_h; kh++) {
                             for(size_t kw=0; kw<K_w; kw++) {
-                                int ih = (int)(ho*stride) - (int)pad + (int)kh;
-                                int iw = (int)(wo*stride) - (int)pad + (int)kw;
-                                if(ih >= 0 && ih < (int)H_in && iw >= 0 && iw < (int)W_in) {
-                                    size_t in_idx = ni*(C_in*H_in*W_in) + ci*(H_in*W_in) + ih*W_in + iw;
+                                int64_t ih = (int64_t)ho * (int64_t)stride - (int64_t)pad + (int64_t)kh;
+                                int64_t iw = (int64_t)wo * (int64_t)stride - (int64_t)pad + (int64_t)kw;
+                                if(ih >= 0 && (uint64_t)ih < (uint64_t)H_in && iw >= 0 && (uint64_t)iw < (uint64_t)W_in) {
+                                    size_t in_idx = ni*(C_in*H_in*W_in) + ci*(H_in*W_in) + ((size_t)ih)*W_in + ((size_t)iw);
                                     size_t w_idx = co*(C_in*K_h*K_w) + ci*(K_h*K_w) + kh*K_w + kw;
                                     out[in_idx] += g * w[w_idx];
                                 }
@@ -141,10 +141,10 @@ void kernel_conv2d_bwd_w(double* out, const double* grad, const double* in,
                             for(size_t ci=0; ci<C_in; ci++) {
                                 for(size_t kh=0; kh<K_h; kh++) {
                                     for(size_t kw=0; kw<K_w; kw++) {
-                                        int ih = (int)(ho*stride) - (int)pad + (int)kh;
-                                        int iw = (int)(wo*stride) - (int)pad + (int)kw;
-                                        if(ih >= 0 && ih < (int)H_in && iw >= 0 && iw < (int)W_in) {
-                                            size_t in_idx = ni*(C_in*H_in*W_in) + ci*(H_in*W_in) + ih*W_in + iw;
+                                        int64_t ih = (int64_t)ho * (int64_t)stride - (int64_t)pad + (int64_t)kh;
+                                        int64_t iw = (int64_t)wo * (int64_t)stride - (int64_t)pad + (int64_t)kw;
+                                        if(ih >= 0 && (uint64_t)ih < (uint64_t)H_in && iw >= 0 && (uint64_t)iw < (uint64_t)W_in) {
+                                            size_t in_idx = ni*(C_in*H_in*W_in) + ci*(H_in*W_in) + ((size_t)ih)*W_in + ((size_t)iw);
                                             size_t w_idx = co*(C_in*K_h*K_w) + ci*(K_h*K_w) + kh*K_w + kw;
                                             local_w[w_idx] += g * in[in_idx];
                                         }
@@ -192,10 +192,10 @@ void kernel_conv2d_relu_fwd(double* out, const double* in, const double* w,
                     for(size_t ci=0; ci<C_in; ci++) {
                         for(size_t kh=0; kh<K_h; kh++) {
                             for(size_t kw=0; kw<K_w; kw++) {
-                                int ih = (int)(ho*stride) - (int)pad + (int)kh;
-                                int iw = (int)(wo*stride) - (int)pad + (int)kw;
-                                if(ih >= 0 && ih < (int)H_in && iw >= 0 && iw < (int)W_in) {
-                                    size_t in_idx = ni*(C_in*H_in*W_in) + ci*(H_in*W_in) + ih*W_in + iw;
+                                int64_t ih = (int64_t)ho * (int64_t)stride - (int64_t)pad + (int64_t)kh;
+                                int64_t iw = (int64_t)wo * (int64_t)stride - (int64_t)pad + (int64_t)kw;
+                                if(ih >= 0 && (uint64_t)ih < (uint64_t)H_in && iw >= 0 && (uint64_t)iw < (uint64_t)W_in) {
+                                    size_t in_idx = ni*(C_in*H_in*W_in) + ci*(H_in*W_in) + ((size_t)ih)*W_in + ((size_t)iw);
                                     size_t w_idx = co*(C_in*K_h*K_w) + ci*(K_h*K_w) + kh*K_w + kw;
                                     sum += in[in_idx] * w[w_idx];
                                 }
@@ -240,10 +240,10 @@ void kernel_conv2d_int8_fwd(double* out, const int8_t* in, const int8_t* w, doub
                     for(size_t ci=0; ci<C_in; ci++) {
                         for(size_t kh=0; kh<K_h; kh++) {
                             for(size_t kw=0; kw<K_w; kw++) {
-                                int ih = (int)(ho*stride) - (int)pad + (int)kh;
-                                int iw = (int)(wo*stride) - (int)pad + (int)kw;
-                                if(ih >= 0 && ih < (int)H_in && iw >= 0 && iw < (int)W_in) {
-                                    size_t in_idx = ni*(C_in*H_in*W_in) + ci*(H_in*W_in) + ih*W_in + iw;
+                                int64_t ih = (int64_t)ho * (int64_t)stride - (int64_t)pad + (int64_t)kh;
+                                int64_t iw = (int64_t)wo * (int64_t)stride - (int64_t)pad + (int64_t)kw;
+                                if(ih >= 0 && (uint64_t)ih < (uint64_t)H_in && iw >= 0 && (uint64_t)iw < (uint64_t)W_in) {
+                                    size_t in_idx = ni*(C_in*H_in*W_in) + ci*(H_in*W_in) + ((size_t)ih)*W_in + ((size_t)iw);
                                     size_t w_idx = co*(C_in*K_h*K_w) + ci*(K_h*K_w) + kh*K_w + kw;
                                     sum += (int64_t)in[in_idx] * (int64_t)w[w_idx];
                                 }
@@ -414,14 +414,14 @@ void kernel_attention(double* out, const double* q, const double* k, const doubl
 // =====================================================================
 void kernel_attention_kv_cache(double* out, const double* q, const double* k_cache, const double* v_cache,
                                size_t seq_len, size_t n_heads, size_t head_dim) {
-    if (!out || !q || !k_cache || !v_cache) return;
-    if (seq_len == 0 || n_heads == 0 || head_dim == 0) return;
+    if (!out || !q || !k_cache || !v_cache) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (seq_len == 0 || n_heads == 0 || head_dim == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
     double scale = 1.0 / sqrt((double)head_dim);
     size_t hidden_size = n_heads * head_dim;
 
     memset(out, 0, hidden_size * sizeof(double));
     double* scores = (double*)malloc(seq_len * sizeof(double));
-    if (!scores) return;
+    if (!scores) { lancius_set_error(LANCIUS_ERROR_OOM); return; }
 
     for(size_t h=0; h<n_heads; h++) {
         double max_val = -INFINITY;
