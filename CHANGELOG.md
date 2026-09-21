@@ -1,5 +1,31 @@
 # Lancius Changelog
 
+## v12R2 (unreleased) — learn to verify
+
+First work toward the R2 mandate (see `docs/v12R2_SCOPE.md`): the framework
+gains only generic trainable primitives so models can learn the
+extended-boolean verifier scheme. Truth semantics stay models-side.
+
+- Core: `TANH`/`TANH_BWD` (bounded activation saturating the fluid scale)
+  and `MSE`/`MSE_BWD` (regression against step labels in [-1,1]) across
+  IR builders, scheduler executors, autodiff VJPs, and v2 loader
+  forward cases (ids appended at the end; v11S+ files load identically).
+  `_BWD` nodes stay non-serializable, like all training artifacts.
+- Gates: 6 new known-answer checks (tanh(0/±1), MSE == 1/3); new
+  `train_verifier_head` example trains a tanh-headed MLP by MSE with
+  weakest-link credit through the argmin step — loss falls, analytic
+  gradients match finite differences to ~1e-11, scores stay in [-1,1],
+  all in `make check`.
+- Pipeline: `distill_prm800k.py` converts PRM800k step rows to fixed-dim
+  numeric vectors + {-1,0,+1} targets with manifests and sha256;
+  honestly reports the vendored subset is single-class (+1 only).
+- Python-to-C: stdlib-only `distill_prm800k.py` retired in favor of
+  `examples/distill_prm800k.c` (self-contained JSON + sha256, no
+  dependencies) — byte-identical `.bin` output on all 14,564 vendored
+  steps, ASan/UBSan clean including hostile inputs, `--selftest` proofs
+  in `make check`. Third-party-bound scripts (torch/onnx/ort/network)
+  stay in Python: porting those buys nothing but difficulty.
+
 ## v12R1 / V1.2RC1 — 2026-09-21 — hardening plus numerical correctness
 
 First development milestone of the v12 cycle (R1 phase), built on the v11S

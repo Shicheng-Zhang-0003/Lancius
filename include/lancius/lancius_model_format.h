@@ -80,7 +80,13 @@ typedef enum {
     LANCIUS_MODEL_OP_KV_CACHE_WRITE = 34,
     LANCIUS_MODEL_OP_RMSNORM = 35,
     LANCIUS_MODEL_OP_SWIGLU = 36,
-    LANCIUS_MODEL_OP_GQA = 37
+    LANCIUS_MODEL_OP_GQA = 37,
+    /* v12R2: appended at the end; all previously assigned ids unchanged,
+     * so v11S+ files load identically. */
+    LANCIUS_MODEL_OP_TANH = 38,
+    LANCIUS_MODEL_OP_TANH_BWD = 39,
+    LANCIUS_MODEL_OP_MSE = 40,
+    LANCIUS_MODEL_OP_MSE_BWD = 41
 } lancius_model_op;
 
 /*

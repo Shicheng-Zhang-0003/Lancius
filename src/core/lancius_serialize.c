@@ -102,7 +102,7 @@ lancius_graph* lancius_graph_load(const char* path) {
         if (id >= map_size) goto fail;
 
         if (fread(&op, sizeof(lancius_opcode), 1, f) != 1) goto fail;
-        if (op > LANCIUS_OP_GQA) goto fail;
+        if (op > LANCIUS_OP_MSE_BWD) goto fail;
         if (fread(&ndim, sizeof(uint8_t), 1, f) != 1) goto fail;
         if (ndim == 0 || ndim > 4) goto fail;
         if (fread(shape, sizeof(size_t), 4, f) != 4) goto fail;

@@ -339,6 +339,39 @@ lancius_node* lancius_softmax_bwd(lancius_graph* g, const lancius_node* grad, co
     lancius_node* n = alloc_node(g, LANCIUS_OP_SOFTMAX_BWD, grad->ndim, 2);
     if (n) { memcpy(n->shape, grad->shape, sizeof(size_t)*grad->ndim); n->inputs[0] = grad; n->inputs[1] = fwd_y; } return n;
 }
+/* v12R2 generic trainable primitives. Same-shape activation; MSE reduces to
+ * scalar with exact-shape pred/target. Framework only: no truth semantics. */
+lancius_node* lancius_tanh(lancius_graph* g, const lancius_node* a) {
+    if (!a) return NULL;
+    lancius_node* n = alloc_node(g, LANCIUS_OP_TANH, a->ndim, 1);
+    if (n) { memcpy(n->shape, a->shape, sizeof(size_t)*a->ndim); n->inputs[0] = a; } return n;
+}
+lancius_node* lancius_tanh_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* fwd_y) {
+    if (!grad || !fwd_y) return NULL;
+    if (grad->ndim != fwd_y->ndim) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    for (uint8_t i = 0; i < grad->ndim; i++)
+        if (grad->shape[i] != fwd_y->shape[i]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    lancius_node* n = alloc_node(g, LANCIUS_OP_TANH_BWD, grad->ndim, 2);
+    if (n) { memcpy(n->shape, grad->shape, sizeof(size_t)*grad->ndim); n->inputs[0] = grad; n->inputs[1] = fwd_y; } return n;
+}
+lancius_node* lancius_mse(lancius_graph* g, const lancius_node* pred, const lancius_node* target) {
+    if (!pred || !target) return NULL;
+    if (pred->ndim != target->ndim) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    for (uint8_t i = 0; i < pred->ndim; i++)
+        if (pred->shape[i] != target->shape[i]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    lancius_node* n = alloc_node(g, LANCIUS_OP_MSE, 2, 2);
+    if (n) { n->shape[0] = 1; n->shape[1] = 1; n->inputs[0] = pred; n->inputs[1] = target; } return n;
+}
+lancius_node* lancius_mse_bwd(lancius_graph* g, const lancius_node* pred, const lancius_node* target, const lancius_node* grad) {
+    if (!pred || !target || !grad) return NULL;
+    if (pred->ndim != target->ndim) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    for (uint8_t i = 0; i < pred->ndim; i++)
+        if (pred->shape[i] != target->shape[i]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    size_t ge = 0;
+    if (!lancius_node_elements_checked(grad, &ge) || ge != 1) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    lancius_node* n = alloc_node(g, LANCIUS_OP_MSE_BWD, pred->ndim, 3);
+    if (n) { memcpy(n->shape, pred->shape, sizeof(size_t)*pred->ndim); n->inputs[0] = pred; n->inputs[1] = target; n->inputs[2] = grad; } return n;
+}
 lancius_node* lancius_sum_axis0(lancius_graph* g, const lancius_node* a) {
     if (!a || a->ndim != 2) return NULL;
     lancius_node* n = alloc_node(g, LANCIUS_OP_SUM_AXIS0, 2, 1);

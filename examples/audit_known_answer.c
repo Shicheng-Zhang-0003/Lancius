@@ -304,6 +304,39 @@ static void test_flatten(void) {
     finish(s, g);
 }
 
+/* v12R2 generic primitives: bounded activation + regression loss.
+ * Framework only: tanh saturates the fluid scale, MSE grounds step labels. */
+static void test_tanh_mse(void) {
+    lancius_graph* g = lancius_graph_create();
+    lancius_node* X = lancius_input(g, 1, 3);
+    lancius_node* Y = lancius_tanh(g, X);
+    lancius_node* P = lancius_input(g, 1, 3);
+    lancius_node* T = lancius_input(g, 1, 3);
+    lancius_node* L = lancius_mse(g, P, T);
+
+    double x[3] = {0.0, 1.0, -1.0};
+    double p[3] = {1.0, 2.0, 3.0};
+    double t[3] = {1.0, 2.0, 4.0};
+    lancius_node_bind_external(X, x);
+    lancius_node_bind_external(P, p);
+    lancius_node_bind_external(T, t);
+
+    lancius_schedule* s = run(g);
+
+    CHECK(Y && Y->runtime_data, "tanh output allocated");
+    if (Y && Y->runtime_data) {
+        CHECK(close_d(Y->runtime_data[0], 0.0, 1e-12), "tanh(0) == 0");
+        CHECK(close_d(Y->runtime_data[1], 0.7615941559557649, 1e-12), "tanh(1)");
+        CHECK(close_d(Y->runtime_data[2], -0.7615941559557649, 1e-12), "tanh(-1)");
+    }
+    CHECK(L && L->runtime_data, "mse output allocated");
+    if (L && L->runtime_data) {
+        CHECK(close_d(L->runtime_data[0], 1.0 / 3.0, 1e-12), "mse == 1/3");
+    }
+
+    finish(s, g);
+}
+
 static void test_cross_entropy(void) {
     lancius_graph* g = lancius_graph_create();
     lancius_node* logits = lancius_input(g, 1, 2);
@@ -350,6 +383,7 @@ int main(void) {
     before = failures; test_maxpool2d();       report("MaxPool2D", before);
     before = failures; test_flatten();         report("Flatten", before);
     before = failures; test_cross_entropy();   report("CrossEntropy", before);
+    before = failures; test_tanh_mse();        report("Tanh/MSE", before);
 
     lancius_arena_destroy(scratch);
 
