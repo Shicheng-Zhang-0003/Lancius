@@ -21,7 +21,7 @@ src/core/lancius_validate.c \
 src/compiler/lancius_quantize.c
 
 OBJS = $(SRCS:.c=.o)
-all: liblancius.a audit_internals stress_test test_torture generate_text run_llm train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection
+all: liblancius.a audit_internals stress_test test_torture generate_text run_llm train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_despot_probe
 liblancius.a: $(OBJS)
 	ar rcs $@ $(OBJS)
 train_mnist: examples/train_mnist.c liblancius.a
@@ -37,6 +37,8 @@ clean:
 	rm -f audit_threadpool_parity audit_nan_injection test_diamond_memory soak_fuzz
 	rm -f parity_runner run_trained_batch
 	rm -f audit_regression_13c regression_roundtrip.lancius regression_bad_*.lancius regression_trunc_*.lancius regression_huge_*.lancius
+	rm -f audit_known_answer audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_flash_attention
+	rm -f audit_despot_probe
 .PHONY: all clean check check-long check-sanitizers
 train_cifar10: examples/train_cifar10.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp
@@ -110,7 +112,7 @@ install: liblancius.a
 	@echo "📦 Installing Lancius static library to $(PREFIX)/lib..."
 	@mkdir -p $(PREFIX)/lib
 	@cp liblancius.a $(PREFIX)/lib/
-	@echo "✅ Lancius v12A2 installed successfully."
+	@echo "✅ Lancius v12R1 installed successfully."
 
 uninstall:
 	@echo "🗑️  Removing Lancius from $(PREFIX)..."
@@ -136,6 +138,7 @@ check: all
 	./test_torture
 	./test_path_bg
 	./test_grad_check
+	./audit_internals
 	./audit_ffi
 	./audit_threadpool_parity
 	./audit_nan_injection
@@ -148,12 +151,13 @@ check: all
 	./audit_transformer_known_answer
 	./audit_fp32_path
 	./audit_fault_injection
-	@echo "v12A2 check complete."
+	./audit_despot_probe
+	@echo "v12R1 check complete."
 
 check-long: check
 	./soak_fuzz
 	./fuzz_lancius 12345
-	@echo "v12A2 long check complete."
+	@echo "v12R1 long check complete."
 
 # --- v11A1 Task 13b: known-answer audit ---
 audit_known_answer: examples/audit_known_answer.c liblancius.a
@@ -173,15 +177,19 @@ check-sanitizers:
 	./stress_test
 	./test_torture
 	./fuzz_lancius 12345
-	@echo "v12A2 sanitizer gate complete."
+	@echo "v12R1 sanitizer gate complete."
 	@echo "Restoring normal build (removing sanitizer instrumentation)..."
-	$(MAKE) -B liblancius.a
+	$(MAKE) -B all
 	@echo "Normal build restored. Safe to run 'make check' now."
 
 audit_transformer_known_answer: examples/audit_transformer_known_answer.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 
 audit_fp32_path: examples/audit_fp32_path.c liblancius.a
+	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
+
+# --- v12R1: despot probe pins the P0 fixes (broadcast, planner, CE truth) ---
+audit_despot_probe: examples/audit_despot_probe.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 
 audit_fault_injection: examples/audit_fault_injection.c liblancius.a

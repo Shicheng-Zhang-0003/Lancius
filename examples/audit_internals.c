@@ -2,6 +2,7 @@
 #include <lancius.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <time.h>
 
 int main() {
@@ -81,6 +82,12 @@ int main() {
     for(int i=0; i<10; i++) sum += S1->runtime_data[i];
     printf("%.15f (Should be exactly 1.0)\n", sum);
 
+    /* v12R1: this audit runs in `make check`, so its claim must be executable.
+       Softmax rows must sum to 1 within tight tolerance, or the gate fails. */
+    int internals_pass = (S1->runtime_data != NULL) && (fabs(sum - 1.0) < 1e-9);
+    if (internals_pass) printf("  ✅ Softmax normalization verified (|sum-1| < 1e-9).\n");
+    else printf("  ❌ Softmax normalization violated.\n");
+
     printf("\n================================================================\n");
     printf("  INTERNAL X-RAY COMPLETE. INSPECT THE NUMBERS.                \n");
     printf("================================================================\n");
@@ -89,5 +96,5 @@ int main() {
     lancius_schedule_destroy(sched);
     lancius_graph_destroy(g);
     lancius_arena_destroy(scratch);
-    return 0;
+    return internals_pass ? 0 : 1;
 }
