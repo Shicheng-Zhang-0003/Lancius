@@ -38,6 +38,17 @@ This is a development milestone, not a stable release. `v11S` remains the stable
 - New `audit_despot_probe` pins broadcast values, cross-rank broadcast, diamond pooled parity, and the CE contract inside `make check`
 - `audit_internals` verifies softmax normalization; `test_torture` runs a real cycle test; `fuzz_lancius` separates safe-rejects from true failures; `audit_modern_llm` verifies GQA values
 - Sanitizer gate restores a clean build afterwards, so instrumented binaries can never leak into `make check`
+- V3 forensic sweep (see `CHANGELOG.md`): ~70 defects fixed across kernels,
+  scheduler, autodiff, persistence, interop, trainers, and operator;
+  sanitizers clean, PyTorch parity exact
+
+### Ordinary-User Operator
+
+- `./lancius demo` proves an install in one command; `./lancius tui`
+  guides every workflow with validation, defaults, and offline honesty
+- Every verb has `--help`; user file paths never pass through a shell;
+  long trains confirm before burning hours; `doctor` distinguishes
+  missing-core (fail) from missing-training-data (warning)
 
 ---
 

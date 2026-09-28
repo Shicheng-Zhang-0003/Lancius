@@ -101,9 +101,9 @@ Four forensic sweeps, ~70 code-backed defects, all fixed and re-proven
   MNIST raw-loss abort + accuracy gate; both trainers exit 1 at ≤ chance;
   `test_ffi_error` exits 1 on unexpected success/non-NULL handle.
 - Docs: new `docs/DESPOT_TRUTH_V2.md` (full math/programming/operational
-  audit with formulas and proofs); `ARCHITECTURE.md`, `KNOWN_LIMITATIONS.md`,
-  `MANIFEST.md`, `STATUS.md` updated; temp execution under
-  `/tmp/opencode/lancius-despot-logs`.
+  audit with formulas and proofs); `docs/ARCHITECTURE.md`,
+  `KNOWN_LIMITATIONS.md`, `MANIFEST.md`, `STATUS.md` updated; temp execution
+  under `/tmp/opencode/lancius-despot-logs`.
 - Proven: `make check` green; `test_grad_check` (`8.6e-10`, `5.8e-8`);
   `probe_v2` (SUM-3D `BROADCAST ndim3`, RESHAPE, SUM_AXIS, `broadcast_to_shape`,
   N-D partial fail-loud, attention NaN→NUMERICAL) all truth holds.

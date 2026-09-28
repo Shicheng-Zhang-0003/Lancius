@@ -1,5 +1,10 @@
 # Lancius v11A1 Operator Support
 
+> Historical matrix (v11A1 tree). Superseded: the current status table is
+> `../README.md` § Feature Status, and the binding contract is
+> `../KNOWN_LIMITATIONS.md`. Entries below marked experimental, partial, or
+> "implemented in Task 5" describe v11A1, not v12R1.
+
 This matrix describes operator support in the current v11A1 tree.
 
 ## Core Ops

@@ -83,3 +83,31 @@ Real gates (`return fails?1:0`, in `make check` without `||true`): `test_grad_ch
 - Dynamic shapes, GPU, distributed, production LLM serving: not supported.
 - `conv_bwd_w critical` last-bit nondeterminism (training only).
 - LR parity unproven across PyTorch/C batch/scale gaps.
+
+## 9. V3 addendum (2026-09-28) — forensic sweep, same policy
+
+Four parallel reviews, ~70 code-backed defects, all fixed and re-proven
+(`make check`, `check-sanitizers` clean, pytorch parity `3.42e-07`).
+Behavioral deltas vs §1–§8:
+
+- Norms: degenerate LayerNorm/RMSNorm is `NUMERICAL` (was silent
+  beta/zeros), matching the attention contract.
+- Matmul: IR builds 2D-only (was: N-D built a 2D node that dropped batch
+  dims at execution); FP32/INT8 paths check K-match like FP64 always did.
+- Ownership: FP32 has `f32_owner` (was aliased: leak + free-of-external);
+  quantizer syncs `rt->scale`, frees stale int8, skips non-finite max.
+- VM: `CONST` regs materialized (were garbage); inputs checked.
+- Planner/pool: zero-size plans abort (were offset-0 overlaps); queue grows
+  (was racy inline run); shutdown rejects.
+- Persistence: v1 checked writes + partials unlinked + ndim 1/3 loads +
+  view validation + double-free removed; v2 tmp+rename + streamed CRC (no
+  800MB malloc, no `long` truncation, no seek-bypass) + dup-NOP seen-list.
+- Interop: converter true ranks + Reshape rank + pack validation;
+  exporters cap/check/validate/multi-input dummies; datasets no-shell +
+  cwd-jail + slip guards.
+- Trainers/operator: CLI fork+exec, checked allocs/graphs/grads, cifar
+  evaluated-denominator, verifier heap-copied grads + worst-step max,
+  edge/demo/diagnostic cleanup + return codes.
+- Doc drift fixed as part of this batch: single-owner rule per file (see
+  README § Documentation), stale v11A1 format/ops claims bannered,
+  duplicate release note removed.

@@ -1,6 +1,6 @@
 # Lancius Compatibility Manifest
 
-## v12R1 Milestone (development, 2026-09-21) + despot truth V2 (2026-09-28)
+## v12R1 Milestone (development, 2026-09-21) + despot truth V2/V3 (2026-09-28)
 
 v12R1 is the first development milestone of the v12 cycle, not a stable
 release. Public github tag: `V1.2RC1`. It inherits the v11S contract below, with the following additions:
@@ -15,8 +15,14 @@ release. Public github tag: `V1.2RC1`. It inherits the v11S contract below, with
   broadcast incompat (was silent NULL).
 - Broadcast `ADD`/`SUB`/`MUL` follow trailing-rank (NumPy) semantics.
   INT8 Add is row-bias only, else exact FP64 broadcast.
-- Degenerate softmax/CE/attention/KV/GQA denominators report `NUMERICAL`
-  on NaN (zero-sum causal rows stay zeros).
+- Degenerate softmax/CE/attention/KV/GQA/LayerNorm/RMSNorm denominators
+  report `NUMERICAL` on NaN/degenerate variance (zero-sum causal attention
+  rows stay zeros).
+- `lancius_matmul` is 2D-only: N-D inputs fail at build (they previously
+  built a 2D node that silently dropped batch dims at execution, so no
+  correctly-executing model changes behavior).
+- v2 saves are tmp-file + rename (no observable change on success; crashed
+  saves no longer leave truncated files); duplicate NOP ids are rejected.
 - Autodiff: `broadcast_to_shape` for any 1..4-D scalar lift; `SUM`
   (any ndim), `SUM_AXIS0/1`, `RESHAPE` VJPs exact; N-dim partial broadcast
   reduction fails loud (no `SUM_AXIS_ND` yet); every unhandled forward op
