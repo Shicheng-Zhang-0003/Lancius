@@ -22,8 +22,11 @@
 #include <ctype.h>
 #include <math.h>
 #include <dirent.h>
+#include <errno.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 static void print_version(void) {
@@ -75,6 +78,36 @@ static int run_shell(const char *cmd) {
     int rc = system(cmd);
     if (rc != 0) {
         printf("FAIL: command exited with status %d\n", rc);
+        return 1;
+    }
+    return 0;
+}
+
+/* Despot truth: system() with user paths was command injection
+ * (filenames with ; $() `` inject). User-controlled args always go through
+ * fork+execvp with no shell. Fixed commands (no user input) keep system(). */
+static int run_argv(const char *prog, char *const argv[]) {
+    pid_t pid;
+    int st = 0;
+    size_t i;
+    if (!prog || !argv || !argv[0]) return 1;
+    printf("+");
+    for (i = 0; argv[i]; i++) printf(" %s", argv[i]);
+    printf("\n");
+    fflush(stdout);
+    pid = fork();
+    if (pid < 0) {
+        printf("FAIL: fork failed (%s)\n", strerror(errno));
+        return 1;
+    }
+    if (pid == 0) {
+        execvp(prog, argv);
+        _exit(127);
+    }
+    while (waitpid(pid, &st, 0) < 0 && errno == EINTR) {}
+    if (!WIFEXITED(st) || WEXITSTATUS(st) != 0) {
+        printf("FAIL: command exited with status %d\n",
+            WIFEXITED(st) ? WEXITSTATUS(st) : -1);
         return 1;
     }
     return 0;
@@ -581,22 +614,36 @@ static int cmd_datasets(int argc, char **argv) {
     }
     if (strcmp(argv[0], "distill") == 0) {
         /* passthrough: lancius datasets distill -- --in ... --out ... */
-        char cmd[2048];
         if (!file_exists("./distill_prm800k")) {
             printf("FAIL: ./distill_prm800k missing — run `make` first.\n");
             return 1;
         }
-        snprintf(cmd, sizeof(cmd), "./distill_prm800k --selftest");
-        if (run_shell(cmd) != 0) return 1;
+        {
+            char *selftest[3];
+            selftest[0] = "./distill_prm800k";
+            selftest[1] = "--selftest";
+            selftest[2] = NULL;
+            if (run_argv(selftest[0], selftest) != 0) return 1;
+        }
         if (argc > 1) {
-            size_t off = 0;
-            off += (size_t)snprintf(cmd + off, sizeof(cmd) - off, "./distill_prm800k");
-            {
-                int i;
-                for (i = 1; i < argc && off < sizeof(cmd) - 64; i++)
-                    off += (size_t)snprintf(cmd + off, sizeof(cmd) - off, " %s", argv[i]);
+            /* Despot truth: overlong args truncated then RAN (was: ignored
+             * snprintf return). Fail instead; exec (no shell) kills injection. */
+            char *xa[256];
+            int i, ac = 0;
+            if (argc - 1 > 250) {
+                printf("FAIL: too many distill args (%d)\n", argc - 1);
+                return 1;
             }
-            return run_shell(cmd);
+            xa[ac++] = "./distill_prm800k";
+            for (i = 1; i < argc; i++) {
+                if (strlen(argv[i]) > 1024) {
+                    printf("FAIL: distill arg too long\n");
+                    return 1;
+                }
+                xa[ac++] = argv[i];
+            }
+            xa[ac] = NULL;
+            return run_argv(xa[0], xa);
         }
         printf("distill selftest OK. Passthrough args forwarded to ./distill_prm800k.\n");
         return 0;
@@ -830,8 +877,29 @@ static int cmd_run(int argc, char **argv) {
         if ((strcmp(argv[i], "--input") == 0) && i + 1 < argc) input_path = argv[++i];
         else if ((strcmp(argv[i], "--mode") == 0) && i + 1 < argc) mode = argv[++i];
         else if ((strcmp(argv[i], "--fill") == 0) && i + 1 < argc) fill = argv[++i];
-        else if ((strcmp(argv[i], "--topk") == 0) && i + 1 < argc) topk = atoi(argv[++i]);
-        else if ((strcmp(argv[i], "--show") == 0) && i + 1 < argc) show = atoi(argv[++i]);
+        /* Despot truth: atoi overflow/UB on garbage (was: unchecked). */
+        else if ((strcmp(argv[i], "--topk") == 0) && i + 1 < argc) {
+            char *ep = NULL;
+            long v;
+            i++;
+            v = strtol(argv[i], &ep, 10);
+            if (!ep || *ep != 0 || v < 1 || v > 1000000) {
+                printf("FAIL: bad --topk '%s' (want 1..1000000)\n", argv[i]);
+                return 2;
+            }
+            topk = (int)v;
+        }
+        else if ((strcmp(argv[i], "--show") == 0) && i + 1 < argc) {
+            char *ep = NULL;
+            long v;
+            i++;
+            v = strtol(argv[i], &ep, 10);
+            if (!ep || *ep != 0 || v < 1 || v > 1000000) {
+                printf("FAIL: bad --show '%s' (want 1..1000000)\n", argv[i]);
+                return 2;
+            }
+            show = (int)v;
+        }
         else if (is_help_arg(argv[i])) {
             print_run_help();
             return 0;
@@ -932,8 +1000,17 @@ static int cmd_run(int argc, char **argv) {
             }
             sz = file_size(input_path);
             if (sz == (long)(feed_elems[i] * sizeof(double))) {
+                /* Despot truth: short reads left calloc tails as silent zeros. */
                 size_t nr = fread(owned[i], 1, feed_elems[i] * sizeof(double), f);
-                (void)nr;
+                if (nr != feed_elems[i] * sizeof(double)) {
+                    int j;
+                    printf("FAIL: short read on --input %s\n", input_path);
+                    fclose(f);
+                    for (j = 0; j <= i; j++) free(owned[j]);
+                    lancius_schedule_destroy(sched);
+                    lancius_graph_destroy(g);
+                    return 1;
+                }
             } else if (sz == (long)(feed_elems[i] * sizeof(float))) {
                 float *tmp = (float *)malloc(feed_elems[i] * sizeof(float));
                 if (!tmp) {
@@ -948,7 +1025,16 @@ static int cmd_run(int argc, char **argv) {
                 {
                     size_t nr = fread(tmp, 1, feed_elems[i] * sizeof(float), f);
                     size_t kk;
-                    (void)nr;
+                    if (nr != feed_elems[i] * sizeof(float)) {
+                        int j;
+                        printf("FAIL: short read on --input %s\n", input_path);
+                        free(tmp);
+                        fclose(f);
+                        for (j = 0; j <= i; j++) free(owned[j]);
+                        lancius_schedule_destroy(sched);
+                        lancius_graph_destroy(g);
+                        return 1;
+                    }
                     for (kk = 0; kk < feed_elems[i]; kk++) owned[i][kk] = (double)tmp[kk];
                 }
                 free(tmp);
@@ -1139,9 +1225,11 @@ static int cmd_convert(int argc, char **argv) {
             return 1;
         }
         {
-            char cmd[1024];
-            snprintf(cmd, sizeof(cmd), "python3 onnx_to_lancius.py %s %s", argv[1], argv[2]);
-            return run_shell(cmd);
+            /* Despot truth: no shell (was: injection via filenames). */
+            char *xa[5];
+            xa[0] = "python3"; xa[1] = "onnx_to_lancius.py";
+            xa[2] = argv[1]; xa[3] = argv[2]; xa[4] = NULL;
+            return run_argv(xa[0], xa);
         }
     }
     if (strcmp(argv[0], "lancius2onnx") == 0) {
@@ -1162,9 +1250,10 @@ static int cmd_convert(int argc, char **argv) {
             return 1;
         }
         {
-            char cmd[1024];
-            snprintf(cmd, sizeof(cmd), "python3 export_lancius_onnx.py %s %s", argv[1], argv[2]);
-            return run_shell(cmd);
+            char *xa[5];
+            xa[0] = "python3"; xa[1] = "export_lancius_onnx.py";
+            xa[2] = argv[1]; xa[3] = argv[2]; xa[4] = NULL;
+            return run_argv(xa[0], xa);
         }
     }
     printf("unknown convert '%s'\n", argv[0]);
@@ -1196,10 +1285,28 @@ static int cmd_export(int argc, char **argv) {
         printf("FAIL: export_lancius_pytorch.py missing in this directory\n");
         return 1;
     }
-    off = (size_t)snprintf(cmd, sizeof(cmd), "python3 export_lancius_pytorch.py %s %s", argv[1], argv[2]);
-    for (i = 3; i < argc && off < sizeof(cmd) - 64; i++)
-        off += (size_t)snprintf(cmd + off, sizeof(cmd) - off, " %s", argv[i]);
-    return run_shell(cmd);
+    /* Despot truth: no shell + no silent truncation (was: both). */
+    {
+        char *xa[256];
+        int ac = 0;
+        if (argc > 250) {
+            printf("FAIL: too many export args (%d)\n", argc);
+            return 1;
+        }
+        xa[ac++] = "python3";
+        xa[ac++] = "export_lancius_pytorch.py";
+        for (i = 1; i < argc; i++) {
+            if (strlen(argv[i]) > 1024) {
+                printf("FAIL: export arg too long\n");
+                return 1;
+            }
+            xa[ac++] = argv[i];
+        }
+        xa[ac] = NULL;
+        (void)cmd;
+        (void)off;
+        return run_argv(xa[0], xa);
+    }
 }
 
 /* ---------------- help ---------------- */
@@ -1270,7 +1377,14 @@ static void tui_line(void) {
 }
 
 static int tui_read(char *buf, size_t cap) {
+    int c;
+    if (cap == 0) return 0;
     if (!fgets(buf, (int)cap, stdin)) return 0;
+    /* Despot truth: overlong lines left tails for the next prompt, shifting
+     * every later answer (was: undrained). */
+    if (!strchr(buf, '\n') && !feof(stdin)) {
+        while ((c = fgetc(stdin)) != '\n' && c != EOF) {}
+    }
     buf[strcspn(buf, "\r\n")] = 0;
     trim_inplace(buf);
     return 1;
@@ -1459,7 +1573,7 @@ static int tui_do_train(void) {
 
 static int tui_do_run(void) {
     char m[512], mode[64], fill[64], topk[64], show[64];
-    char *av[9];
+    char *av[11];
     int ac = 0;
     if (!tui_prompt("model path [test_model.lancius]", m, sizeof(m))) return 0;
     if (!m[0]) snprintf(m, sizeof(m), "test_model.lancius");
@@ -1484,13 +1598,12 @@ static int tui_do_run(void) {
     if (tui_back_word(topk)) return 0;
     if (!tui_prompt_def("show values", "16", show, sizeof(show))) return 0;
     if (tui_back_word(show)) return 0;
+    /* Despot truth: the show answer was prompted then dropped (stayed 16). */
     av[ac++] = m;
     av[ac++] = "--mode"; av[ac++] = mode;
     av[ac++] = "--fill"; av[ac++] = fill;
     av[ac++] = "--topk"; av[ac++] = topk;
-    /* --show would be 9th+; keep topk only in TUI to stay within bounds,
-     * show stays default 16 (ordinary-user sane default). */
-    (void)show;
+    av[ac++] = "--show"; av[ac++] = show;
     return cmd_run(ac, av);
 }
 
