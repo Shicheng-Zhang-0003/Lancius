@@ -191,6 +191,9 @@ lancius_node* lancius_softmax(lancius_graph* g, const lancius_node* a);
 lancius_node* lancius_sum(lancius_graph* g, const lancius_node* a);
 lancius_node* lancius_broadcast_4d(lancius_graph* g, const lancius_node* a, size_t n, size_t c, size_t h, size_t w);
 lancius_node* lancius_broadcast(lancius_graph* g, const lancius_node* a, size_t r, size_t c);
+/* Despot truth: N-dim broadcast to arbitrary shape (1..4). Used by autodiff
+ * SUM grads and scalar broadcasts so 3D/4D reductions are exact, not [1,1]-wrong. */
+lancius_node* lancius_broadcast_to_shape(lancius_graph* g, const lancius_node* a, const size_t* shape, uint8_t ndim);
 lancius_node* lancius_transpose(lancius_graph* g, const lancius_node* a);
 
 lancius_node* lancius_conv2d(lancius_graph* g, const lancius_node* in, const lancius_node* w, uint32_t stride, uint32_t pad);

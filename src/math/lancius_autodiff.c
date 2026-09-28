@@ -4,10 +4,13 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-static void accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_input_id, lancius_node* new_grad, lancius_node** fwd_to_full) {
-    if (!new_grad) return;
+/* Despot truth: returns 1 on success/neutral-skip, 0 on hard shape failure.
+ * Hard failure must abort the whole autodiff (return NULL), never leave a
+ * NULL grad that trains as zero. */
+static int accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_input_id, lancius_node* new_grad, lancius_node** fwd_to_full) {
+    if (!new_grad) return 1;
     lancius_node* full_input = fwd_to_full[fwd_input_id];
-    if (!full_input) return;
+    if (!full_input) return 1;
 
     bool exact_match = (new_grad->ndim == full_input->ndim);
     if (exact_match) {
@@ -18,8 +21,12 @@ static void accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_i
 
     if (exact_match) {
         if (grad_map[fwd_input_id] == NULL) grad_map[fwd_input_id] = new_grad;
-        else grad_map[fwd_input_id] = lancius_add(g, grad_map[fwd_input_id], new_grad);
-        return;
+        else {
+            lancius_node* acc = lancius_add(g, grad_map[fwd_input_id], new_grad);
+            if (!acc) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
+            grad_map[fwd_input_id] = acc;
+        }
+        return 1;
     }
 
     size_t in_elems = 0, grad_elems = 0;
@@ -28,7 +35,8 @@ static void accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_i
 
     if (has_in_elems && has_grad_elems && in_elems == 1 && grad_elems > 1) {
         lancius_node* sum_node = lancius_sum(g, new_grad);
-        if (sum_node) {
+        if (!sum_node) { lancius_set_error(LANCIUS_ERROR_INTERNAL); return 0; }
+        {
             if (full_input->ndim == 2) {
                 new_grad = sum_node;
             } else if (full_input->ndim >= 1 && full_input->ndim <= 4) {
@@ -37,27 +45,85 @@ static void accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_i
                 for (uint8_t i = 0; i < full_input->ndim; i++) s[i] = full_input->shape[i];
                 new_grad = lancius_reshape(g, sum_node, full_input->ndim,
                                            s[0], s[1], s[2], s[3]);
+                if (!new_grad) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
             } else {
                 lancius_set_error(LANCIUS_ERROR_INVALID_RANK);
-                return;
+                return 0;
             }
         }
     } else if (new_grad->ndim == 2 && full_input->ndim == 2) {
         if (new_grad->shape[0] == 1 && new_grad->shape[1] == 1 && (full_input->shape[0] > 1 || full_input->shape[1] > 1)) {
             new_grad = lancius_broadcast(g, new_grad, full_input->shape[0], full_input->shape[1]);
+            if (!new_grad) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
         }
         else if ((new_grad->shape[0] > 1 || new_grad->shape[1] > 1) && full_input->shape[0] == 1 && full_input->shape[1] == 1) {
             new_grad = lancius_sum(g, new_grad);
+            if (!new_grad) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
         }
         else if (new_grad->shape[0] > 1 && new_grad->shape[1] == full_input->shape[1] && full_input->shape[0] == 1) {
             new_grad = lancius_sum_axis0(g, new_grad);
+            if (!new_grad) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
         }
         else if (new_grad->shape[1] > 1 && new_grad->shape[0] == full_input->shape[0] && full_input->shape[1] == 1) {
             new_grad = lancius_sum_axis1(g, new_grad);
+            if (!new_grad) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
+        }
+        else {
+            /* Despot truth: 2D shapes differ but match no reduction rule.
+             * Verify broadcast compat; if incompatible or unreducible, fail loud
+             * instead of inserting a wrong-shaped gradient. */
+            bool compat = true;
+            {
+                uint8_t nd = 2;
+                for (uint8_t i = 0; i < nd; i++) {
+                    size_t da = full_input->shape[i], db = new_grad->shape[i];
+                    /* grad_out is output-shaped (>= input under broadcast), so
+                     * input dim must be 1 or equal grad dim. */
+                    if (!(da == 1 || da == db)) { compat = false; break; }
+                }
+            }
+            if (!compat || new_grad->shape[0] != full_input->shape[0] || new_grad->shape[1] != full_input->shape[1]) {
+                lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH);
+                return 0;
+            }
+        }
+    } else {
+        /* Despot truth: N-dim (non-2D) gradient path. Exact match handled above;
+         * scalar-input reduction handled above. Remaining cases: */
+        if (has_grad_elems && grad_elems == 1) {
+            /* Scalar grad_out (SUM output [1,1]) broadcast to N-dim input.
+             * Exact math: d_input[i] = grad_out[0] for all i. */
+            lancius_node* b = lancius_broadcast_to_shape(g, new_grad, full_input->shape, full_input->ndim);
+            if (!b) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
+            new_grad = b;
+        } else {
+            /* Broadcast-compatible partial reduction (e.g. [1,2,1,4] vs
+             * [3,2,5,4]) needs per-axis N-dim sums the IR cannot yet express.
+             * Fail loud instead of inserting a wrong-shaped gradient. */
+            uint8_t nd_g = new_grad->ndim, nd_in = full_input->ndim;
+            uint8_t nd = (nd_g > nd_in) ? nd_g : nd_in;
+            bool compat = true;
+            for (uint8_t i = 0; i < nd; i++) {
+                int gi = (int)i - ((int)nd - (int)nd_g);
+                int ii = (int)i - ((int)nd - (int)nd_in);
+                size_t dg = (gi < 0) ? 1 : new_grad->shape[gi];
+                size_t di = (ii < 0) ? 1 : full_input->shape[ii];
+                if (!(di == 1 || di == dg)) { compat = false; break; }
+                if (dg == 0 || di == 0) { compat = false; break; }
+            }
+            if (!compat) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
+            /* Compatible but shapes differ => needs N-dim axis sums. No silent drop. */
+            bool same = (nd_g == nd_in);
+            if (same) {
+                for (uint8_t i = 0; i < nd_g; i++) {
+                    if (new_grad->shape[i] != full_input->shape[i]) { same = false; break; }
+                }
+            }
+            if (!same) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
         }
     }
 
-    if (!new_grad) return;
+    if (!new_grad) { lancius_set_error(LANCIUS_ERROR_INTERNAL); return 0; }
     if (grad_map[fwd_input_id] == NULL) grad_map[fwd_input_id] = new_grad;
     else {
         lancius_node* acc = lancius_add(g, grad_map[fwd_input_id], new_grad);
@@ -65,15 +131,19 @@ static void accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_i
             /* Broadcast-incompatible accumulation is a real shape error:
                do not silently drop the gradient. */
             lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH);
-            return;
+            return 0;
         }
         grad_map[fwd_input_id] = acc;
     }
+    return 1;
 }
 
 lancius_training_graph* lancius_ir_autodiff(lancius_graph* fwd_g, lancius_node* loss_node) {
     if (!loss_node) return NULL; // Prevent segfault on malformed graphs
     if (!fwd_g || fwd_g->next_id == 0) return NULL;
+    /* Despot truth: sticky errors from prior graphs must not poison this build,
+     * and any shape failure inside backward aborts the whole training graph. */
+    lancius_clear_error();
     lancius_training_graph* tg = (lancius_training_graph*)calloc(1, sizeof(lancius_training_graph));
     if (!tg) return NULL;
     tg->graph = lancius_graph_create();
@@ -117,9 +187,12 @@ break;
             case LANCIUS_OP_RELU: n = lancius_relu(tg->graph, in0); break;
             case LANCIUS_OP_TRANSPOSE: n = lancius_transpose(tg->graph, in0); break;
             case LANCIUS_OP_SUM: n = lancius_sum(tg->graph, in0); break;
+            case LANCIUS_OP_SUM_AXIS0: n = lancius_sum_axis0(tg->graph, in0); break;
+            case LANCIUS_OP_SUM_AXIS1: n = lancius_sum_axis1(tg->graph, in0); break;
             case LANCIUS_OP_BROADCAST:
                 if (old->ndim == 4) n = lancius_broadcast_4d(tg->graph, in0, old->shape[0], old->shape[1], old->shape[2], old->shape[3]);
-                else n = lancius_broadcast(tg->graph, in0, old->shape[0], old->shape[1]);
+                else if (old->ndim == 2) n = lancius_broadcast(tg->graph, in0, old->shape[0], old->shape[1]);
+                else n = lancius_broadcast_to_shape(tg->graph, in0, old->shape, old->ndim);
                 break;
             case LANCIUS_OP_SOFTMAX: n = lancius_softmax(tg->graph, in0); break;
             case LANCIUS_OP_CROSS_ENTROPY: n = lancius_cross_entropy(tg->graph, in0, in1); break;
@@ -131,7 +204,31 @@ break;
             case LANCIUS_OP_MAXPOOL2D: n = lancius_maxpool2d(tg->graph, in0, old->kernel_h, old->stride); break;
             case LANCIUS_OP_FLATTEN: n = lancius_flatten(tg->graph, in0); break;
             case LANCIUS_OP_RESHAPE: n = lancius_reshape(tg->graph, in0, old->ndim, old->shape[0], old->shape[1], old->shape[2], old->shape[3]); break;
+            /* Despot truth: transformer forward ops clone exactly so fwd_to_full
+             * stays complete; backward still fails loud (no wrong grads). */
+            case LANCIUS_OP_LAYERNORM: n = lancius_layernorm(tg->graph, in0, in1, fwd_to_full[old->inputs[2]->id]); break;
+            case LANCIUS_OP_RMSNORM: n = lancius_rmsnorm(tg->graph, in0, in1); break;
+            case LANCIUS_OP_GELU: n = lancius_gelu(tg->graph, in0); break;
+            case LANCIUS_OP_SWIGLU: n = lancius_swiglu(tg->graph, in0, in1); break;
+            case LANCIUS_OP_GQA: n = lancius_gqa(tg->graph, in0, in1, fwd_to_full[old->inputs[2]->id], old->kernel_h, old->kernel_w); break;
+            case LANCIUS_OP_ROPE: n = lancius_rope(tg->graph, in0, old->shape[0], old->shape[1], old->shape[2] / 2); break;
+            case LANCIUS_OP_ATTENTION: n = lancius_attention(tg->graph, in0, in1, fwd_to_full[old->inputs[2]->id]); break;
             case LANCIUS_OP_NOP: n = NULL; break; // V9 Fix: Skip neutralized nodes
+            /* Despot truth: _BWD nodes must never appear in the forward graph.
+             * Fail loud instead of silently cloning them. */
+            case LANCIUS_OP_RELU_BWD:
+            case LANCIUS_OP_SOFTMAX_BWD:
+            case LANCIUS_OP_CROSS_ENTROPY_BWD:
+            case LANCIUS_OP_TANH_BWD:
+            case LANCIUS_OP_MSE_BWD:
+            case LANCIUS_OP_CONV2D_BWD:
+            case LANCIUS_OP_CONV2D_BWD_W:
+            case LANCIUS_OP_MAXPOOL2D_BWD:
+                fprintf(stderr, "[AUTODIFF FATAL] Backward op %d in forward graph; refusing silent clone.\n", old->op);
+                free(fwd_to_full);
+                free(tg->grad_nodes);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
             case LANCIUS_OP_CONV2D_RELU_FUSED:
                 // V10S FIX: Manually allocate to preserve the FUSED opcode!
                 n = (lancius_node*)lancius_arena_alloc(tg->graph->arena, sizeof(lancius_node), 8);
@@ -191,11 +288,24 @@ break;
             lancius_node* gA = grad_out;
             lancius_node* gB = grad_out;
 
-            if (gA && gA->ndim == 2 && gA->shape[0] == 1 && gA->shape[1] == 1 && (A->shape[0] > 1 || A->shape[1] > 1)) {
-                gA = lancius_broadcast(tg->graph, gA, A->shape[0], A->shape[1]);
-            }
-            if (gB && gB->ndim == 2 && gB->shape[0] == 1 && gB->shape[1] == 1 && (B->shape[0] > 1 || B->shape[1] > 1)) {
-                gB = lancius_broadcast(tg->graph, gB, B->shape[0], B->shape[1]);
+            /* Despot truth: scalar grad_out ([1,1], 1 elem) lifted to operand
+             * shape via exact N-dim broadcast, not 2D-only. */
+            {
+                size_t ge = 0;
+                if (gA && lancius_node_elements_checked(gA, &ge) && ge == 1 && A && A->ndim >= 1 && A->ndim <= 4) {
+                    size_t ae = 0;
+                    if (lancius_node_elements_checked(A, &ae) && ae > 1) {
+                        if (A->ndim == 2) gA = lancius_broadcast(tg->graph, gA, A->shape[0], A->shape[1]);
+                        else gA = lancius_broadcast_to_shape(tg->graph, gA, A->shape, A->ndim);
+                    }
+                }
+                if (gB && lancius_node_elements_checked(gB, &ge) && ge == 1 && B && B->ndim >= 1 && B->ndim <= 4) {
+                    size_t be = 0;
+                    if (lancius_node_elements_checked(B, &be) && be > 1) {
+                        if (B->ndim == 2) gB = lancius_broadcast(tg->graph, gB, B->shape[0], B->shape[1]);
+                        else gB = lancius_broadcast_to_shape(tg->graph, gB, B->shape, B->ndim);
+                    }
+                }
             }
 
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_mul(tg->graph, gA, B), fwd_to_full);
@@ -226,9 +336,30 @@ break;
         } else if (fwd_n->op == LANCIUS_OP_RELU) {
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_relu_bwd(tg->graph, grad_out, fwd_to_full[fwd_n->inputs[0]->id]), fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_SUM) {
+            /* Despot truth: SUM always reduces to scalar [1,1]; grad is scalar
+             * broadcast to input shape for any 1..4-D input. Exact math:
+             * d_input[i] = grad_out[0]. No [1,1]-for-3D lie. */
             lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
-            if (full_input && full_input->ndim == 4 && grad_out->ndim == 2 && grad_out->shape[0] == 1 && grad_out->shape[1] == 1) {
-                lancius_node* bcast = lancius_broadcast_4d(tg->graph, grad_out, full_input->shape[0], full_input->shape[1], full_input->shape[2], full_input->shape[3]);
+            size_t ge = 0;
+            bool is_scalar_grad = (lancius_node_elements_checked(grad_out, &ge) && ge == 1);
+            if (full_input && is_scalar_grad && full_input->ndim >= 1 && full_input->ndim <= 4) {
+                /* Despot truth: choose exact constructor directly; no trial that
+                 * leaves sticky errors to poison the end-of-iteration gate. */
+                lancius_clear_error();
+                lancius_node* bcast = NULL;
+                if (full_input->ndim == 4) {
+                    bcast = lancius_broadcast_4d(tg->graph, grad_out, full_input->shape[0], full_input->shape[1], full_input->shape[2], full_input->shape[3]);
+                } else if (full_input->ndim == 2) {
+                    bcast = lancius_broadcast(tg->graph, grad_out, full_input->shape[0], full_input->shape[1]);
+                } else {
+                    bcast = lancius_broadcast_to_shape(tg->graph, grad_out, full_input->shape, full_input->ndim);
+                }
+                if (!bcast) {
+                    fprintf(stderr, "[AUTODIFF FATAL] SUM grad broadcast to input shape failed.\n");
+                    free(grad_map); free(fwd_to_full);
+                    lancius_graph_destroy(tg->graph); free(tg);
+                    return NULL;
+                }
                 accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, bcast, fwd_to_full);
             } else {
                 accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, grad_out, fwd_to_full);
@@ -279,6 +410,79 @@ break;
             lancius_node* masked_grad = lancius_relu_bwd(tg->graph, grad_out, fused_out);
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_conv2d_bwd(tg->graph, masked_grad, A, W, fwd_n->stride, fwd_n->pad), fwd_to_full);
             accum_grad(tg->graph, grad_map, fwd_n->inputs[1]->id, lancius_conv2d_bwd_w(tg->graph, masked_grad, A, fwd_n->kernel_h, fwd_n->kernel_w, fwd_n->stride, fwd_n->pad), fwd_to_full);
+        } else if (fwd_n->op == LANCIUS_OP_SUM_AXIS0) {
+            /* Despot truth: SUM_AXIS0 [R,C]->[1,C]; grad [1,C] broadcast to [R,C].
+             * Exact: d_input[r,c] = grad_out[0,c]. */
+            lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
+            if (!full_input || full_input->ndim != 2) {
+                fprintf(stderr, "[AUTODIFF FATAL] SUM_AXIS0 input not 2D.\n");
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
+            lancius_node* b = lancius_broadcast(tg->graph, grad_out, full_input->shape[0], full_input->shape[1]);
+            if (!b) {
+                fprintf(stderr, "[AUTODIFF FATAL] SUM_AXIS0 grad broadcast failed.\n");
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, b, fwd_to_full);
+        } else if (fwd_n->op == LANCIUS_OP_SUM_AXIS1) {
+            /* Despot truth: SUM_AXIS1 [R,C]->[R,1]; grad [R,1] broadcast to [R,C].
+             * Exact: d_input[r,c] = grad_out[r,0]. */
+            lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
+            if (!full_input || full_input->ndim != 2) {
+                fprintf(stderr, "[AUTODIFF FATAL] SUM_AXIS1 input not 2D.\n");
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
+            lancius_node* b = lancius_broadcast(tg->graph, grad_out, full_input->shape[0], full_input->shape[1]);
+            if (!b) {
+                fprintf(stderr, "[AUTODIFF FATAL] SUM_AXIS1 grad broadcast failed.\n");
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, b, fwd_to_full);
+        } else if (fwd_n->op == LANCIUS_OP_RESHAPE) {
+            /* Despot truth: RESHAPE is a pure reorder; grad reshapes back to
+             * input shape. Element counts already validated at build. */
+            lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
+            if (!full_input) {
+                fprintf(stderr, "[AUTODIFF FATAL] RESHAPE input missing.\n");
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
+            lancius_node* rg = lancius_reshape(tg->graph, grad_out, full_input->ndim,
+                full_input->shape[0], full_input->shape[1],
+                full_input->shape[2], full_input->shape[3]);
+            if (!rg) {
+                fprintf(stderr, "[AUTODIFF FATAL] RESHAPE grad reshape failed.\n");
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, rg, fwd_to_full);
+        } else {
+            /* Despot truth: every forward op reaching backward must have an
+             * explicit VJP above. Silent drop is a mathematical lie. */
+            fprintf(stderr, "[AUTODIFF FATAL] No VJP for forward op %d (node %u); refusing silent drop.\n",
+                (int)fwd_n->op, fwd_n->id);
+            free(grad_map); free(fwd_to_full);
+            lancius_graph_destroy(tg->graph); free(tg);
+            return NULL;
+        }
+        /* Despot truth: any sticky shape error from accum_grad or builders
+         * aborts the whole training graph. A NULL grad must never train as zero. */
+        if (lancius_get_error() != LANCIUS_ERROR_OK) {
+            fprintf(stderr, "[AUTODIFF FATAL] Gradient construction failed for op %d (node %u); refusing partial graph.\n",
+                (int)fwd_n->op, fwd_n->id);
+            free(grad_map); free(fwd_to_full);
+            lancius_graph_destroy(tg->graph); free(tg);
+            return NULL;
         }
     }
 

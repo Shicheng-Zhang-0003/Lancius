@@ -10,6 +10,14 @@
 
 // PURE MATH KERNELS. No IR, no Arena, no Graph. Just pointers and dimensions.
 // This is the single source of truth for all LANCIUS math.
+//
+// Despot truth notes:
+// - GELU is tanh-approx (GPT-2/BERT variant), not erf-exact (see kernel_gelu).
+// - LayerNorm/RMSNorm default eps is LANCIUS_NORM_EPS (1e-5) unless caller
+//   passes otherwise; scheduler pins this value.
+// - Attention/GQA/KV-cache: NaN denominators report NUMERICAL; fully-masked
+//   (zero-sum) rows emit zeros for causal safety.
+#define LANCIUS_NORM_EPS 1e-5
 
 void kernel_matmul(double* out, const double* a, const double* b, size_t M, size_t K, size_t N);
 void kernel_matmul_f32(float* out, const float* a, const float* b, size_t M, size_t K, size_t N);

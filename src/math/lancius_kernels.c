@@ -292,6 +292,10 @@ void kernel_layernorm(double* out, const double* in, const double* gamma, const 
     }
 }
 
+/* Despot truth: GELU here is the tanh approximation (Hendrycks-Gimpel tanh
+ * variant, as in GPT-2/BERT), NOT the erf-exact GELU. Max error vs erf-exact
+ * is ~2e-3. Clamps at +-10 are exact limits (tanh saturates), NaN passes
+ * through. If erf-exact is needed, it must be a separate kernel. */
 void kernel_gelu(double* out, const double* in, size_t elements) {
     if (!out || !in) return;
     const double sqrt_2_over_pi = 0.7978845608028654;
@@ -391,7 +395,13 @@ void kernel_attention(double* out, const double* q, const double* k, const doubl
                 }
 
                 double* out_row = out + (i * n_heads * head_dim) + (h * head_dim);
-                if (l_i > 0.0 && l_i == l_i) {
+                /* Despot truth: NaN denominator is NUMERICAL (fail loud),
+                 * not silent zeros. Zero denominator (fully masked row) stays
+                 * zeros for causal safety; NaN must never masquerade as 0. */
+                if (l_i != l_i) {
+                    lancius_set_error(LANCIUS_ERROR_NUMERICAL);
+                    memset(out_row, 0, head_dim * sizeof(double));
+                } else if (l_i > 0.0) {
                     double inv_l = 1.0 / l_i;
                     #pragma omp simd
                     for (size_t d = 0; d < head_dim; d++) {
@@ -437,8 +447,13 @@ void kernel_attention_kv_cache(double* out, const double* q, const double* k_cac
             if (scores[j] > max_val) max_val = scores[j];
         }
 
-        // 2. Softmax
-        if (max_val == -INFINITY || max_val != max_val) {
+        // 2. Softmax (despot truth: NaN fails loud, -inf/zero stays zeros)
+        if (max_val != max_val) {
+            lancius_set_error(LANCIUS_ERROR_NUMERICAL);
+            for (size_t d = 0; d < head_dim; d++) out[h * head_dim + d] = 0.0;
+            continue;
+        }
+        if (max_val == -INFINITY) {
             for (size_t d = 0; d < head_dim; d++) out[h * head_dim + d] = 0.0;
             continue;
         }
@@ -447,7 +462,12 @@ void kernel_attention_kv_cache(double* out, const double* q, const double* k_cac
             scores[j] = exp(scores[j] - max_val);
             sum_exp += scores[j];
         }
-        if (sum_exp > 0.0 && sum_exp == sum_exp) {
+        if (sum_exp != sum_exp) {
+            lancius_set_error(LANCIUS_ERROR_NUMERICAL);
+            for (size_t d = 0; d < head_dim; d++) out[h * head_dim + d] = 0.0;
+            continue;
+        }
+        if (sum_exp > 0.0) {
             for(size_t j=0; j<seq_len; j++) scores[j] /= sum_exp;
         } else {
             for (size_t d = 0; d < head_dim; d++) out[h * head_dim + d] = 0.0;
@@ -549,7 +569,11 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
                     m_i = m_new;
                 }
                 double* out_row = out + (i * hidden_size_q) + (hq * head_dim);
-                if (l_i > 0.0 && l_i == l_i) {
+                /* Despot truth: NaN denominator is NUMERICAL, not silent zeros. */
+                if (l_i != l_i) {
+                    lancius_set_error(LANCIUS_ERROR_NUMERICAL);
+                    memset(out_row, 0, head_dim * sizeof(double));
+                } else if (l_i > 0.0) {
                     double inv_l = 1.0 / l_i;
                     #pragma omp simd
                     for (size_t d = 0; d < head_dim; d++) out_row[d] = o_i[d] * inv_l;
