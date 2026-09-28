@@ -290,8 +290,12 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
 
         (void)rn.flags;
 
+        /* Despot truth: u64->size_t narrowing is checked for 32-bit hosts. */
         size_t sh[4];
-        for (int s = 0; s < 4; s++) sh[s] = (size_t)rn.shape[s];
+        for (int s = 0; s < 4; s++) {
+            if (rn.shape[s] > (uint64_t)SIZE_MAX) goto fail;
+            sh[s] = (size_t)rn.shape[s];
+        }
 
         in_ids = NULL;
         if (rn.input_count > 0) {
@@ -369,11 +373,16 @@ break;
                 n = lancius_sum(g, in0);
                 break;
 
-            case LANCIUS_MODEL_OP_BROADCAST:
+            case LANCIUS_MODEL_OP_BROADCAST: {
+                /* Despot truth: BROADCAST persists for any 1..4-D shape
+                 * (SUM grads use 1/3-D via broadcast_to_shape). */
+                size_t bshape[4] = {sh[0], sh[1], sh[2], sh[3]};
                 if (rn.ndim == 4) n = lancius_broadcast_4d(g, in0, sh[0], sh[1], sh[2], sh[3]);
                 else if (rn.ndim == 2) n = lancius_broadcast(g, in0, sh[0], sh[1]);
+                else if (rn.ndim >= 1 && rn.ndim <= 4) n = lancius_broadcast_to_shape(g, in0, bshape, rn.ndim);
                 else goto fail;
                 break;
+            }
 
             case LANCIUS_MODEL_OP_TRANSPOSE:
                 n = lancius_transpose(g, in0);

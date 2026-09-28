@@ -142,11 +142,9 @@ def convert(onnx_path, lancius_path):
                 tmp_dims = []
                 for idx, d in enumerate(target_dims):
                     if d == 0:
-                        # copy input dim at same rank position (right-aligned if ranks differ)
-                        # For converter's 4-padded shapes, map via trailing alignment
-                        rank_in = len([s for s in in_shape_full if s > 0]) if in_shape_full else 0
-                        # simplest correct for supported ranks 2/4: copy from input's corresponding dim
-                        # Use positional copy when ranks match, else fail loud
+                        # copy input dim at same rank position; supported ranks 2/4 only.
+                        # Use positional copy when ranks match, else fail loud.
+                        # (Despot truth: no dead rank_in computation; copy is positional.)
                         if in_shape_full is None or idx >= len(target_dims):
                             raise ValueError(f"Reshape copy-dim failed for '{node.output[0]}'.")
                         # input dims in converter are 4-padded; target rank may be 2 or 4
@@ -214,6 +212,17 @@ def convert(onnx_path, lancius_path):
                         # 2-elem pads [h,w] may differ per axis; C supports single pad -> require equal
                         raise ValueError(f"Conv '{node.output[0]}' asymmetric pads {pads} need single pad.")
                     meta[3] = pads[0]
+                if attr.name == 'dilations':
+                    dil = list(attr.ints)
+                    if any(d != 1 for d in dil):
+                        raise ValueError(f"Conv '{node.output[0]}' dilations {dil} != 1 not supported; refusing silent dense compute.")
+                if attr.name == 'group':
+                    if attr.i != 1:
+                        raise ValueError(f"Conv '{node.output[0]}' group={attr.i} != 1 not supported; refusing silent dense compute.")
+                if attr.name == 'auto_pad':
+                    ap = attr.s.decode() if isinstance(attr.s, bytes) else str(attr.s)
+                    if ap not in ('NOTSET', ''):
+                        raise ValueError(f"Conv '{node.output[0]}' auto_pad='{ap}' not supported; export explicit pads.")
             if (meta[0] <= 0 or meta[1] <= 0) and len(node.input) >= 2 and node.input[1] in initializer_map:
                 # Torch-slim exports may omit kernel_shape; recover from weight [Cout,Cin,Kh,Kw].
                 w = initializer_map[node.input[1]]
@@ -233,6 +242,21 @@ def convert(onnx_path, lancius_path):
                     if len(attr.ints) >= 2 and attr.ints[0] != attr.ints[1]:
                         raise ValueError(f"MaxPool '{node.output[0]}' asymmetric strides {list(attr.ints)}.")
                     meta[2] = attr.ints[0]
+                if attr.name == 'pads':
+                    pads = list(attr.ints)
+                    if any(p != 0 for p in pads):
+                        raise ValueError(f"MaxPool '{node.output[0]}' pads {pads} != 0 not supported; C MaxPool is valid-only.")
+                if attr.name == 'dilations':
+                    dil = list(attr.ints)
+                    if any(d != 1 for d in dil):
+                        raise ValueError(f"MaxPool '{node.output[0]}' dilations {dil} != 1 not supported.")
+                if attr.name == 'ceil_mode':
+                    if attr.i != 0:
+                        raise ValueError(f"MaxPool '{node.output[0]}' ceil_mode=1 not supported; C uses floor (H-K)/s+1.")
+                if attr.name == 'auto_pad':
+                    ap = attr.s.decode() if isinstance(attr.s, bytes) else str(attr.s)
+                    if ap not in ('NOTSET', ''):
+                        raise ValueError(f"MaxPool '{node.output[0]}' auto_pad='{ap}' not supported.")
 
         # Decompose Gemm into MatMul + Add(bias) with Transpose support
         if node.op_type == 'Gemm' and len(node.input) >= 2:
