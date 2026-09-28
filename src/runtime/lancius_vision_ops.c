@@ -50,9 +50,11 @@ void lancius_execute_vision_op(lancius_node* n) {
 
         double scale_in = in_node->scale;
         double scale_w = w_node->scale;
+        /* Despot truth: zero INT8 scale is numerically degenerate (dequant
+         * would collapse to zeros). Report NUMERICAL, not shape mismatch. */
         if (scale_in == 0.0 || scale_w == 0.0) {
             fprintf(stderr, "[LANCIUS VISION FATAL] INT8 Conv2D scale is 0 (misconfigured quantizer)\n");
-            lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE);
+            lancius_set_error(LANCIUS_ERROR_NUMERICAL);
             return;
         }
 
@@ -198,7 +200,11 @@ void lancius_execute_vision_op(lancius_node* n) {
         size_t stride = n->stride;
         size_t H_out = grad_node->shape[2], W_out = grad_node->shape[3];
 
-        memset(n->runtime_data, 0, N*C*H_in*W_in*sizeof(double));
+        /* Despot truth: output byte size is checked; corrupt shapes fail loud. */
+        size_t out_elems = 0;
+        if (!lancius_node_elements_checked(n, &out_elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
+        if (out_elems > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        memset(n->runtime_data, 0, out_elems * sizeof(double));
 
         #pragma omp parallel for schedule(static)
         for(size_t ni=0; ni<N; ni++) {

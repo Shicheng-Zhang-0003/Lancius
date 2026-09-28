@@ -4,6 +4,7 @@
 #include "lancius/lancius_vision_ops.h"
 #include "lancius/lancius_kernels.h"
 #include "lancius/lancius_validate.h"
+#include "lancius/lancius_checked.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -260,7 +261,7 @@ static void execute_node_math(lancius_node* n) {
         if (!lancius_node_elements_checked(n, &total) || total % hidden != 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
         size_t num_instances = total / hidden;
 
-        kernel_layernorm(n->runtime_data, in, gamma, beta, num_instances, hidden, 1e-5);
+        kernel_layernorm(n->runtime_data, in, gamma, beta, num_instances, hidden, LANCIUS_NORM_EPS);
     }
     else if (n->op == LANCIUS_OP_GELU) {
         double* in = n->inputs[0]->runtime_data;
@@ -355,7 +356,7 @@ static void execute_node_math(lancius_node* n) {
         if (!lancius_node_elements_checked(n, &total) || total % hidden != 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
         size_t num_instances = total / hidden;
 
-        kernel_rmsnorm(n->runtime_data, in, gamma, num_instances, hidden, 1e-5);
+        kernel_rmsnorm(n->runtime_data, in, gamma, num_instances, hidden, LANCIUS_NORM_EPS);
     }
         else if (n->op == LANCIUS_OP_SWIGLU) {
             double* gate = n->inputs[0]->runtime_data;
@@ -470,17 +471,35 @@ static void execute_node_math(lancius_node* n) {
         double* a = n->inputs[0]->runtime_data; double* b = n->inputs[1]->runtime_data;
         int8_t* b_int8 = n->inputs[1]->runtime_data_int8;
 
-        // V10S ONNX Mixed-Precision Add (Biases)
+        /* Despot truth: INT8 Add is row-bias only ([1,N] bias + [R,N] act).
+         * Any other broadcast with INT8 bias falls through to exact FP64
+         * broadcast below; never miscompute via cols/shape[1] assumption. */
         if (b_int8 && a) {
-            double scale_b = n->inputs[1]->scale;
-            size_t cols = n->shape[1];
-            size_t rows = n->shape[0];
-            for(size_t r=0; r<rows; r++) {
-                for(size_t cc=0; cc<cols; cc++) {
-                    n->runtime_data[r*cols + cc] = a[r*cols + cc] + (double)b_int8[cc] * scale_b;
+            bool int8_row_bias = false;
+            if (n->ndim == 2 && n->inputs[0]->ndim == 2 && n->inputs[1]->ndim == 2) {
+                size_t cols = n->shape[1], rows = n->shape[0];
+                size_t aR = n->inputs[0]->shape[0], aC = n->inputs[0]->shape[1];
+                size_t bR = n->inputs[1]->shape[0], bC = n->inputs[1]->shape[1];
+                size_t b_elems = 0;
+                if (lancius_node_elements_checked(n->inputs[1], &b_elems) &&
+                    rows > 0 && cols > 0 && aR == rows && aC == cols &&
+                    bR == 1 && bC == cols && b_elems == cols &&
+                    n->shape[0] == rows && n->shape[1] == cols) {
+                    int8_row_bias = true;
                 }
             }
-            return;
+            if (int8_row_bias) {
+                double scale_b = n->inputs[1]->scale;
+                size_t cols = n->shape[1];
+                size_t rows = n->shape[0];
+                for(size_t r=0; r<rows; r++) {
+                    for(size_t cc=0; cc<cols; cc++) {
+                        n->runtime_data[r*cols + cc] = a[r*cols + cc] + (double)b_int8[cc] * scale_b;
+                    }
+                }
+                return;
+            }
+            /* else: fall through to exact FP64 broadcast; INT8 fast path refused. */
         }
 
         if (!a || !b) return;
@@ -536,7 +555,10 @@ static void execute_node_math(lancius_node* n) {
             double max_a = 0.0;
             size_t elems_a = M * K;
             for(size_t i=0; i<elems_a; i++) { double v = fabs(a[i]); if(v>max_a) max_a = v; }
-            double scale_a = (max_a > 0.0) ? (max_a / 127.0) : 1e-8;
+            /* Despot truth: all-zero activations quantize to all-zero with any
+             * scale; use 1.0 (not 1e-8 lie) so scale stays consistent with the
+             * offline quantizer which skips all-zero tensors. Result is 0 either way. */
+            double scale_a = (max_a > 0.0) ? (max_a / 127.0) : 1.0;
 
             int8_t* a_int8 = (int8_t*)malloc(elems_a ? elems_a : 1);
             if (!a_int8) { lancius_set_error(LANCIUS_ERROR_OOM); return; }
@@ -607,24 +629,36 @@ static void execute_node_math(lancius_node* n) {
     }
     else if (n->op == LANCIUS_OP_TRANSPOSE) {
         double* a = n->inputs[0]->runtime_data; if (!a) return;
+        if (!n->inputs[0] || n->inputs[0]->ndim != 2 || n->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
         size_t R = n->inputs[0]->shape[0]; size_t C = n->inputs[0]->shape[1];
+        if (R == 0 || C == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+        if (n->shape[0] != C || n->shape[1] != R) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
         for(size_t r=0; r<R; r++) for(size_t c=0; c<C; c++) n->runtime_data[c*R + r] = a[r*C + c];
     }
     else if (n->op == LANCIUS_OP_SUM) {
         double* a = n->inputs[0]->runtime_data; if (!a) return;
-        size_t elems = lancius_node_elements(n->inputs[0]);
+        /* Despot truth: never abort on corrupt shapes. */
+        size_t elems = 0;
+        if (!lancius_node_elements_checked(n->inputs[0], &elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
         double sum = 0.0; for(size_t k=0; k<elems; k++) sum += a[k];
         n->runtime_data[0] = sum;
     }
     else if (n->op == LANCIUS_OP_SUM_AXIS0) {
         double* a = n->inputs[0]->runtime_data; if (!a) return;
+        if (!n->inputs[0] || n->inputs[0]->ndim != 2 || n->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
         size_t R = n->inputs[0]->shape[0]; size_t C = n->inputs[0]->shape[1];
+        if (R == 0 || C == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+        if (n->shape[0] != 1 || n->shape[1] != C) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        if (C > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
         memset(n->runtime_data, 0, C * sizeof(double));
         for(size_t r=0; r<R; r++) for(size_t c=0; c<C; c++) n->runtime_data[c] += a[r*C + c];
     }
     else if (n->op == LANCIUS_OP_SUM_AXIS1) {
         double* a = n->inputs[0]->runtime_data; if (!a) return;
+        if (!n->inputs[0] || n->inputs[0]->ndim != 2 || n->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
         size_t R = n->inputs[0]->shape[0]; size_t C = n->inputs[0]->shape[1];
+        if (R == 0 || C == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+        if (n->shape[0] != R || n->shape[1] != 1) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
         for(size_t r=0; r<R; r++) { double s=0; for(size_t c=0; c<C; c++) s += a[r*C + c]; n->runtime_data[r] = s; }
     }
     else if (n->op == LANCIUS_OP_BROADCAST) {
@@ -639,16 +673,21 @@ static void execute_node_math(lancius_node* n) {
             uint8_t in_ndim = n->inputs[0]->ndim;
             if (in_ndim > out_ndim || out_ndim == 0 || out_ndim > 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
 
+            /* Despot truth: broadcast stride products are checked. */
             size_t in_strides_raw[4] = {0};
             in_strides_raw[in_ndim - 1] = 1;
             for (int i = (int)in_ndim - 2; i >= 0; i--) {
-                in_strides_raw[i] = in_strides_raw[i + 1] * n->inputs[0]->shape[i + 1];
+                size_t d = n->inputs[0]->shape[i + 1];
+                if (d != 0 && in_strides_raw[i + 1] > SIZE_MAX / d) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+                in_strides_raw[i] = in_strides_raw[i + 1] * d;
             }
 
             size_t out_strides[4] = {0};
             out_strides[out_ndim - 1] = 1;
             for (int i = (int)out_ndim - 2; i >= 0; i--) {
-                out_strides[i] = out_strides[i + 1] * n->shape[i + 1];
+                size_t d = n->shape[i + 1];
+                if (d != 0 && out_strides[i + 1] > SIZE_MAX / d) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+                out_strides[i] = out_strides[i + 1] * d;
             }
 
             size_t effective_in_stride[4] = {0};
@@ -797,7 +836,11 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
         lancius_wave* wave = &schedule->waves[w];
         for (uint32_t i = 0; i < wave->node_count; i++) {
             lancius_node* n = wave->nodes[i];
-            size_t elements = lancius_node_elements(n); (void)elements;
+            /* Despot truth: never abort on corrupt shapes on hot path. */
+            size_t elements = 0;
+            size_t nbytes_checked = 0;
+            if (!lancius_node_elements_checked(n, &elements)) { lancius_set_error(LANCIUS_ERROR_LIMIT); continue; }
+            if (!lancius_node_bytes_checked(n, &nbytes_checked)) { lancius_set_error(LANCIUS_ERROR_LIMIT); continue; }
 
             if (n->op == LANCIUS_OP_INPUT) continue;
             if (n->op == LANCIUS_OP_NOP) continue; // V9 Fix: Skip neutralized nodes
@@ -806,7 +849,7 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
                     if (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         n->runtime_data = (double*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
-                        n->runtime_data = (double*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32); /* A3 */
+                        n->runtime_data = (double*)lancius_arena_alloc(scratch, nbytes_checked, 32); /* A3 */
                     }
                     /* A2: record buffer ownership */
                     lancius_node_set_owner(n, (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
@@ -823,7 +866,7 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
                     if (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         buf_f32 = (float*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
-                        buf_f32 = (float*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32);
+                        buf_f32 = (float*)lancius_arena_alloc(scratch, nbytes_checked, 32);
                     }
 
                     n->runtime_data_f32 = buf_f32;
@@ -833,7 +876,7 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
 
                     if (!buf_f32) {
                         lancius_set_error(LANCIUS_ERROR_OOM);
-                        fprintf(stderr, "[EXEC FATAL] FP32 OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, lancius_node_bytes(n));
+                        fprintf(stderr, "[EXEC FATAL] FP32 OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, nbytes_checked);
                         continue;
                     }
                 }
@@ -841,13 +884,13 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
                 if (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         n->runtime_data = (double*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
-                        n->runtime_data = (double*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32); /* A3 */
+                        n->runtime_data = (double*)lancius_arena_alloc(scratch, nbytes_checked, 32); /* A3 */
                     }
                 /* A2: record buffer ownership */
                 lancius_node_set_owner(n, (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
                 if (!n->runtime_data) {
                     lancius_set_error(LANCIUS_ERROR_OOM); /* A4 OOM */
-                    fprintf(stderr, "[EXEC FATAL] OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, elements * sizeof(double));
+                    fprintf(stderr, "[EXEC FATAL] OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, nbytes_checked);
                     continue;
                 }
             }
@@ -874,7 +917,11 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
         lancius_wave* wave = &schedule->waves[w];
         for (uint32_t i = 0; i < wave->node_count; i++) {
             lancius_node* n = wave->nodes[i];
-            size_t elements = lancius_node_elements(n); (void)elements;
+            /* Despot truth: never abort on corrupt shapes on hot path. */
+            size_t elements = 0;
+            size_t nbytes_checked = 0;
+            if (!lancius_node_elements_checked(n, &elements)) { lancius_set_error(LANCIUS_ERROR_LIMIT); continue; }
+            if (!lancius_node_bytes_checked(n, &nbytes_checked)) { lancius_set_error(LANCIUS_ERROR_LIMIT); continue; }
             if (n->op == LANCIUS_OP_INPUT) continue;
             if (n->op == LANCIUS_OP_NOP) continue; // V9 Fix: Skip neutralized nodes
             if (n->op == LANCIUS_OP_CONST) {
@@ -882,7 +929,7 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
                     if (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         n->runtime_data = (double*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
-                        n->runtime_data = (double*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32); /* A3 */
+                        n->runtime_data = (double*)lancius_arena_alloc(scratch, nbytes_checked, 32); /* A3 */
                     }
                     /* A2: record buffer ownership */
                     lancius_node_set_owner(n, (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
@@ -898,7 +945,7 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
                     if (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         buf_f32 = (float*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
-                        buf_f32 = (float*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32);
+                        buf_f32 = (float*)lancius_arena_alloc(scratch, nbytes_checked, 32);
                     }
 
                     n->runtime_data_f32 = buf_f32;
@@ -908,7 +955,7 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
 
                     if (!buf_f32) {
                         lancius_set_error(LANCIUS_ERROR_OOM);
-                        fprintf(stderr, "[EXEC FATAL] FP32 OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, lancius_node_bytes(n));
+                        fprintf(stderr, "[EXEC FATAL] FP32 OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, nbytes_checked);
                         continue;
                     }
                 }
@@ -916,13 +963,13 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
                 if (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) {
                         n->runtime_data = (double*)((uint8_t*)schedule->static_pool + schedule->plan->offsets[n->id]);
                     } else {
-                        n->runtime_data = (double*)lancius_arena_alloc(scratch, lancius_node_bytes(n), 32); /* A3 */
+                        n->runtime_data = (double*)lancius_arena_alloc(scratch, nbytes_checked, 32); /* A3 */
                     }
                 /* A2: record buffer ownership */
                 lancius_node_set_owner(n, (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
                 if (!n->runtime_data) {
                     lancius_set_error(LANCIUS_ERROR_OOM);
-                    fprintf(stderr, "[EXEC FATAL] OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, lancius_node_bytes(n));
+                    fprintf(stderr, "[EXEC FATAL] OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, nbytes_checked);
                     continue;
                 }
             }
@@ -990,8 +1037,11 @@ lancius_liveness_profile lancius_analyze_liveness(lancius_graph* g) {
         for(uint32_t i=0; i<sched->waves[w].node_count; i++) {
             lancius_node* n = sched->waves[w].nodes[i];
             if (n->op != LANCIUS_OP_INPUT && n->op != LANCIUS_OP_CONST) {
-                size_t elems = lancius_node_elements(n);
-                wave_mem += elems * sizeof(double);
+                /* Despot truth: never abort on corrupt shapes in profiling. */
+                size_t b = 0;
+                if (!lancius_node_bytes_checked(n, &b)) continue;
+                if (b > SIZE_MAX - wave_mem) continue;
+                wave_mem += b;
                 profile.tensor_count++;
             }
         }
@@ -1131,10 +1181,13 @@ static void execute_permute(lancius_node* n) {
     for (uint8_t i = 0; i < in->ndim && i < 4; i++) in_shape[i] = in->shape[i];
     for (uint8_t i = 0; i < n->ndim && i < 4; i++) out_shape[i] = n->shape[i];
 
+    /* Despot truth: stride products are checked; corrupt shapes fail loud. */
     size_t in_stride[4];
     in_stride[3] = 1;
     in_stride[2] = in_shape[3];
+    if (in_shape[2] != 0 && in_stride[2] > SIZE_MAX / in_shape[2]) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     in_stride[1] = in_shape[2] * in_stride[2];
+    if (in_shape[1] != 0 && in_stride[1] > SIZE_MAX / in_shape[1]) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     in_stride[0] = in_shape[1] * in_stride[1];
 
     uint32_t axes[4] = {
@@ -1189,11 +1242,28 @@ static void execute_matmul_batched(lancius_node* n) {
     size_t N = b->shape[2];
     if (batches == 0 || M == 0 || K == 0 || N == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
     if (M > SIZE_MAX / K || M * K > SIZE_MAX / N) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    /* Despot truth: batch offsets are checked; overflow fails loud, never wraps. */
+    size_t a_batch_elems = 0, b_batch_elems = 0, c_batch_elems = 0;
+    if (!lancius_checked_mul_size(M, K, &a_batch_elems)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (!lancius_checked_mul_size(K, N, &b_batch_elems)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (!lancius_checked_mul_size(M, N, &c_batch_elems)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    size_t a_total = 0, b_total = 0, c_total = 0;
+    if (!lancius_checked_mul_size(batches, a_batch_elems, &a_total)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (!lancius_checked_mul_size(batches, b_batch_elems, &b_total)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (!lancius_checked_mul_size(batches, c_batch_elems, &c_total)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    (void)a_total; (void)b_total; (void)c_total;
 
     for (size_t batch = 0; batch < batches; batch++) {
-        const double* A_batch = A + batch * M * K;
-        const double* B_batch = B + batch * K * N;
-        double* C_batch = C + batch * M * N;
+        size_t a_off = 0, b_off = 0, c_off = 0;
+        if (!lancius_checked_mul_size(batch, a_batch_elems, &a_off) ||
+            !lancius_checked_mul_size(batch, b_batch_elems, &b_off) ||
+            !lancius_checked_mul_size(batch, c_batch_elems, &c_off)) {
+            lancius_set_error(LANCIUS_ERROR_OVERFLOW);
+            return;
+        }
+        const double* A_batch = A + a_off;
+        const double* B_batch = B + b_off;
+        double* C_batch = C + c_off;
 
         kernel_matmul(C_batch, A_batch, B_batch, M, K, N);
     }
