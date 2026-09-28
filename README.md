@@ -58,71 +58,44 @@ re-derived and re-executed. Plausible outputs were not accepted as proof.
 
 ### Correctness Fixes (audited, fixed, re-proven)
 
-- **Broadcast elementwise math is now correct.** Direct `ADD`/`SUB`/`MUL`
-  on broadcastable shapes (e.g. `[2,2]` with `[1,2]`) previously ran a flat
-  `a[k] OP b[k]` loop — wrong values plus an out-of-bounds read.
-  IR builders now emit the true broadcast output shape
-  (`out[i] = max(a[i], b[i])`), and both the scheduler and the bytecode VM
-  execute N-dimensional strided broadcast. Verified both argument orders:
-  `[1,2,3,4] OP [10,20] → [10,40,30,80]` / `[11,22,13,24]`.
-- **Softmax zero-sum guard.** All-`-inf` rows previously produced silent
-  `NaN`. Both the scheduler and the VM now return a numerical error instead.
-- **Model integrity is now mandatory.** A zero CRC field previously disabled
-  verification entirely (4 zeroed bytes bypassed integrity). The v2 loader
-  now rejects `checksum == 0` by default; legacy unverified loads require
-  explicit opt-in via `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1`. Duplicate-ID
-  detection is O(1), sparse IDs are bounded, and weight skipping streams
-  instead of truncating through `long`.
-- **Attention execution is validated.** Cache heads/dim must match the query,
-  K/V heads/dim must match, and single-token decode without a bound cache is
-  rejected instead of attending over garbage. GQA Q/K/V shapes are checked
-  against declared heads/dim.
-- **INT8 accumulation is 64-bit.** The `int32` accumulator overflowed past
-  132104 terms; both the INT8 conv kernel and the mixed-precision matmul now
-  use `int64`. The dead `&& 0` overflow guard is a real check.
-- **No more silent OOM.** Thread-local weight buffers and Flash/GQA scratch
-  allocations now report `OOM` instead of emitting zeros or uninitialized
-  tiles. Arena allocation failures report error codes.
-- **No more `abort()` on the execution hot paths.** Scheduler, planner, and
-  vision copy paths use the `_checked` element/byte counters and return
-  errors on corrupt shapes.
+Each fix below was re-derived formula-by-formula and re-proven by
+independent execution. The full per-batch record lives in `CHANGELOG.md`;
+only the essence is stated here so this list cannot drift from it.
+
+- **Broadcast elementwise math is now correct** (was flat-loop wrong + OOB):
+  true N-dim trailing-rank broadcast in IR, scheduler, and VM.
+- **Softmax zero-sum guard** (was silent `NaN`): scheduler and VM return a
+  numerical error instead.
+- **Model integrity is now mandatory** (was 4 zeroed bytes bypassed it):
+  `checksum == 0` rejected by default, O(1) duplicate IDs, sparse-ID bounds,
+  streaming weight skip.
+- **Attention execution is validated** (was attending over garbage):
+  cache/K/V heads/dim checks, cache-less long-context decode rejected.
+- **INT8 accumulation is 64-bit** (was `int32` overflow past 132104 terms).
+- **No more silent OOM** (was zeros/uninitialized tiles): error codes
+  everywhere including arena and thread-local paths.
+- **No more `abort()` on the execution hot paths** (was aborting counters):
+  `_checked` arithmetic with error returns.
 
 ### ONNX Strictness
 
-The converter now fails loud instead of emitting silently wrong graphs:
-
-- `Reshape` follows ONNX semantics: `0` copies the input dim, `-1` infers.
-  The two were previously conflated.
-- `Gemm` rejects `transA` and non-unit `alpha`/`beta`, and transposed weights
-  are cloned per use instead of mutating a shared initializer in place.
-- Asymmetric Conv pads/strides and non-square MaxPool kernels are rejected
-  instead of silently keeping only the first element.
-- Symbolic (dynamic-batch) dimensions are rejected instead of being silently
-  frozen to 1. Export static batches for conversion.
+The converter fails loud instead of emitting silently wrong graphs:
+`Reshape` `0`-copy vs `-1`-infer, `Gemm` clone-on-write with
+`transA`/`alpha`/`beta` rejection, symmetric-only Conv/Pool,
+symbolic-dim rejection. Details in `CHANGELOG.md`.
 
 ### Training Alignment
 
-- CIFAR-10 inputs are now `((x/255) - 0.5) / 0.5` in `[-1,1]`, matching the
-  PyTorch `Normalize((0.5,), (0.5,))` reference. The old `[-0.5,0.5]` range
-  halved the effective scale versus tuned learning rates.
-- MNIST uses He initialization (correct for ReLU) instead of
-  Xavier-uniform, binds training parameters by buffer identity instead of
-  shape-sniffing, zeroes gradient buffers per batch, and documents the true
-  cross-entropy mean scale (`1/R`, i.e. `1/64` — not `1/640`).
-- CIFAR-10 evaluation tracks logits by graph identity instead of picking the
-  first `ADD` with 10 columns (the autodiff graph contains many), and logs
-  raw versus clamped loss so divergence can no longer hide at `2.3025`.
+CIFAR-10 `[-1,1]` normalization matching PyTorch, He init on MNIST,
+identity-based parameter binding, per-batch grad zeroing, `1/R`
+cross-entropy scale, identity-tracked eval logits. Details in
+`CHANGELOG.md`.
 
 ### API and Harness Honesty
 
-- The stable FFI error space now preserves causes: `GRAPH_CYCLE`,
-  `OVERFLOW`, `NUMERICAL`, and `INVALID_HANDLE` instead of collapsing them
-  into shape-mismatch/OOM/null.
-- Audits that printed PASS/FAIL but always exited 0 now propagate failures
-  (`audit_modern_llm`, `audit_flash_attention`, `audit_threadpool_parity`,
-  `audit_ffi`, `audit_pytorch_parity.py`).
-- `lancius_dtype_size()` returns 0 on invalid codes and
-  `checked_product_shape(NULL)` fails instead of masking caller bugs.
+Widened FFI error codes (`GRAPH_CYCLE`/`OVERFLOW`/`NUMERICAL`/
+`INVALID_HANDLE`), failure-propagating audit exit codes, loud
+`dtype_size`/`product_shape`. Details in `CHANGELOG.md`.
 
 ### Inherited Baseline (v11S)
 
@@ -146,34 +119,13 @@ Binary compatibility is **guaranteed** for v2 models written by v11S and later.
 
 ### Fixed
 
-- N-dimensional broadcast `ADD`/`SUB`/`MUL` in scheduler, IR shape inference,
-  and bytecode VM (was flat-loop wrong + OOB).
-- Softmax zero-sum guard in scheduler and VM.
-- v2 loader: CRC required by default, O(1) duplicate detection, sparse-ID
-  bounds, streaming weight skip, sticky-error clearing.
-- Attention cache/heads/dim validation; single-token-without-cache rejected;
-  GQA shape validation; RMSNorm gamma/divisibility checks.
-- INT8 `int64` accumulators; real overflow guards; OOM error reporting in
-  kernels, arena, and thread-local paths.
-- Aborting element/byte counters replaced with `_checked` + error returns on
-  all execution, planning, and copy paths; `FLATTEN`/`RESHAPE` verify
-  element-count equality.
-- ONNX: Reshape `0`/`-1`, Gemm clone-on-write + `alpha`/`beta`/`transA`
-  rejection, symmetric-only Conv/Pool, symbolic-dim rejection.
-- Training: `[-1,1]` CIFAR normalization, He init on MNIST, identity-based
-  parameter binding, per-batch grad zeroing, identity-tracked eval logits,
-  raw-vs-clamped loss logging, static ONNX export.
-- Stable API: widened error codes; `dtype_size`/`product_shape` fail loud.
-- False-green audits now exit non-zero on divergence.
-- Despot truth V2: `broadcast_to_shape` any 1..4-D; `SUM` (any ndim),
-  `SUM_AXIS0/1`, `RESHAPE` VJPs exact; N-dim partial broadcast fails loud
-  with whole-graph abort (no zero-grad lie); permute/batched offsets checked;
-  no abort on hot paths; INT8 Add row-bias-only; INT8 `scale=1.0` all-zero;
-  attention/KV/GQA NaN→NUMERICAL; GELU tanh-approx documented;
-  `LANCIUS_NORM_EPS` pinned; vision scale `NUMERICAL` + checked pool-bwd;
-  `u64→size_t` checked; ONNX dilation/group/pads/ceil rejected; trainers
-  raw-abort + chance-gate; `test_ffi_error` honest (see
-  `docs/DESPOT_TRUTH_V2.md`).
+This section used to repeat the Highlights above bullet-for-bullet. The
+single record is `CHANGELOG.md` (v12R1 batches, despot truth V2/V3); the
+machine-checked proofs are `docs/DESPOT_TRUTH_V2.md` and `make check`.
+In short: N-dim broadcast, softmax guards, mandatory CRC integrity,
+validated attention, `int64` INT8, OOM errors, abort-free hot paths,
+strict ONNX, training alignment, widened API codes, honest audit exits,
+despot truth V2/V3 gradient and loader truth.
 
 ### Improved
 
@@ -421,138 +373,30 @@ not claiming to be.
 
 > `v12R1` is a development milestone. The limitations below define its supported scope.
 
-### Production Status
+The binding contract lives in one place: **`KNOWN_LIMITATIONS.md`**. It is
+restated here only as essence, so the two can never drift apart:
 
-- Intended for edge deployment and bare-metal inference within documented scope
-- Stable C API covers the core inference workflow
-- Binary compatibility guaranteed for v2 models written by v11S+
-- Internal APIs beyond the stable API may change in future cycles
+- Edge/bare-metal inference within documented scope; stable C API covers
+  the core inference workflow; v2 binary compatibility guaranteed for
+  models written by v11S+; internal APIs may change.
+- CPU-only, static graphs, no dynamic shapes; Linux x86_64 primary
+  (Makefile targets AVX2/FMA).
+- Transformers, FP32-beyond-matmul, training, and broad ONNX are
+  experimental or deferred — each fails loud outside its scope.
+- v2 integrity required by default (`checksum == 0` rejected unless
+  `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1`).
 
-### Runtime Limitations
-
-- CPU-only execution
-- No GPU acceleration
-- No distributed execution
-- Static graph execution only
-- No dynamic shape execution
-- No general runtime shape mutation contract
-- Single-token attention decode requires a bound KV-cache; cache-less
-  decode of a longer context is rejected rather than executed over garbage
-
-### Transformer Limitations
-
-Transformer support is experimental.
-
-- Transformer inference is experimental
-- Transformer backward passes are not supported (autodiff fails loud)
-- Batched-matmul backward is not supported (autodiff fails loud)
-- KV-cache runtime is FP64-only for now
-- FP32 execution is currently scoped to matmul; there is no FP32 LLM path
-- The `ROPE` graph opcode has no public builder; use `kernel_rope()` or
-  `lancius_transformer_apply_rope_token()` for position handling
-- `EMBEDDING`, `KV_CACHE_READ`, and `KV_CACHE_WRITE` opcodes are reserved
-  and unimplemented; graphs using them fail loud
-- This is not a full LLM serving runtime
-
-### Model Format Limitations
-
-The active model format is v2.
-
-However:
-
-- The v2 format is **frozen** as of v11S for compatible writers
-- Binary compatibility is guaranteed for v2 models written by v11S+
-- Models produced by `v11A1` or `v11A2` should be treated as development artifacts
-- `checksum == 0` files are rejected by default; set
-  `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1` to load legacy unverified files
-- Legacy v1 loading remains available as a fallback, but v1 is not the active format
-
-### ONNX Interoperability Limitations
-
-ONNX conversion is experimental and deliberately strict.
-
-- Operator coverage is limited to `Conv`, `Relu`, `MaxPool`, `Flatten`,
-  `MatMul`, `Add`, `Reshape`, `Gemm`, `Transpose`
-- Validated primarily against LeNet-class graphs
-- `Reshape` supports rank 2 and rank 4 targets with `0`-copy and single-`-1`
-  inference only
-- Conv requires symmetric pads/strides expressible as a single pad/stride;
-  MaxPool requires square kernels
-- `Gemm` requires `transA == 0` and `alpha == beta == 1.0`
-- Symbolic (dynamic) dimensions are rejected; export static batches
-- The converter is currently FP64-oriented
-- Unsupported ONNX graphs fail conversion instead of producing partial models
-
-### API Limitations
-
-The stable C API covers the core inference workflow.
-- Model loading and saving via `lancius_graph_load_stable` / `lancius_graph_save_stable`
-- Graph construction (input, matmul, relu)
-- Data binding and execution
-- Output reading with truncation protection (FP64 outputs only)
-- Tensor introspection (element count, dtype)
-- Opaque handles and thread-local error states (widened codes)
-- Transformer ops, conv2d builders, and advanced ops remain internal-only
-
-### Training Limitations
-
-Training-related code exists in the repository, but `v12R1` is inference-first.
-
-- Training components are experimental
-- Training workflows are not production-grade
-- Evaluated on MNIST/CIFAR-10 style graphs only
-- Training is not part of any stable release contract
-
-### Platform Support
-
-Primary supported environment:
-
-- Linux
-- x86_64 CPU
-
-Other architectures may work, but they require additional validation.
-The Makefile targets AVX2/FMA; non-x86 builds need flag adjustments.
-
-### Hardening Status
-
-`v12R1` includes the hardening, numerical-correctness, and despot truth
-batches described above. It is a development milestone, not a frozen
-release.
-
-The next milestone (`v12R2`) is intended to focus on:
-
-- feature decisions for the remainder of the v12 cycle
-- continued loader and format hardening
-- sanitizer and fuzz validation
-- release-candidate preparation
+The next milestone (`v12R2`) is scoped in `docs/v12R2_SCOPE.md`.
 <!-- /SECTION:KNOWN_LIMITATIONS -->
 
 <!-- SECTION:MODEL_FORMAT -->
 ## Model Format
 
-The active model format is **v2**.
-
-v2 improves on v1 by using:
-
-- explicit magic (`0x32434E41`)
-- explicit version (`2`)
-- fixed-width fields
-- little-endian encoding
-- explicit header flags
-- stronger loader validation
-- mandatory CRC32 body integrity check (v12R1; opt-out only via
-  `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1`)
-
-Loader defenses include duplicate-ID rejection, forward-reference rejection,
-weight-length-vs-shape agreement, sparse-ID bounds, reserved-flag rejection,
-and `EXTERNAL_WEIGHTS` rejection.
-
-Legacy v1 loading remains available as a deprecated fallback.
-
-However:
-
-> Binary compatibility is **guaranteed** for v2 models written by v11S and later.
-> The v2 format is frozen. CRC32 integrity verification is required by default.
+The active model format is **v2** (frozen since v11S; binary compatibility
+guaranteed for v2 models written by v11S+; CRC32 integrity required by
+default). The contract — magic, versions, flags, loader defenses,
+legacy opt-in — is stated once in **`MANIFEST.md`**; the historical
+direction note is `docs/v11A1_MODEL_FORMAT.md`.
 <!-- /SECTION:MODEL_FORMAT -->
 
 <!-- SECTION:ONNX_INTEROPERABILITY -->
@@ -578,32 +422,9 @@ This workflow is intended for validation and interoperability testing.
 
 It is not a general-purpose ONNX runtime.
 
-### Current Status
-
-ONNX support is:
-
-- experimental and strict: violations raise instead of degrading silently
-- validated primarily against LeNet-class convolutional graphs
-- limited in operator coverage
-- not guaranteed to handle arbitrary ONNX models
-
-The converter currently writes Lancius v2 binary models.
-
-### Supported Converter Operators
-
-The ONNX converter currently handles a small operator set:
-
-- `Conv` (symmetric pads/strides only)
-- `Relu`
-- `MaxPool` (square kernels only)
-- `Flatten`
-- `MatMul`
-- `Add`
-- `Reshape` (rank 2/4, `0`-copy, single-`-1`)
-- `Gemm` (`transA == 0`, `alpha == beta == 1.0`, per-use transpose clones)
-- `Transpose` (`[1,0]` / `[1,0,2,3]` only)
-
-Other ONNX operators are not part of the validated conversion path.
+Support is experimental and strict (violations raise; LeNet-class only;
+converter writes v2 models). Operator scope and boundaries are stated once
+in **`KNOWN_LIMITATIONS.md`**; the strictness record is `CHANGELOG.md`.
 
 ### Optional Python Dependencies
 
@@ -642,43 +463,31 @@ Run parity validation against ONNX Runtime (fails non-zero on divergence):
 ```bash
 python3 audit_pytorch_parity.py
 ```
-
-### Important Limitations
-
-- Dynamic shapes are not supported; export static batches.
-- Operator coverage is limited.
-- Conv/Pool attribute handling is symmetric-only by design.
-- The converter is currently FP64-oriented.
-- FP32 ONNX export is deferred.
-- Unsupported ONNX graphs fail conversion instead of producing partial models.
-
-> ONNX support should be treated as an experimental interoperability path,
-> not a stable model import guarantee.
 <!-- /SECTION:ONNX_INTEROPERABILITY -->
 
 <!-- SECTION:DOCUMENTATION -->
 ## Documentation
 
-Relevant documents in this tree:
+Each document owns one thing; start here, then follow pointers:
 
-- `docs/v11A3_SCOPE.md` — last frozen milestone scope
-- `docs/v11A2_SCOPE.md` — previous milestone scope
-- `docs/v11A1_SCOPE.md` — historical milestone scope
-- `docs/v11A1_MODEL_FORMAT.md` — model format direction
-- `docs/v11A1_OPS.md` — operator support matrix
-- `docs/ARCHITECTURE.md` — high-level architecture overview
-- `docs/releases/v10S/RELEASE_NOTES_v10S.md` — historical v10S release notes
-- `docs/releases/v11S/GITHUB_RELEASE_v11S.md` — v11S release notes
+- `STATUS.md` — current milestone status (the only live status)
+- `CHANGELOG.md` — per-batch fix history (the only fix list)
+- `KNOWN_LIMITATIONS.md` — binding boundaries (the only contract)
+- `MANIFEST.md` — compatibility contract (the only compat statement)
+- `docs/DESPOT_TRUTH_V2.md` — audit proofs incl. V3 addendum
+- `docs/ARCHITECTURE.md` — subsystem contracts and pipeline
+- `docs/v12R2_SCOPE.md` — next-milestone scope (binding for v12R2)
 - `docs/releases/v12R1/GITHUB_RELEASE_v12R1.md` — v12R1 release notes
-- `KNOWN_LIMITATIONS.md` — explicit limitations and non-goals
+- `docs/releases/v11S/GITHUB_RELEASE_v11S.md` — v11S release notes
+- `docs/releases/v10S/RELEASE_NOTES_v10S.md` — historical v10S notes
+- `docs/v11A3_SCOPE.md`, `docs/v11A2_SCOPE.md`, `docs/v11A1_SCOPE.md` — frozen history
+- `docs/v11A1_MODEL_FORMAT.md`, `docs/v11A1_OPS.md` — historical direction
+  (bannered as superseded; do not quote for v12R1 behavior)
 - `SECURITY.md` — security reporting policy
-- `CHANGELOG.md` — changelog (see the `v12R1` entry for this milestone)
-- `STATUS.md` — current milestone status
 
-> Some documents may still reference `v11A1` or `v11A2`.
->
-> Where that happens, treat them as historical unless they explicitly describe
-> current (`v12R1`) behavior.
+> Historical files (`v11A*`, `v10S`) describe their own milestones, not
+> v12R1. Quoting them for current behavior is a documentation bug —
+> report it.
 <!-- /SECTION:DOCUMENTATION -->
 
 <!-- SECTION:ROADMAP -->
@@ -723,10 +532,9 @@ Previous milestone: v11S / V1.1 (stable).
 
 The next milestone is `v12R2` (the R2 phase, public `V1.2RC2`), followed by the v12 freeze,
 hardening, and bug-hunting phase (R3) and the `v12S` stable release
-candidate (public `V1.2`).
-
-Candidate v12 work (not committed): FP32 operator expansion, FP32 KV-cache
-storage, broader ONNX coverage, and dynamic shape exploration.
+candidate (public `V1.2`). Scope — not just direction — is fixed in
+`docs/v12R2_SCOPE.md`; candidate work listed anywhere else is stale
+unless that file says so.
 
 ### Stable Release
 
@@ -740,27 +548,9 @@ cycle completes its hardening gate.
 ## Security
 
 Lancius `v12R1` is a development milestone, not a hardened release.
-
-Security issues should be reported privately before public disclosure.
-
-Security-relevant concerns include:
-
-- memory corruption
-- unsafe deserialization
-- malformed model loading
-- arbitrary execution risks
-- dependency vulnerabilities
-
-Model handling notes:
-
-- v2 CRC32 integrity verification is required by default; files with a zero
-  checksum are rejected unless `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1` is set.
-- Models loaded from untrusted sources should still be validated before
-  use. Loading arbitrary untrusted binaries is not recommended.
-
-For the current reporting policy, see:
-
-- `SECURITY.md`
+Report issues privately before public disclosure; treat untrusted model
+files as untrusted input (CRC is integrity, not trust). The policy lives
+in **`SECURITY.md`** — stated there, not repeated here.
 <!-- /SECTION:SECURITY -->
 
 <!-- SECTION:LICENSE -->

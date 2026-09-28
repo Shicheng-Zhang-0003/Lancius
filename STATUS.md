@@ -74,4 +74,16 @@ Build clean under `-Wall -Wextra -Werror`; `audit_regression_13c` 49/49,
 failure-propagating exit codes; broadcast/planner/softmax/CE fixes verified
 by the despot probe (`audit_despot_probe`, in the `make check` gate);
 V2 fixes verified by `probe_v2` (SUM-3D, RESHAPE, SUM_AXIS, N-D fail-loud,
-attention NaN→NUMERICAL) + `test_grad_check` (`8.6e-10`, `5.8e-8`).
+attention NaN→NUMERICAL) + `test_grad_check` (`8.6e-10`, `5.8e-8`);
+V3 fixes verified by the same gate (no new gates needed: every finding was
+a hardening of an already-gated path) plus pytorch parity
+(`3.42e-07`, FP64 limits).
+
+## Operator status
+
+`./lancius` (`examples/lancius_cli.c`) is the ordinary-user operator:
+`doctor`/`status`/`models [--check]`/`demo`/`help`, per-verb `--help`,
+`datasets`/`train`/`run`/`info`/`convert`/`export`/`generate`, and a `tui`
+that calls verbs directly (no re-exec), validates inputs, confirms long
+trains, and pauses on ttys. User paths exec without a shell. `demo`
+proves an install in one command; `make check` covers `info`/`run`.

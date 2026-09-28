@@ -75,9 +75,12 @@ and do NOT abort.
 -   v2 models always carry non-zero CRC32; files with `checksum == 0`
     are rejected by default (set `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1` to
     load legacy pre-hardening files). Saver never emits 0.
--   Degenerate denominators fail loud: all-`-inf` softmax/CE rows and
-    attention/KV/GQA `NaN` denominators return `NUMERICAL` instead of values;
-    fully-masked zero-sum attention rows emit zeros for causal safety.
+-   Degenerate denominators fail loud: all-`-inf` softmax/CE rows,
+    attention/KV/GQA `NaN` denominators, and degenerate LayerNorm/RMSNorm
+    variances return `NUMERICAL` instead of values; fully-masked zero-sum
+    attention rows emit zeros for causal safety.
+-   `lancius_matmul` builds 2D-only graphs (the executor is 2D); N-D inputs
+    fail at build time instead of silently dropping batch dims at execution.
 -   Broadcast follows trailing-rank (NumPy) semantics for `ADD`/`SUB`/`MUL`;
     incompatible shapes are rejected, never read out of bounds.
 -   Autodiff: `SUM` (any 1..4-D via `broadcast_to_shape`), `SUM_AXIS0/1`,
@@ -92,6 +95,15 @@ and do NOT abort.
     about their convergence); LR parity across PyTorch/C batch/scale gaps
     is unproven by design.
 -   `conv_bwd_w critical` FP-sum order is last-bit nondeterministic (training only).
+-   Bytecode VM materializes `CONST` nodes at execute time; graphs mixing
+    `CONST` with computed ops execute identically to the scheduler on the
+    2D MLP subset.
+-   `export_lancius_onnx.py` refuses `checksum == 0` files unless passed
+    `--allow-legacy` (mirrors the C loader default).
+-   Operator (`./lancius`): `status`/`models`/`demo`/`doctor` are
+    informational or self-contained; `train` shells only fixed binaries,
+    user paths always exec without a shell. Long trains (cifar10, hours)
+    are confirmed interactively in the TUI.
 
 ## Philosophy
 

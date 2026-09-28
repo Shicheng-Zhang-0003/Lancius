@@ -1,5 +1,12 @@
 # Lancius Model Format (v11A3 Freeze)
 
+> Historical direction note. The v2 format described below as a goal is
+> **done and frozen**: see `../MANIFEST.md` (compat contract) and
+> `../KNOWN_LIMITATIONS.md` (boundaries). Two claims below are stale and
+> corrected here: v2 — not v1 — is the active save format, and
+> `checksum_crc32 == 0` files are **rejected by default** (opt-in via
+> `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1`), not accepted without verification.
+
 ## Active format before Task 6b
 
 Until Task 6b is applied, the active model format is **v1**.
@@ -43,7 +50,8 @@ Binary compatibility is guaranteed for v2 models written by v11A3 and later.
 ### CRC32 integrity
 
 The `checksum_crc32` header field covers the model body (bytes 48..EOF).
-- `checksum_crc32 == 0`: legacy model (pre-CRC), accepted without verification.
+- `checksum_crc32 == 0`: legacy model (pre-CRC), **rejected by default**
+  (corrected; was: accepted without verification).
 - `checksum_crc32 != 0`: verified on load; mismatch rejects the model.
 
 ### Reserved flags

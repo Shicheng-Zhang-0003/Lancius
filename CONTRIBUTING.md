@@ -14,8 +14,9 @@ Lancius values:
 Please read:
 
 -   README.md
--   ARCHITECTURE.md
+-   docs/ARCHITECTURE.md
 -   KNOWN_LIMITATIONS.md
+-   docs/DESPOT_TRUTH_V2.md (how this project proves correctness)
 
 ## Pull Requests
 
