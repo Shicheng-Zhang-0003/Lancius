@@ -4,14 +4,16 @@
 #include <stdint.h>
 
 /*
- * v11A3 model format status:
+ * v11A3 model format status (v12R1 integrity policy):
  * Active serializer/loader: v2, with v1 load fallback (deprecated).
  * v2 fixed-width format is FROZEN as of v11A3.
  * CRC32 integrity check: computed over the body (bytes 48..EOF).
- *   - checksum_crc32 == 0: legacy model, accepted without verification.
+ *   - checksum_crc32 == 0: legacy unverified file. REJECTED by default;
+ *     load only with explicit opt-in LANCIUS_ALLOW_LEGACY_UNVERIFIED=1.
+ *     The saver never emits 0 (maps 0->1) so 0 always means legacy.
  *   - checksum_crc32 != 0: verified on load; mismatch rejects the model.
- * EXTERNAL_WEIGHTS flag: reserved, must not be set in v11S models.
- * Binary compatibility is guaranteed for v2 models written by v11A3+.
+ * EXTERNAL_WEIGHTS flag: reserved, must not be set in v11S+ models.
+ * Binary compatibility is guaranteed for v2 models written by v11S+.
  */
 
 
