@@ -45,6 +45,9 @@ void* lancius_arena_alloc(lancius_arena* a, size_t size, size_t alignment) {
     size = (size + 31) & ~(size_t)31; // Force 32-byte footprint
     if (alignment == 0) alignment = 32; // V10S ARMOR: Enforce 32-byte AVX2 boundary
     if (alignment & (alignment - 1)) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; } // Must be power of 2
+    /* Despot truth: uncapped alignment (1<<60) wrapped ALIGN_UP and forced a
+     * gigantic grow (OOM-DoS). Cap at 1MB (32B footprint never needs more). */
+    if (alignment > (1u << 20)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }
 
     // RED TEAM FIX 1: Prevent SIZE_MAX overflow on size + alignment
     if (size > SIZE_MAX - alignment) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }

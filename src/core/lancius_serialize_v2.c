@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stddef.h>
+#include <limits.h>
+#include <unistd.h>
 
 typedef struct __attribute__((packed)) {
     uint32_t magic;
@@ -98,10 +101,15 @@ static lancius_node* map_get(idmap* m, uint32_t id) {
 }
 
 int lancius_graph_save_v2(lancius_graph* g, const char* path) {
+    char tmp[PATH_MAX];
+    FILE* f;
     if (!g || !path) return -1;
     if (!is_little_endian()) return -1;
 
-    FILE* f = fopen(path, "w+b");
+    /* Despot truth: write to tmp + rename (was: truncate-in-place, mid-save
+     * failure left a partial file at the real path). */
+    if (snprintf(tmp, sizeof(tmp), "%s.tmp", path) >= (int)sizeof(tmp)) return -1;
+    f = fopen(tmp, "w+b");
     if (!f) return -1;
 
     v2_header h;
@@ -115,12 +123,13 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
     h.header_size = (uint32_t)sizeof(h);
 
     if (fwrite(&h, 1, sizeof(h), f) != sizeof(h)) {
-        fclose(f);
+        fclose(f); unlink(tmp);
         return -1;
     }
 
     for (uint32_t i = 0; i < g->node_count; i++) {
         lancius_node* n = g->nodes[i];
+        if (!n) { fclose(f); unlink(tmp); return -1; }
         lancius_runtime_sync_from_legacy(n);
 
         v2_node rn;
@@ -144,7 +153,8 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
 
         rn.flags = 0;
         rn.dtype = (uint8_t)n->dtype;
-        if (!lancius_dtype_is_valid(rn.dtype)) rn.dtype = LANCIUS_DTYPE_FP64;
+        /* Despot truth: invalid dtype was silently coerced to FP64. Fail loud. */
+        if (!lancius_dtype_is_valid(rn.dtype)) { fclose(f); unlink(tmp); return -1; }
 
         rn.has_weights = 0;
         rn.scale = n->scale;
@@ -156,7 +166,7 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
 
         if (n->op == LANCIUS_OP_INPUT) {
             size_t ne = 0;
-            if (!lancius_node_elements_checked(n, &ne)) { fclose(f); return -1; }
+            if (!lancius_node_elements_checked(n, &ne)) { fclose(f); unlink(tmp); return -1; }
             if (rn.dtype == LANCIUS_DTYPE_INT8 && n->runtime_data_int8) {
                 rn.has_weights = 1;
                 data = n->runtime_data_int8;
@@ -178,53 +188,62 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
         }
 
         if (rn.has_weights && elems > 100000000u) {
-            fclose(f);
+            fclose(f); unlink(tmp);
             return -1;
         }
 
         rn.weight_elems = (uint64_t)elems;
 
         if (fwrite(&rn, 1, sizeof(rn), f) != sizeof(rn)) {
-            fclose(f);
+            fclose(f); unlink(tmp);
             return -1;
         }
 
         for (uint32_t j = 0; j < n->input_count; j++) {
             uint32_t in_id = n->inputs[j] ? n->inputs[j]->id : UINT32_MAX;
             if (fwrite(&in_id, sizeof(uint32_t), 1, f) != 1) {
-                fclose(f);
+                fclose(f); unlink(tmp);
                 return -1;
             }
         }
 
         if (rn.has_weights && elems > 0) {
             if (fwrite(data, elem_size, elems, f) != elems) {
-                fclose(f);
+                fclose(f); unlink(tmp);
                 return -1;
             }
         }
     }
 
-    /* v11A3 format freeze: compute and write CRC32 over the model body. */
+    /* v11A3 format freeze: stream CRC32 over the model body (no 800MB malloc,
+     * checked seeks, offsetof not magic 40). */
     {
-        if (fflush(f) != 0) { fclose(f); return -1; }
-        long body_end = ftell(f);
         long body_start = (long)sizeof(v2_header);
-        if (body_end < 0 || body_end < body_start) { fclose(f); return -1; }
-        long body_size = body_end - body_start;
-        if (body_size <= 0) { fclose(f); return -1; }
-        uint8_t* body_buf = (uint8_t*)malloc((size_t)body_size);
-        if (!body_buf) { fclose(f); return -1; }
-        if (fseek(f, body_start, SEEK_SET) != 0) { free(body_buf); fclose(f); return -1; }
-        if (fread(body_buf, 1, (size_t)body_size, f) != (size_t)body_size) { free(body_buf); fclose(f); return -1; }
-        uint32_t crc = lancius_crc32(0, body_buf, (size_t)body_size);
-        free(body_buf);
+        long body_end, body_size, left;
+        uint32_t crc = 0;
+        uint8_t chunk[65536];
+        if (fflush(f) != 0) { fclose(f); unlink(tmp); return -1; }
+        if (fseek(f, 0, SEEK_END) != 0) { fclose(f); unlink(tmp); return -1; }
+        body_end = ftell(f);
+        if (body_end < 0 || body_end < body_start) { fclose(f); unlink(tmp); return -1; }
+        body_size = body_end - body_start;
+        if (body_size <= 0) { fclose(f); unlink(tmp); return -1; }
+        if (fseek(f, body_start, SEEK_SET) != 0) { fclose(f); unlink(tmp); return -1; }
+        left = body_size;
+        while (left > 0) {
+            size_t want = (left < (long)sizeof(chunk)) ? (size_t)left : sizeof(chunk);
+            size_t got = fread(chunk, 1, want, f);
+            if (got != want) { fclose(f); unlink(tmp); return -1; }
+            crc = lancius_crc32(crc, chunk, got);
+            left -= (long)got;
+        }
         if (crc == 0) crc = 1; /* 0 means legacy/unverified; never emit it */
-        if (fseek(f, 40, SEEK_SET) != 0) { fclose(f); return -1; } /* offset of checksum_crc32 */
-        if (fwrite(&crc, sizeof(uint32_t), 1, f) != 1) { fclose(f); return -1; }
+        if (fseek(f, (long)offsetof(v2_header, checksum_crc32), SEEK_SET) != 0) { fclose(f); unlink(tmp); return -1; }
+        if (fwrite(&crc, sizeof(uint32_t), 1, f) != 1) { fclose(f); unlink(tmp); return -1; }
+        if (fflush(f) != 0 || fclose(f) != 0) { unlink(tmp); return -1; }
     }
 
-    fclose(f);
+    if (rename(tmp, path) != 0) { unlink(tmp); return -1; }
     return 0;
 }
 
@@ -269,6 +288,9 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
 
     idmap map = {NULL, 0};
     uint32_t* in_ids = NULL;
+    /* NOP duplicate seen-list (NOPs map to NULL, invisible to map_get). */
+    uint32_t* nop_ids = NULL;
+    uint32_t nop_seen = 0, nop_cap = 0;
     // Hostile fix: seen_ids linear O(n^2) scan removed; map_get is the duplicate oracle (O(1)).
     // Bound sparse IDs to prevent 80MB realloc DoS: ids must be dense-ish.
     // Legit saves emit dense ids < next_id <= node_count + NOP slack.
@@ -547,9 +569,26 @@ break;
             }
         }
 
-        /* A3: reject duplicate node ids (including NOP ids, which map to NULL).
-         * Hostile fix: O(1) via map only; removed O(n^2) linear scan. */
-        if (map_get(&map, rn.id)) goto fail;
+        /* A3: reject duplicate node ids.
+         * Despot truth: NOPs map to NULL, so map_get was falsy for them and a
+         * duplicate NOP id sailed through (was: comment claimed coverage).
+         * Non-NOP dupes use the O(1) map; NOP ids use a small seen-list
+         * (NOPs are rare; optimizer-neutered only). */
+        if (rn.op == LANCIUS_MODEL_OP_NOP) {
+            for (uint32_t _d = 0; _d < nop_seen; _d++) {
+                if (nop_ids[_d] == rn.id) goto fail;
+            }
+            if (nop_seen >= nop_cap) {
+                uint32_t ncap = nop_cap ? nop_cap * 2 : 64;
+                uint32_t *nn = (uint32_t*)realloc(nop_ids, (size_t)ncap * sizeof(uint32_t));
+                if (!nn) goto fail;
+                nop_ids = nn;
+                nop_cap = ncap;
+            }
+            nop_ids[nop_seen++] = rn.id;
+        } else {
+            if (map_get(&map, rn.id)) goto fail;
+        }
 
         if (!map_set(&map, rn.id, n)) goto fail;
     }
@@ -564,28 +603,38 @@ break;
         if (env && env[0] == '1') allow_legacy = 1;
         if (h.checksum_crc32 == 0 && !allow_legacy) goto fail;
     }
+    /* Despot truth: CRC over a malloc'd whole body (up to 800MB x2) with
+     * long/ftell (32-bit truncation, non-seekable bypass when fseek fails or
+     * body_size<=0 skipped verification entirely). Stream in 64KB chunks
+     * with checked seeks; any seek/size anomaly fails closed. */
     if (h.checksum_crc32 != 0) {
-        fseek(f, 0, SEEK_END);
-        long file_end = ftell(f);
-        long body_start = (long)h.header_size;
-        long body_size = file_end - body_start;
-        if (body_size > 0) {
-            uint8_t* body_buf = (uint8_t*)malloc((size_t)body_size);
-            if (!body_buf) goto fail;
-            fseek(f, body_start, SEEK_SET);
-            if (fread(body_buf, 1, (size_t)body_size, f) != (size_t)body_size) {
-                free(body_buf);
-                goto fail;
+        long body_start = (long)LANCIUS_MODEL_HEADER_SIZE_V2;
+        if (h.header_size != LANCIUS_MODEL_HEADER_SIZE_V2) goto fail;
+        if (fseek(f, 0, SEEK_END) != 0) goto fail;
+        {
+            long file_end = ftell(f);
+            long body_size;
+            uint32_t computed_crc = 0;
+            uint8_t chunk[65536];
+            long left;
+            if (file_end < 0 || file_end < body_start) goto fail;
+            body_size = file_end - body_start;
+            if (body_size <= 0) goto fail;
+            if (fseek(f, body_start, SEEK_SET) != 0) goto fail;
+            left = body_size;
+            while (left > 0) {
+                size_t want = (left < (long)sizeof(chunk)) ? (size_t)left : sizeof(chunk);
+                size_t got = fread(chunk, 1, want, f);
+                if (got != want) goto fail;
+                computed_crc = lancius_crc32(computed_crc, chunk, got);
+                left -= (long)got;
             }
-            uint32_t computed_crc = lancius_crc32(0, body_buf, (size_t)body_size);
-            free(body_buf);
-            if (computed_crc != h.checksum_crc32) {
-                goto fail;
-            }
+            if (computed_crc != h.checksum_crc32) goto fail;
         }
     }
 
     free(map.v);
+    free(nop_ids);
     fclose(f);
 
     for (uint32_t i = 0; i < g->node_count; i++) {
@@ -598,6 +647,7 @@ break;
 fail:
     free(in_ids);
     free(map.v);
+    free(nop_ids);
     if (g) lancius_graph_destroy(g);
     fclose(f);
     return NULL;

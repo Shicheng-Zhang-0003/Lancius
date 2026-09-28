@@ -111,6 +111,9 @@ LANCIUS_EXPORT lancius_graph_handle lancius_graph_create_stable(lancius_context 
     if (!wrapper->g) { free(wrapper); sync_internal_error(); if (g_last_error == LANCIUS_OK) set_error(LANCIUS_ERR_OOM); return NULL; }
 
     wrapper->scratch = lancius_arena_create(16 * 1024 * 1024); // 16MB execution scratch
+    /* Despot truth: unchecked scratch (load path checks) returned success with
+     * NULL scratch, crashing later in schedule_execute. */
+    if (!wrapper->scratch) { lancius_graph_destroy(wrapper->g); free(wrapper); set_error(LANCIUS_ERR_OOM); return NULL; }
     wrapper->sched = NULL;
 
     set_error(LANCIUS_OK);
@@ -136,7 +139,8 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_input(lancius_graph_handle g, s
         return NULL;
     }
     lancius_node* n = lancius_input(wrapper->g, rows, cols);
-    if (!n) { set_error(LANCIUS_ERR_OOM); return NULL; }
+    /* Despot truth: shape/LIMIT failures were all reported as OOM. */
+    if (!n) { sync_internal_error(); if (g_last_error == LANCIUS_OK) set_error(LANCIUS_ERR_OOM); return NULL; }
     set_error(LANCIUS_OK);
     return (lancius_tensor_handle)n;
 }

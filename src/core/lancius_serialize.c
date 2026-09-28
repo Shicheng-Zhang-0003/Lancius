@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define LANCIUS_MAGIC 0x21434E41 // "LANC!"
 /* v11A1 Task 6a: active format is v1. v2 lands in Task 6b. */
@@ -11,68 +12,89 @@
 int lancius_graph_save_v2(lancius_graph* g, const char* path);
 lancius_graph* lancius_graph_load_v2(const char* path);
 
-// Bulletproof macros to silence GCC's aggressive warn_unused_result on fread/fwrite
-#define SAFE_READ(ptr, size, nmemb, stream) do { size_t _r = fread(ptr, size, nmemb, stream); (void)_r; } while(0)
-#define SAFE_WRITE(ptr, size, nmemb, stream) do { size_t _r = fwrite(ptr, size, nmemb, stream); (void)_r; } while(0)
+/* Despot truth: every write is checked; any failure unlinks the partial file
+ * (was: return values discarded, truncated files reported as success). */
+#define CHECKED_WRITE(ptr, size, nmemb, stream) \
+    do { if (fwrite(ptr, size, nmemb, stream) != (size_t)(nmemb)) goto wfail; } while(0)
 
 int lancius_graph_save(lancius_graph* g, const char* path) {
     if (lancius_graph_save_v2(g, path) == 0) return 0;
 
     fprintf(stderr, "[LANCIUS SERIAL WARN] v2 save failed, falling back to v1\n");
 
+    /* Despot truth: NULL graph/path derefed (was unguarded). */
+    if (!g || !path || !g->nodes) return -1;
     FILE* f = fopen(path, "wb");
     if (!f) return -1;
     uint32_t magic = LANCIUS_MAGIC;
-    SAFE_WRITE(&magic, sizeof(uint32_t), 1, f);
-    SAFE_WRITE(&g->node_count, sizeof(uint32_t), 1, f);
+    CHECKED_WRITE(&magic, sizeof(uint32_t), 1, f);
+    CHECKED_WRITE(&g->node_count, sizeof(uint32_t), 1, f);
 
     for (uint32_t i = 0; i < g->node_count; i++) {
         lancius_node* n = g->nodes[i];
+        uint32_t meta[4];
+        uint8_t is_view_flag;
+        uint8_t has_weights;
+        size_t elems = 0;
+        uint8_t dtype;
+        if (!n) goto wfail;
         lancius_runtime_sync_from_legacy(n); /* A1 */
-        SAFE_WRITE(&n->id, sizeof(uint32_t), 1, f);
-        SAFE_WRITE(&n->op, sizeof(lancius_opcode), 1, f);
-        SAFE_WRITE(&n->ndim, sizeof(uint8_t), 1, f);
-        SAFE_WRITE(n->shape, sizeof(size_t), 4, f);
-        SAFE_WRITE(&n->input_count, sizeof(uint32_t), 1, f);
+        CHECKED_WRITE(&n->id, sizeof(uint32_t), 1, f);
+        CHECKED_WRITE(&n->op, sizeof(lancius_opcode), 1, f);
+        CHECKED_WRITE(&n->ndim, sizeof(uint8_t), 1, f);
+        CHECKED_WRITE(n->shape, sizeof(size_t), 4, f);
+        if (n->input_count > 16) goto wfail;
+        if (n->input_count > 0 && !n->inputs) goto wfail;
+        CHECKED_WRITE(&n->input_count, sizeof(uint32_t), 1, f);
         for(uint32_t j=0; j<n->input_count; j++) {
-            SAFE_WRITE(&n->inputs[j]->id, sizeof(uint32_t), 1, f);
+            if (!n->inputs[j]) goto wfail;
+            CHECKED_WRITE(&n->inputs[j]->id, sizeof(uint32_t), 1, f);
         }
-        SAFE_WRITE(&n->attr_val, sizeof(double), 1, f);
-        uint32_t meta[4] = {n->kernel_h, n->kernel_w, n->stride, n->pad};
-        SAFE_WRITE(meta, sizeof(uint32_t), 4, f);
-        SAFE_WRITE(n->axes, sizeof(uint32_t), 4, f);
+        CHECKED_WRITE(&n->attr_val, sizeof(double), 1, f);
+        meta[0] = n->kernel_h; meta[1] = n->kernel_w; meta[2] = n->stride; meta[3] = n->pad;
+        CHECKED_WRITE(meta, sizeof(uint32_t), 4, f);
+        CHECKED_WRITE(n->axes, sizeof(uint32_t), 4, f);
         // V9.5: Write view flag (0 for non-views, maintains backward compat)
-        uint8_t is_view_flag = n->is_view ? 1 : 0;
-        SAFE_WRITE(&is_view_flag, sizeof(uint8_t), 1, f);
+        is_view_flag = n->is_view ? 1 : 0;
+        CHECKED_WRITE(&is_view_flag, sizeof(uint8_t), 1, f);
         if (is_view_flag) {
-            SAFE_WRITE(n->strides, sizeof(size_t), 4, f);
             uint32_t source_id = n->view_source ? n->view_source->id : UINT32_MAX;
-            SAFE_WRITE(&source_id, sizeof(uint32_t), 1, f);
+            CHECKED_WRITE(n->strides, sizeof(size_t), 4, f);
+            CHECKED_WRITE(&source_id, sizeof(uint32_t), 1, f);
         }
 
-        uint8_t has_weights = (n->op == LANCIUS_OP_INPUT && (n->runtime_data != NULL || n->runtime_data_int8 != NULL)) ? 1 : 0;
-        SAFE_WRITE(&has_weights, sizeof(uint8_t), 1, f);
+        has_weights = (n->op == LANCIUS_OP_INPUT && (n->runtime_data != NULL || n->runtime_data_int8 != NULL)) ? 1 : 0;
+        CHECKED_WRITE(&has_weights, sizeof(uint8_t), 1, f);
         if (has_weights) {
-            size_t elems = lancius_node_elements(n);
-                if (elems > 100000000) { fprintf(stderr, "[SERIAL FATAL] Tensor size exceeds sanity limit."); fclose(f); return -1; }
-            uint8_t dtype = n->dtype;
+            /* Despot truth: never abort() from a library save path. */
+            if (!lancius_node_elements_checked(n, &elems)) goto wfail;
+                if (elems > 100000000) { fprintf(stderr, "[SERIAL FATAL] Tensor size exceeds sanity limit."); goto wfail; }
+            dtype = n->dtype;
             /* A3: clamp unknown dtypes to FP64 for serialization safety */
             if (!lancius_dtype_is_valid(dtype)) dtype = LANCIUS_DTYPE_FP64;
-            SAFE_WRITE(&dtype, sizeof(uint8_t), 1, f);
-            SAFE_WRITE(&n->scale, sizeof(double), 1, f);
+            CHECKED_WRITE(&dtype, sizeof(uint8_t), 1, f);
+            CHECKED_WRITE(&n->scale, sizeof(double), 1, f);
             if (dtype == LANCIUS_DTYPE_INT8) {
-                SAFE_WRITE(n->runtime_data_int8, sizeof(int8_t), elems, f);
+                if (!n->runtime_data_int8) goto wfail;
+                CHECKED_WRITE(n->runtime_data_int8, sizeof(int8_t), elems, f);
             } else {
-                SAFE_WRITE(n->runtime_data, sizeof(double), elems, f);
+                if (!n->runtime_data) goto wfail;
+                CHECKED_WRITE(n->runtime_data, sizeof(double), elems, f);
             }
         }
     }
-    fclose(f);
+    if (fflush(f) != 0 || fclose(f) != 0) { unlink(path); return -1; }
     printf("[LANCIUS SERIAL] Saved %u nodes to %s\n", g->node_count, path);
     return 0;
+wfail:
+    fclose(f);
+    unlink(path);
+    return -1;
 }
 
 lancius_graph* lancius_graph_load(const char* path) {
+    /* Despot truth: fopen(NULL) is UB (was unguarded). */
+    if (!path) return NULL;
     lancius_graph* g_v2 = lancius_graph_load_v2(path);
     if (g_v2) return g_v2;
 
@@ -152,8 +174,12 @@ lancius_graph* lancius_graph_load(const char* path) {
         const lancius_node* in2 = input_count > 2 ? id_map[in_ids[2]] : NULL;
 
         if (op == LANCIUS_OP_INPUT) {
+            /* Despot truth: ndim 1/3 was silently coerced to 2D, dropping dims
+             * and desyncing the weight stream. Only 2/3/4 load; else fail. */
             if (ndim == 4) n = lancius_input_4d(g, shape[0], shape[1], shape[2], shape[3]);
-            else n = lancius_input(g, shape[0], shape[1]);
+            else if (ndim == 3) n = lancius_input_3d(g, shape[0], shape[1], shape[2]);
+            else if (ndim == 2) n = lancius_input(g, shape[0], shape[1]);
+            else { free(in_ids); goto fail; }
         } else if (op == LANCIUS_OP_CONST) n = lancius_const(g, attr_val, shape[0], shape[1]);
         else if (op == LANCIUS_OP_ADD) n = lancius_add(g, in0, in1);
         else if (op == LANCIUS_OP_SUB) n = lancius_sub(g, in0, in1);
@@ -206,32 +232,29 @@ lancius_graph* lancius_graph_load(const char* path) {
             n->kernel_h = meta[0]; n->kernel_w = meta[1]; n->stride = meta[2]; n->pad = meta[3];
             memcpy(n->axes, axes, sizeof(uint32_t)*4);
             if (is_view) {
+                /* Despot truth: dangling/forward view_source derefed later (was
+                 * stored unchecked, NULL or not-yet-loaded). */
+                if (view_source_id == UINT32_MAX || view_source_id >= map_size ||
+                    id_map[view_source_id] == NULL) { free(in_ids); goto fail; }
                 n->is_view = 1;
                 memcpy(n->strides, view_strides, sizeof(size_t)*4);
-                if (view_source_id != UINT32_MAX && view_source_id < map_size) {
-                    n->view_source = id_map[view_source_id];
-                }
+                n->view_source = id_map[view_source_id];
             }
             id_map[id] = n;
             if (has_weights) {
                 size_t elems = 0;
                 if (!lancius_node_elements_checked(n, &elems)) { free(in_ids); goto fail; }
+                /* Despot truth: the manual free loops below double-freed:
+                 * buffers are bound OWNED_HEAP, so graph_destroy releases them.
+                 * Just destroy (v2 pattern). */
                 if (elems > SIZE_MAX / sizeof(double)) {
                     fprintf(stderr, "[SERIAL FATAL] Tensor size overflow.\n");
                     free(in_ids); fclose(f); free(id_map);
-                    for (uint32_t k = 0; k < g->node_count; k++) {
-                        if (g->nodes[k]->runtime_data) free(g->nodes[k]->runtime_data);
-                        if (g->nodes[k]->runtime_data_int8) free(g->nodes[k]->runtime_data_int8);
-                    }
                     lancius_graph_destroy(g); return NULL;
                 }
                 if (elems > 100000000) {
                     fprintf(stderr, "[SERIAL FATAL] Tensor size exceeds sanity limit.\n");
                     free(in_ids); fclose(f); free(id_map);
-                    for (uint32_t k = 0; k < g->node_count; k++) {
-                        if (g->nodes[k]->runtime_data) free(g->nodes[k]->runtime_data);
-                        if (g->nodes[k]->runtime_data_int8) free(g->nodes[k]->runtime_data_int8);
-                    }
                     lancius_graph_destroy(g); return NULL;
                 }
                 uint8_t dtype;
@@ -273,11 +296,9 @@ lancius_graph* lancius_graph_load(const char* path) {
 fail:
     lancius_set_error(LANCIUS_ERROR_INVALID_MODEL); /* A4 fail */
     fprintf(stderr, "[SERIAL FATAL] Malformed or truncated .lancius file. Aborting load.\n");
+    /* Despot truth: buffers are bound OWNED_HEAP; manual free + destroy
+     * double-freed every bound node (was: free loops here). */
     if (g) {
-        for (uint32_t k = 0; k < g->node_count; k++) {
-            if (g->nodes[k]->runtime_data) free(g->nodes[k]->runtime_data);
-            if (g->nodes[k]->runtime_data_int8) free(g->nodes[k]->runtime_data_int8);
-        }
         lancius_graph_destroy(g);
     }
     free(id_map);
