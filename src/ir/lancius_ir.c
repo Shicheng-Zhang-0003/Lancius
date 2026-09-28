@@ -145,6 +145,33 @@ lancius_node* lancius_broadcast_4d(lancius_graph* g, const lancius_node* a, size
     return n_node;
 }
 
+/* Despot truth: broadcast scalar (or broadcast-compatible) to any 1..4-D shape.
+ * Math: out[I] = a[bcast(I)], trailing-rank NumPy semantics. Scheduler already
+ * executes N-dim strided broadcast; this constructor makes it reachable for
+ * autodiff SUM grads and scalar lifts without forcing [1,1]-wrong shapes. */
+lancius_node* lancius_broadcast_to_shape(lancius_graph* g, const lancius_node* a, const size_t* shape, uint8_t ndim) {
+    if (!g || !a || !shape) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (ndim == 0 || ndim > 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
+    if (lancius_validate_shape(shape, ndim) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
+    size_t ae = 0, oe = 0;
+    if (!lancius_node_elements_checked(a, &ae)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
+    if (!lancius_checked_product_shape(shape, ndim, &oe)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
+    if (ae != 1) {
+        /* Non-scalar must already match exactly; partial N-dim reductions are
+         * expressed via SUM_AXIS ops in accum_grad, not here. */
+        if (a->ndim != ndim) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+        for (uint8_t i = 0; i < ndim; i++) {
+            if (a->shape[i] != shape[i]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+        }
+    }
+    lancius_node* n = alloc_node(g, LANCIUS_OP_BROADCAST, ndim, 1);
+    if (n) {
+        for (uint8_t i = 0; i < ndim; i++) n->shape[i] = shape[i];
+        n->inputs[0] = a;
+    }
+    return n;
+}
+
 void lancius_graph_destroy(lancius_graph* g) {
     if (!g) return;
     lancius_graph_release_owned(g);
@@ -247,28 +274,29 @@ static uint8_t broadcast_out_ndim(const lancius_node* a, const lancius_node* b) 
     return (a->ndim > b->ndim) ? a->ndim : b->ndim;
 }
 lancius_node* lancius_add(lancius_graph* g, const lancius_node* a, const lancius_node* b) {
-        if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] ADD NULL input"); return NULL; }
+        if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] ADD NULL input"); lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     // V10S FIX: Allow broadcast
 
-    if (lancius_validate_binary_broadcast(a, b) != LANCIUS_ERROR_OK) return NULL;
+    /* Despot truth: broadcast incompatibility sets sticky error, never silent NULL. */
+    if (lancius_validate_binary_broadcast(a, b) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     uint8_t ond = broadcast_out_ndim(a, b);
     lancius_node* n = alloc_node(g, LANCIUS_OP_ADD, ond, 2);
     if (n) { broadcast_out_shape(a, b, n->shape); n->inputs[0] = a; n->inputs[1] = b; } return n;
 }
 lancius_node* lancius_sub(lancius_graph* g, const lancius_node* a, const lancius_node* b) {
-        if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] SUB NULL input"); return NULL; }
+        if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] SUB NULL input"); lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     // V10S FIX: Allow broadcast
 
-    if (lancius_validate_binary_broadcast(a, b) != LANCIUS_ERROR_OK) return NULL;
+    if (lancius_validate_binary_broadcast(a, b) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     uint8_t ond = broadcast_out_ndim(a, b);
     lancius_node* n = alloc_node(g, LANCIUS_OP_SUB, ond, 2);
     if (n) { broadcast_out_shape(a, b, n->shape); n->inputs[0] = a; n->inputs[1] = b; } return n;
 }
 lancius_node* lancius_mul(lancius_graph* g, const lancius_node* a, const lancius_node* b) {
-        if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] MUL NULL input"); return NULL; }
+        if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] MUL NULL input"); lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     // V10S FIX: Allow broadcast
 
-    if (lancius_validate_binary_broadcast(a, b) != LANCIUS_ERROR_OK) return NULL;
+    if (lancius_validate_binary_broadcast(a, b) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     uint8_t ond = broadcast_out_ndim(a, b);
     lancius_node* n = alloc_node(g, LANCIUS_OP_MUL, ond, 2);
     if (n) { broadcast_out_shape(a, b, n->shape); n->inputs[0] = a; n->inputs[1] = b; } return n;
