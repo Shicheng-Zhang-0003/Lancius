@@ -237,6 +237,7 @@ lancius_node* lancius_rope(lancius_graph* g, const lancius_node* qk, size_t seq_
 lancius_node* lancius_const_scalar(lancius_graph* g, double val, uint8_t ndim);
 
 /* A1: runtime state API */
+int lancius_node_attach_runtime(lancius_graph* g, lancius_node* n);
 lancius_runtime_state* lancius_graph_runtime(lancius_graph* g, uint32_t node_id);
 lancius_runtime_state* lancius_node_rt(const lancius_node* n);
 void lancius_runtime_sync_from_legacy(lancius_node* n);

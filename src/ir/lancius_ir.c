@@ -136,9 +136,19 @@ lancius_node* lancius_broadcast_4d(lancius_graph* g, const lancius_node* a, size
     size_t ae = 0, oe = 0;
     if (!lancius_node_elements_checked(a, &ae)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
     if (!lancius_checked_product_shape(out, 4, &oe)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
+    /* Despot truth: oe%ae==0 is not broadcast (e.g. 12 into 24 can still be
+     * incompatible); only scalar, exact, or per-dim 1-or-equal is executable. */
     if (ae != 1 && ae != oe) {
-        /* Allow row/col patterns only if caller uses 2D-compatible layout; otherwise require exact/scalar. */
-        if (oe % ae != 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+        bool compat = true;
+        if (a->ndim == 0 || a->ndim > 4) compat = false;
+        else {
+            for (uint8_t i = 0; i < 4; i++) {
+                int ai = (int)i - (4 - (int)a->ndim);
+                size_t da = (ai < 0) ? 1 : a->shape[ai];
+                if (!(da == 1 || da == out[i])) { compat = false; break; }
+            }
+        }
+        if (!compat) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     }
     lancius_node* n_node = alloc_node(g, LANCIUS_OP_BROADCAST, 4, 1);
     if (n_node) { n_node->shape[0] = n; n_node->shape[1] = c; n_node->shape[2] = h; n_node->shape[3] = w; n_node->inputs[0] = a; }
@@ -191,8 +201,11 @@ static lancius_node* alloc_node(lancius_graph* g, lancius_opcode op, uint8_t ndi
     memset(n, 0, sizeof(lancius_node));
     n->id = g->next_id++;
 
-    /* A1: attach separated runtime state */
+    /* A1: attach separated runtime state.
+     * Despot truth: ensure_capacity can OOM; a node with NULL rt violates
+     * the tracked-node invariant (was returned anyway). */
     lancius_ensure_runtime_capacity(g, n->id);
+    if (!g->rt_states || n->id >= g->rt_cap) { lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
     if (g->rt_states && n->id < g->rt_cap) {
         n->rt = &g->rt_states[n->id];
         n->rt->buffer = NULL;
@@ -203,6 +216,7 @@ static lancius_node* alloc_node(lancius_graph* g, lancius_opcode op, uint8_t ndi
         n->rt->owner = LANCIUS_MEMORY_EXTERNAL;
         n->rt->buffer_owner = LANCIUS_MEMORY_EXTERNAL; /* A2 */
         n->rt->int8_owner = LANCIUS_MEMORY_EXTERNAL;   /* A2 */
+        n->rt->f32_owner = LANCIUS_MEMORY_EXTERNAL;
         n->rt->offset = 0;
         n->rt->flags = 0;
     }
@@ -302,12 +316,17 @@ lancius_node* lancius_mul(lancius_graph* g, const lancius_node* a, const lancius
     if (n) { broadcast_out_shape(a, b, n->shape); n->inputs[0] = a; n->inputs[1] = b; } return n;
 }
 lancius_node* lancius_matmul(lancius_graph* g, const lancius_node* a, const lancius_node* b) {
+    if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (!a || !b || a->ndim < 2 || b->ndim < 2) {
         fprintf(stderr, "[LANCIUS IR FATAL] MATMUL ndim < 2: a=%u b=%u", a?a->ndim:0, b?b->ndim:0);
+        lancius_set_error(LANCIUS_ERROR_INVALID_RANK);
         return NULL;
     }
+    /* Despot truth: executor is 2D-only (scheduler reads shape[0..1]); an N-D
+     * matmul node would silently drop batch dims at execution. Fail loud. */
+    if (a->ndim != 2 || b->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     // V10S FIX: NDim-aware dimension extraction (handles 4D Reshape outputs)
-    if (lancius_validate_matmul(a->shape, a->ndim, b->shape, b->ndim) != LANCIUS_ERROR_OK) return NULL;
+    if (lancius_validate_matmul(a->shape, a->ndim, b->shape, b->ndim) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     size_t a_rows = a->shape[a->ndim - 2];
     size_t a_cols = a->shape[a->ndim - 1];
     size_t b_rows = b->shape[b->ndim - 2];
@@ -477,7 +496,12 @@ lancius_node* lancius_reshape(lancius_graph* g, const lancius_node* in, uint8_t 
     return n;
 }
 lancius_node* lancius_conv2d_bwd_w(lancius_graph* g, const lancius_node* grad, const lancius_node* fwd_in, uint32_t k_h, uint32_t k_w, uint32_t stride, uint32_t pad) {
-    if (!grad || !fwd_in) return NULL;
+    if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (!grad || !fwd_in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    /* Despot truth: corrupt 2D inputs yielded wrong-shape grads silently. */
+    if (grad->ndim != 4 || fwd_in->ndim != 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
+    if (k_h == 0 || k_w == 0 || stride == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
+    if (grad->shape[1] == 0 || fwd_in->shape[1] == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_CONV2D_BWD_W, 4, 2);
     if (n) {
         n->shape[0] = grad->shape[1]; n->shape[1] = fwd_in->shape[1];
@@ -628,6 +652,28 @@ lancius_node* lancius_const_scalar(lancius_graph* g, double val, uint8_t ndim) {
 
 /* A1: runtime state helpers */
 
+/* Despot truth: hand-built nodes (autodiff fused-clone) need the same rt
+ * invariant alloc_node provides; capacity growth can OOM (was ignored). */
+int lancius_node_attach_runtime(lancius_graph* g, lancius_node* n) {
+    if (!g || !n) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return 0; }
+    lancius_ensure_runtime_capacity(g, n->id);
+    if (!g->rt_states || n->id >= g->rt_cap) { lancius_set_error(LANCIUS_ERROR_OOM); return 0; }
+    n->rt = &g->rt_states[n->id];
+    n->rt->buffer = NULL;
+    n->rt->buffer_int8 = NULL;
+    n->rt->buffer_f32 = NULL;
+    n->rt->dtype = LANCIUS_DTYPE_FP64;
+    n->rt->scale = 1.0;
+    n->rt->owner = LANCIUS_MEMORY_EXTERNAL;
+    n->rt->buffer_owner = LANCIUS_MEMORY_EXTERNAL;
+    n->rt->int8_owner = LANCIUS_MEMORY_EXTERNAL;
+    n->rt->f32_owner = LANCIUS_MEMORY_EXTERNAL;
+    n->rt->offset = 0;
+    n->rt->flags = 0;
+    n->rt->transformer_state = NULL;
+    return 1;
+}
+
 lancius_runtime_state* lancius_graph_runtime(lancius_graph* g, uint32_t node_id) {
     if (!g || !g->rt_states || node_id >= g->rt_cap) return NULL;
     return &g->rt_states[node_id];
@@ -672,6 +718,9 @@ void lancius_node_set_owner(lancius_node* n, lancius_memory_owner owner) {
 
     n->rt->owner = owner;
     n->rt->buffer_owner = owner;
+    /* Despot truth: FP32 buffers track f32_owner (was left stale, leaking
+     * arena/pool f32 or misreading ownership on release). */
+    if (n->dtype == LANCIUS_DTYPE_FP32) n->rt->f32_owner = owner;
 }
 
 lancius_memory_owner lancius_node_get_owner(const lancius_node* n) {
@@ -745,8 +794,7 @@ void lancius_node_bind_external_f32(lancius_node* n, float* data) {
 
     if (n->rt) {
         n->rt->buffer_f32 = data;
-        n->rt->buffer_owner = LANCIUS_MEMORY_EXTERNAL;
-        n->rt->owner = LANCIUS_MEMORY_EXTERNAL;
+        n->rt->f32_owner = LANCIUS_MEMORY_EXTERNAL;
         if (data) n->rt->dtype = LANCIUS_DTYPE_FP32;
     }
 
@@ -765,8 +813,7 @@ void lancius_node_bind_owned_heap_f32(lancius_node* n, float* data) {
 
     if (n->rt) {
         n->rt->buffer_f32 = data;
-        n->rt->buffer_owner = LANCIUS_MEMORY_OWNED_HEAP;
-        n->rt->owner = LANCIUS_MEMORY_OWNED_HEAP;
+        n->rt->f32_owner = LANCIUS_MEMORY_OWNED_HEAP;
         n->rt->dtype = LANCIUS_DTYPE_FP32;
     }
 
@@ -791,16 +838,19 @@ void lancius_node_release_owned(lancius_node* n) {
             n->rt->int8_owner = LANCIUS_MEMORY_EXTERNAL;
         }
 
-        if (n->rt->buffer_owner == LANCIUS_MEMORY_OWNED_HEAP && n->runtime_data_f32) {
+        /* Despot truth: f32 has its own owner (was aliased to buffer_owner,
+         * leaking owned f32 or freeing external fp64). */
+        if (n->rt->f32_owner == LANCIUS_MEMORY_OWNED_HEAP && n->runtime_data_f32) {
             free(n->runtime_data_f32);
             n->runtime_data_f32 = NULL;
             n->rt->buffer_f32 = NULL;
-            n->rt->buffer_owner = LANCIUS_MEMORY_EXTERNAL;
+            n->rt->f32_owner = LANCIUS_MEMORY_EXTERNAL;
         }
 
         if (
             n->rt->buffer_owner == LANCIUS_MEMORY_EXTERNAL &&
-            n->rt->int8_owner == LANCIUS_MEMORY_EXTERNAL
+            n->rt->int8_owner == LANCIUS_MEMORY_EXTERNAL &&
+            n->rt->f32_owner == LANCIUS_MEMORY_EXTERNAL
         ) {
             n->rt->owner = LANCIUS_MEMORY_EXTERNAL;
         }

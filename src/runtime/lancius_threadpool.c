@@ -1,5 +1,7 @@
 #include "lancius/lancius_threadpool.h"
+#include "lancius/lancius_error.h"
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 
 struct lancius_pool {
@@ -50,7 +52,8 @@ lancius_pool* lancius_pool_create(int num_threads) {
     if (num_threads <= 0) num_threads = 4;
     if (num_threads > 256) num_threads = 256;
     lancius_pool* pool = (lancius_pool*)calloc(1, sizeof(lancius_pool));
-    if (!pool) return NULL;
+    /* Despot truth: creation failure sets OOM (was silent NULL). */
+    if (!pool) { lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
     pool->num_threads = num_threads;
     pool->queue_cap = 1024;
     pool->queue = (lancius_task*)malloc(sizeof(lancius_task) * (size_t)pool->queue_cap);
@@ -80,10 +83,30 @@ lancius_pool* lancius_pool_create(int num_threads) {
 void lancius_pool_submit(lancius_pool* pool, lancius_task_fn fn, void* arg) {
     if (!pool || !fn) return;
     pthread_mutex_lock(&pool->mutex);
+    /* Despot truth: queue-full inline fallback ran on the submitter thread
+     * concurrently with workers (scratch arenas are not thread-safe) and was
+     * invisible to pool_wait. Grow the queue instead; reject after shutdown. */
+    if (pool->shutdown) { pthread_mutex_unlock(&pool->mutex); return; }
     if (pool->count >= pool->queue_cap) {
-        pthread_mutex_unlock(&pool->mutex);
-        fn(arg); // Fallback synchronous execution to prevent deadlock
-        return;
+        int new_cap = pool->queue_cap * 2;
+        lancius_task *nq;
+        if (new_cap <= 0 || new_cap > 1000000) { pthread_mutex_unlock(&pool->mutex); return; }
+        nq = (lancius_task*)realloc(pool->queue, sizeof(lancius_task) * (size_t)new_cap);
+        if (!nq) { pthread_mutex_unlock(&pool->mutex); return; }
+        /* Re-linearize ring into the grown buffer. */
+        {
+            int i;
+            lancius_task *tmp = (lancius_task*)malloc(sizeof(lancius_task) * (size_t)pool->count);
+            if (!tmp) { pthread_mutex_unlock(&pool->mutex); return; }
+            for (i = 0; i < pool->count; i++)
+                tmp[i] = nq[(pool->head + i) % pool->queue_cap];
+            memcpy(nq, tmp, sizeof(lancius_task) * (size_t)pool->count);
+            free(tmp);
+        }
+        pool->queue = nq;
+        pool->head = 0;
+        pool->tail = pool->count;
+        pool->queue_cap = new_cap;
     }
     pool->queue[pool->tail].fn = fn;
     pool->queue[pool->tail].arg = arg;

@@ -18,17 +18,24 @@ lancius_program* lancius_compile_graph(lancius_graph* g) {
     prog->rows = (size_t*)calloc(prog->num_regs, sizeof(size_t));
     prog->cols = (size_t*)calloc(prog->num_regs, sizeof(size_t));
     prog->input_regs = (uint32_t*)malloc(g->node_count * sizeof(uint32_t));
-    if (!prog->code || !prog->rows || !prog->cols || !prog->input_regs) {
-        free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog);
+    prog->is_const = (uint8_t*)calloc(prog->num_regs, sizeof(uint8_t));
+    prog->const_val = (double*)calloc(prog->num_regs, sizeof(double));
+    if (!prog->code || !prog->rows || !prog->cols || !prog->input_regs || !prog->is_const || !prog->const_val) {
+        free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog->is_const); free(prog->const_val); free(prog);
         return NULL;
     }
     prog->input_count = 0;
 
     // v10S GUARD: Bytecode VM only supports 2D tensors
     for (uint32_t i = 0; i < g->node_count; i++) {
+        if (!g->nodes[i] || g->nodes[i]->id >= g->next_id) {
+            fprintf(stderr, "[BYTECODE FATAL] corrupt node table.\n");
+            free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog->is_const); free(prog->const_val); free(prog);
+            return NULL;
+        }
         if (g->nodes[i]->ndim > 2) {
             fprintf(stderr, "[BYTECODE FATAL] ndim > 2 not supported in v10S VM.\n");
-            free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog);
+            free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog->is_const); free(prog->const_val); free(prog);
             return NULL;
         }
     }
@@ -40,6 +47,7 @@ lancius_program* lancius_compile_graph(lancius_graph* g) {
         prog->rows[i] = n->shape[0];
         prog->cols[i] = n->shape[1];
         if (n->op == LANCIUS_OP_INPUT) prog->input_regs[prog->input_count++] = i;
+        else if (n->op == LANCIUS_OP_CONST) { prog->is_const[i] = 1; prog->const_val[i] = n->attr_val; }
     }
 
     for (uint32_t i = 0; i < g->node_count; i++) {
@@ -74,7 +82,7 @@ lancius_program* lancius_compile_graph(lancius_graph* g) {
         } else {
             /* Anything beyond 2D MLP must fail loudly, never miscompile. */
             fprintf(stderr, "[BYTECODE FATAL] op %d not supported in v10S VM (node %u).\n", n->op, n->id);
-            free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog);
+            free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog->is_const); free(prog->const_val); free(prog);
             return NULL;
         }
     }
@@ -88,11 +96,30 @@ lancius_program* lancius_compile_graph(lancius_graph* g) {
 
 int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lancius_arena* scratch) {
     if (!prog || !scratch || !out) return -1;
+    /* Despot truth: inputs deref was unchecked (NULL + OOB reg). */
+    if (prog->input_count > 0 && !inputs) return -1;
 
     double** regs = (double**)lancius_arena_alloc(scratch, prog->num_regs * sizeof(double*), 8);
     if (!regs) return -1;
+    memset(regs, 0, prog->num_regs * sizeof(double*));
 
-    for (uint32_t i = 0; i < prog->input_count; i++) regs[prog->input_regs[i]] = inputs[i];
+    for (uint32_t i = 0; i < prog->input_count; i++) {
+        if (prog->input_regs[i] >= prog->num_regs) return -1;
+        regs[prog->input_regs[i]] = inputs[i];
+    }
+    /* Despot truth: materialize CONST regs (were uninitialized garbage). */
+    if (prog->is_const && prog->const_val) {
+        for (uint32_t r = 0; r < prog->num_regs; r++) {
+            if (!prog->is_const[r]) continue;
+            size_t ce = 0;
+            if (prog->rows[r] && prog->cols[r] > SIZE_MAX / prog->rows[r]) return -1;
+            ce = prog->rows[r] * prog->cols[r];
+            if (ce && ce > SIZE_MAX / sizeof(double)) return -1;
+            regs[r] = (double*)lancius_arena_alloc(scratch, ce ? ce * sizeof(double) : 32, 32);
+            if (!regs[r]) return -1;
+            for (size_t k = 0; k < ce; k++) regs[r][k] = prog->const_val[r];
+        }
+    }
 
     size_t pc = 0;
     while (pc < prog->code_len) {
@@ -191,5 +218,7 @@ void lancius_program_destroy(lancius_program* prog) {
     if (prog->input_regs) free(prog->input_regs);
     if (prog->rows) free(prog->rows);
     if (prog->cols) free(prog->cols);
+    if (prog->is_const) free(prog->is_const);
+    if (prog->const_val) free(prog->const_val);
     free(prog);
 }

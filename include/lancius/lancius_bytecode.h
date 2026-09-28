@@ -30,6 +30,10 @@ typedef struct {
     uint32_t input_count;
     size_t* rows;
     size_t* cols;
+    /* Despot truth: CONST regs were never materialized (garbage reads).
+     * is_const[r] marks them; const_val[r] is the fill value. */
+    uint8_t* is_const;
+    double* const_val;
 } lancius_program;
 
 lancius_program* lancius_compile_graph(lancius_graph* g);

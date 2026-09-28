@@ -56,6 +56,10 @@ typedef struct lancius_runtime_state {
     /* A2: split ownership for legacy FP64 and INT8 buffers */
     lancius_memory_owner buffer_owner;
     lancius_memory_owner int8_owner;
+    /* Despot truth: FP32 shared buffer_owner with FP64, so freeing one
+     * clobbered the other (leak, or worse, free of external memory).
+     * FP32 has its own owner now. */
+    lancius_memory_owner f32_owner;
     size_t offset;
     uint32_t flags;
     void* transformer_state;
