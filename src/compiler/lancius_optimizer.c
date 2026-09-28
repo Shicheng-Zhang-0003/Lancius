@@ -3,9 +3,12 @@
 
 static int count_consumers(lancius_graph* g, lancius_node* target) {
     int count = 0;
-    for (uint32_t i = 0; i < g->node_count; i++) {
+    uint32_t i, j;
+    if (!g || !g->nodes || !target) return 0;
+    for (i = 0; i < g->node_count; i++) {
         lancius_node* n = g->nodes[i];
-        for (uint32_t j = 0; j < n->input_count; j++) {
+        if (!n || !n->inputs) continue;
+        for (j = 0; j < n->input_count; j++) {
             if (n->inputs[j] == target) count++;
         }
     }
@@ -20,6 +23,9 @@ void lancius_optimize_fusion(lancius_graph* g) {
         if (!n) continue;
         if (n->op == LANCIUS_OP_RELU && n->input_count > 0 && n->inputs && n->inputs[0] && n->inputs[0]->op == LANCIUS_OP_CONV2D) {
             lancius_node* conv = (lancius_node*)n->inputs[0];
+            /* Despot truth: stolen inputs array must hold 2 entries (was: OOB
+             * read when conv had <2 inputs). */
+            if (!conv->inputs || conv->input_count != 2 || !conv->inputs[0] || !conv->inputs[1]) continue;
             if (conv->ndim != 4 || n->ndim != 4) continue;
             if (count_consumers(g, conv) == 1) {
                 n->op = LANCIUS_OP_CONV2D_RELU_FUSED;

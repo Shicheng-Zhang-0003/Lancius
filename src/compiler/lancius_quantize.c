@@ -18,8 +18,17 @@ void lancius_quantize_graph(lancius_graph* g) {
                 double abs_v = fabs(n->runtime_data[j]);
                 if (abs_v > max_val) max_val = abs_v;
             }
-            if (!(max_val > 0.0)) continue; /* all-zero weights: leave FP64, avoid 1e-8 lie */
+            /* Despot truth: all-zero stays FP64; non-finite max (Inf/NaN)
+             * would make scale Inf and (int8_t)NaN UB — skip loud. */
+            if (!(max_val > 0.0) || !isfinite(max_val)) continue;
             n->scale = max_val / 127.0;
+            /* Despot truth: overwriting a prior owned int8 buffer leaks it. */
+            if (n->runtime_data_int8 && n->rt && n->rt->int8_owner == LANCIUS_MEMORY_OWNED_HEAP) {
+                free(n->runtime_data_int8);
+                n->runtime_data_int8 = NULL;
+                n->rt->buffer_int8 = NULL;
+                n->rt->int8_owner = LANCIUS_MEMORY_EXTERNAL;
+            }
 
             int8_t* q = (int8_t*)malloc(elems ? elems : 1);
             if (!q) continue;
@@ -33,6 +42,10 @@ void lancius_quantize_graph(lancius_graph* g) {
             n->dtype = LANCIUS_DTYPE_INT8;
             /* A2: quantized INT8 weights are owned heap buffers */
             lancius_node_bind_owned_heap_int8(n, n->runtime_data_int8);
+            /* Despot truth: rt->scale was left stale at 1.0, mis-scaling any
+             * rt-based dequant path. Sync it. */
+            if (n->rt) n->rt->scale = n->scale;
+            lancius_runtime_sync_from_legacy(n);
             quantized_count++;
         }
     }

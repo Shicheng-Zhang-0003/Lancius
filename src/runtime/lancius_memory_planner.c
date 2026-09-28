@@ -88,7 +88,15 @@ lancius_memory_plan* lancius_build_memory_plan(lancius_schedule* sched, lancius_
         lancius_node* n = g->nodes[i];
         if (!n || n->id >= max_id) continue;
         if (birth[n->id] != UINT32_MAX) {
-            size_t sz = get_node_bytes(n);
+            /* Despot truth: zero-size pooled intervals aliased offset 0 and
+             * overlapped live tensors (was: continue with sz==0 pooled). */
+            size_t sz = 0;
+            if (!lancius_node_bytes_checked(n, &sz) || sz == 0) {
+                free(birth); free(death); free(intervals); free(is_input_to_others);
+                lancius_set_error(LANCIUS_ERROR_LIMIT);
+                return NULL;
+            }
+            sz = get_node_bytes(n);
             intervals[num_intervals].node_id = n->id;
             intervals[num_intervals].birth_wave = birth[n->id];
             intervals[num_intervals].death_wave = (death[n->id] > birth[n->id]) ? death[n->id] : birth[n->id];

@@ -1,16 +1,26 @@
 #include "lancius/lancius_autodiff.h"
+#include "lancius/lancius_validate.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /* Despot truth: returns 1 on success/neutral-skip, 0 on hard shape failure.
  * Hard failure must abort the whole autodiff (return NULL), never leave a
  * NULL grad that trains as zero. */
 static int accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_input_id, lancius_node* new_grad, lancius_node** fwd_to_full) {
-    if (!new_grad) return 1;
+    /* Despot truth: NULL grad is never neutral (was: builder OOM silently
+     * skipped, training that param as zero). Fail loud. */
+    if (!new_grad) {
+        if (lancius_get_error() == LANCIUS_ERROR_OK) lancius_set_error(LANCIUS_ERROR_INTERNAL);
+        return 0;
+    }
     lancius_node* full_input = fwd_to_full[fwd_input_id];
-    if (!full_input) return 1;
+    if (!full_input) {
+        if (lancius_get_error() == LANCIUS_ERROR_OK) lancius_set_error(LANCIUS_ERROR_INTERNAL);
+        return 0;
+    }
 
     bool exact_match = (new_grad->ndim == full_input->ndim);
     if (exact_match) {
@@ -160,6 +170,8 @@ lancius_training_graph* lancius_ir_autodiff(lancius_graph* fwd_g, lancius_node* 
         lancius_node* n = NULL;
         const lancius_node* in0 = (old->input_count > 0 && old->inputs && old->inputs[0]) ? fwd_to_full[old->inputs[0]->id] : NULL;
         const lancius_node* in1 = (old->input_count > 1 && old->inputs && old->inputs[1]) ? fwd_to_full[old->inputs[1]->id] : NULL;
+        /* Despot truth: inputs[2] was derefed unguarded (LAYERNORM/GQA/ATTENTION). */
+        const lancius_node* in2 = (old->input_count > 2 && old->inputs && old->inputs[2]) ? fwd_to_full[old->inputs[2]->id] : NULL;
 
         switch(old->op) {
             case LANCIUS_OP_INPUT:
@@ -167,7 +179,15 @@ lancius_training_graph* lancius_ir_autodiff(lancius_graph* fwd_g, lancius_node* 
 if (old->ndim == 4) n = lancius_input_4d(tg->graph, old->shape[0], old->shape[1], old->shape[2], old->shape[3]);
 else if (old->ndim == 3) n = lancius_input_3d(tg->graph, old->shape[0], old->shape[1], old->shape[2]);
 else n = lancius_input(tg->graph, old->shape[0], old->shape[1]);
-if(n) { n->runtime_data = old->runtime_data; lancius_runtime_sync_from_legacy(n); }
+/* Despot truth: clone kept only FP64 (quantized models silently dequantized). */
+if(n) {
+    n->runtime_data = old->runtime_data;
+    n->runtime_data_int8 = old->runtime_data_int8;
+    n->runtime_data_f32 = old->runtime_data_f32;
+    n->dtype = old->dtype; n->scale = old->scale;
+    lancius_runtime_sync_from_legacy(n);
+    if (n->rt) { n->rt->int8_owner = old->rt ? old->rt->int8_owner : LANCIUS_MEMORY_EXTERNAL; n->rt->f32_owner = old->rt ? old->rt->f32_owner : LANCIUS_MEMORY_EXTERNAL; }
+}
 break;
             case LANCIUS_OP_CONST: {
                 if (old->ndim == 2) n = lancius_const(tg->graph, old->attr_val, old->shape[0], old->shape[1]);
@@ -206,13 +226,13 @@ break;
             case LANCIUS_OP_RESHAPE: n = lancius_reshape(tg->graph, in0, old->ndim, old->shape[0], old->shape[1], old->shape[2], old->shape[3]); break;
             /* Despot truth: transformer forward ops clone exactly so fwd_to_full
              * stays complete; backward still fails loud (no wrong grads). */
-            case LANCIUS_OP_LAYERNORM: n = lancius_layernorm(tg->graph, in0, in1, fwd_to_full[old->inputs[2]->id]); break;
+            case LANCIUS_OP_LAYERNORM: n = lancius_layernorm(tg->graph, in0, in1, in2); break;
             case LANCIUS_OP_RMSNORM: n = lancius_rmsnorm(tg->graph, in0, in1); break;
             case LANCIUS_OP_GELU: n = lancius_gelu(tg->graph, in0); break;
             case LANCIUS_OP_SWIGLU: n = lancius_swiglu(tg->graph, in0, in1); break;
-            case LANCIUS_OP_GQA: n = lancius_gqa(tg->graph, in0, in1, fwd_to_full[old->inputs[2]->id], old->kernel_h, old->kernel_w); break;
+            case LANCIUS_OP_GQA: n = lancius_gqa(tg->graph, in0, in1, in2, old->kernel_h, old->kernel_w); break;
             case LANCIUS_OP_ROPE: n = lancius_rope(tg->graph, in0, old->shape[0], old->shape[1], old->shape[2] / 2); break;
-            case LANCIUS_OP_ATTENTION: n = lancius_attention(tg->graph, in0, in1, fwd_to_full[old->inputs[2]->id]); break;
+            case LANCIUS_OP_ATTENTION: n = lancius_attention(tg->graph, in0, in1, in2); break;
             case LANCIUS_OP_NOP: n = NULL; break; // V9 Fix: Skip neutralized nodes
             /* Despot truth: _BWD nodes must never appear in the forward graph.
              * Fail loud instead of silently cloning them. */
@@ -231,41 +251,112 @@ break;
                 return NULL;
             case LANCIUS_OP_CONV2D_RELU_FUSED:
                 // V10S FIX: Manually allocate to preserve the FUSED opcode!
+                // Despot truth: rt attach checked (was NULL), output NOT aliased
+                // (was shared with fwd graph: UAF + cross-execution overwrite).
+                if (tg->graph->next_id == UINT32_MAX) {
+                    fprintf(stderr, "[AUTODIFF FATAL] node id space exhausted.\n");
+                    free(fwd_to_full);
+                    free(tg->grad_nodes);
+                    lancius_graph_destroy(tg->graph); free(tg);
+                    return NULL;
+                }
                 n = (lancius_node*)lancius_arena_alloc(tg->graph->arena, sizeof(lancius_node), 8);
                 if (n) {
                     memset(n, 0, sizeof(lancius_node));
                     n->id = tg->graph->next_id++;
+                    if (!lancius_node_attach_runtime(tg->graph, n)) {
+                        fprintf(stderr, "[AUTODIFF FATAL] fused-clone runtime attach failed.\n");
+                        free(fwd_to_full);
+                        free(tg->grad_nodes);
+                        lancius_graph_destroy(tg->graph); free(tg);
+                        return NULL;
+                    }
                     n->op = LANCIUS_OP_CONV2D_RELU_FUSED; // Crucial: Keep the fused opcode
                     n->ndim = 4;
                     n->input_count = 2;
                     n->inputs = (const lancius_node**)lancius_arena_alloc(tg->graph->arena, sizeof(lancius_node*) * 2, 8);
-                    if (!n->inputs) { n = NULL; break; }
+                    if (!n->inputs) {
+                        fprintf(stderr, "[AUTODIFF FATAL] fused-clone inputs alloc failed.\n");
+                        free(fwd_to_full);
+                        free(tg->grad_nodes);
+                        lancius_graph_destroy(tg->graph); free(tg);
+                        return NULL;
+                    }
                     n->inputs[0] = in0; n->inputs[1] = in1;
                     n->shape[0] = old->shape[0]; n->shape[1] = old->shape[1]; n->shape[2] = old->shape[2]; n->shape[3] = old->shape[3];
                     n->kernel_h = old->kernel_h; n->kernel_w = old->kernel_w; n->stride = old->stride; n->pad = old->pad;
                     n->dtype = LANCIUS_DTYPE_FP64;
                     n->scale = 1.0;
-                    n->runtime_data = old->runtime_data;
+                    n->runtime_data = NULL;
                     lancius_runtime_sync_from_legacy(n);
                     // Track node in training graph
                     if (tg->graph->node_count >= tg->graph->node_cap) {
                         size_t new_cap = tg->graph->node_cap == 0 ? 1024 : (size_t)tg->graph->node_cap * 2;
+                        if (new_cap > (size_t)UINT32_MAX + 1) {
+                            fprintf(stderr, "[AUTODIFF FATAL] training graph node cap exhausted.\n");
+                            free(fwd_to_full);
+                            free(tg->grad_nodes);
+                            lancius_graph_destroy(tg->graph); free(tg);
+                            return NULL;
+                        }
                         lancius_node** nn = (lancius_node**)realloc(tg->graph->nodes, sizeof(lancius_node*) * new_cap);
-                        if (!nn) { n = NULL; break; }
+                        if (!nn) {
+                            fprintf(stderr, "[AUTODIFF FATAL] training graph track OOM.\n");
+                            free(fwd_to_full);
+                            free(tg->grad_nodes);
+                            lancius_graph_destroy(tg->graph); free(tg);
+                            return NULL;
+                        }
                         tg->graph->nodes = nn;
                         tg->graph->node_cap = (uint32_t)new_cap;
                     }
                     tg->graph->nodes[tg->graph->node_count++] = n;
                 }
                 break;
-            default: fprintf(stderr, "[AUTODIFF FATAL] Unhandled op %d\n", old->op); break;
+            default:
+                /* Despot truth: storing NULL and continuing builds a broken
+                 * graph (was: silent). Fail loud. */
+                fprintf(stderr, "[AUTODIFF FATAL] Unhandled op %d\n", old->op);
+                free(fwd_to_full);
+                free(tg->grad_nodes);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
         }
         fwd_to_full[old->id] = n;
+    }
+
+    /* Despot truth: foreign loss_node id OOB-read/wrote grad_map (was unchecked). */
+    if (loss_node->id >= fwd_g->next_id) {
+        fprintf(stderr, "[AUTODIFF FATAL] loss node id %u outside forward graph (max %u).\n",
+            loss_node->id, fwd_g->next_id);
+        free(fwd_to_full); free(tg->grad_nodes);
+        lancius_graph_destroy(tg->graph); free(tg);
+        return NULL;
+    }
+    {
+        bool member = false;
+        for (uint32_t _i = 0; _i < fwd_g->node_count; _i++) {
+            if (fwd_g->nodes[_i] == loss_node) { member = true; break; }
+        }
+        if (!member) {
+            fprintf(stderr, "[AUTODIFF FATAL] loss node is not a member of the forward graph.\n");
+            free(fwd_to_full); free(tg->grad_nodes);
+            lancius_graph_destroy(tg->graph); free(tg);
+            return NULL;
+        }
     }
 
     lancius_node** grad_map = (lancius_node**)calloc(fwd_g->next_id, sizeof(lancius_node*));
     if (!grad_map) { free(fwd_to_full); free(tg->grad_nodes); lancius_graph_destroy(tg->graph); free(tg); return NULL; }
     grad_map[loss_node->id] = lancius_const(tg->graph, 1.0, 1, 1);
+    if (!grad_map[loss_node->id]) {
+        /* Despot truth: NULL seed (OOM) made the whole loop skip and return
+         * an empty grad graph as success (was unchecked). */
+        fprintf(stderr, "[AUTODIFF FATAL] gradient seed alloc failed.\n");
+        free(grad_map); free(fwd_to_full); free(tg->grad_nodes);
+        lancius_graph_destroy(tg->graph); free(tg);
+        return NULL;
+    }
 
     for (int i = fwd_g->node_count - 1; i >= 0; i--) {
         lancius_node* fwd_n = fwd_g->nodes[i];
@@ -377,9 +468,24 @@ break;
             lancius_graph_destroy(tg->graph); free(tg);
             return NULL;
         } else if (fwd_n->op == LANCIUS_OP_PERMUTE) {
+            /* Despot truth: corrupt axes[i]>=4 wrote past inv_axes (stack OOB). */
             uint32_t inv_axes[4] = {0,0,0,0};
+            if (lancius_validate_permutation(fwd_n->axes, 4) != LANCIUS_ERROR_OK) {
+                fprintf(stderr, "[AUTODIFF FATAL] corrupt permute axes in forward graph.\n");
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
             for(int i=0; i<4; i++) inv_axes[fwd_n->axes[i]] = i;
-            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_permute(tg->graph, grad_out, inv_axes[0], inv_axes[1], inv_axes[2], inv_axes[3]), fwd_to_full);
+            {
+                lancius_node* pg = lancius_permute(tg->graph, grad_out, inv_axes[0], inv_axes[1], inv_axes[2], inv_axes[3]);
+                if (!pg || !accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, pg, fwd_to_full)) {
+                    fprintf(stderr, "[AUTODIFF FATAL] PERMUTE grad failed.\n");
+                    free(grad_map); free(fwd_to_full);
+                    lancius_graph_destroy(tg->graph); free(tg);
+                    return NULL;
+                }
+            }
         } else if (fwd_n->op == LANCIUS_OP_CROSS_ENTROPY) {
             lancius_node* A = fwd_to_full[fwd_n->inputs[0]->id];
             lancius_node* Y = fwd_to_full[fwd_n->inputs[1]->id];
