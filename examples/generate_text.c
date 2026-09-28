@@ -46,6 +46,8 @@ int main(void) {
 
     if (!q_prompt || !k_prompt || !v_prompt) {
         printf("FATAL: OOM allocating prompt buffers\n");
+        free(q_prompt); free(k_prompt); free(v_prompt);
+        lancius_kv_cache_destroy(cache);
         return 1;
     }
 
@@ -106,6 +108,11 @@ int main(void) {
 
     if (!sp || !scratch) {
         printf("FATAL: could not compile prefill schedule\n");
+        if (sp) lancius_schedule_destroy(sp);
+        if (scratch) lancius_arena_destroy(scratch);
+        lancius_graph_destroy(gp);
+        free(q_prompt); free(k_prompt); free(v_prompt);
+        lancius_kv_cache_destroy(cache);
         return 1;
     }
 
@@ -113,6 +120,11 @@ int main(void) {
 
     if (lancius_kv_cache_prefill(cache, k_prompt, v_prompt, prompt_len) != 0) {
         printf("FATAL: prefill cache append failed\n");
+        lancius_schedule_destroy(sp);
+        lancius_graph_destroy(gp);
+        lancius_arena_destroy(scratch);
+        free(q_prompt); free(k_prompt); free(v_prompt);
+        lancius_kv_cache_destroy(cache);
         return 1;
     }
 
@@ -160,6 +172,11 @@ int main(void) {
 
     if (!gamma_data || !beta_data) {
         printf("FATAL: OOM allocating LayerNorm parameters\n");
+        free(gamma_data); free(beta_data);
+        lancius_graph_destroy(g);
+        lancius_arena_destroy(scratch);
+        free(q_prompt); free(k_prompt); free(v_prompt);
+        lancius_kv_cache_destroy(cache);
         return 1;
     }
 
@@ -172,14 +189,33 @@ int main(void) {
 
     /*
      * Bind K/V graph inputs to cache buffers.
+     * Despot truth: unchecked buffers crashed later (were: no NULL check).
      */
-    lancius_node_bind_external(K_in, (void*)lancius_kv_cache_k_buffer(cache, NULL));
-    lancius_node_bind_external(V_in, (void*)lancius_kv_cache_v_buffer(cache, NULL));
+    {
+        const void* kbuf = lancius_kv_cache_k_buffer(cache, NULL);
+        const void* vbuf = lancius_kv_cache_v_buffer(cache, NULL);
+        if (!kbuf || !vbuf) {
+            printf("FATAL: KV-cache buffers missing\n");
+            free(gamma_data); free(beta_data);
+            lancius_graph_destroy(g);
+            lancius_arena_destroy(scratch);
+            free(q_prompt); free(k_prompt); free(v_prompt);
+            lancius_kv_cache_destroy(cache);
+            return 1;
+        }
+        lancius_node_bind_external(K_in, (void*)kbuf);
+        lancius_node_bind_external(V_in, (void*)vbuf);
+    }
 
     lancius_schedule* sched = lancius_ir_schedule(g);
 
     if (!sched) {
         printf("FATAL: could not compile generation schedule\n");
+        free(gamma_data); free(beta_data);
+        lancius_graph_destroy(g);
+        lancius_arena_destroy(scratch);
+        free(q_prompt); free(k_prompt); free(v_prompt);
+        lancius_kv_cache_destroy(cache);
         return 1;
     }
 
@@ -189,11 +225,21 @@ int main(void) {
 
     if (!q || !k || !v) {
         printf("FATAL: OOM allocating token buffers\n");
+        free(q); free(k); free(v);
+        lancius_schedule_destroy(sched);
+        lancius_graph_destroy(g);
+        lancius_arena_destroy(scratch);
+        free(gamma_data); free(beta_data);
+        free(q_prompt); free(k_prompt); free(v_prompt);
+        lancius_kv_cache_destroy(cache);
         return 1;
     }
 
     printf("[3/3] Generating tokens...\n");
 
+    /* Despot truth: RoPE/append/logits failures only broke the loop, then
+     * fell through to DEMO COMPLETE + return 0 (masked failures). */
+    int gen_rc = 0;
     for (size_t step = 0; step < gen_steps; step++) {
         /*
          * v11A2 Section 6:
@@ -214,11 +260,13 @@ int main(void) {
 
         if (lancius_transformer_apply_rope_token(cache, q, k, (int)position) != 0) {
             printf("\n[WARN] RoPE helper failed. Stopping generation.\n");
+            gen_rc = 1;
             break;
         }
 
         if (lancius_kv_cache_append_generation_token(cache, k, v) != 0) {
             printf("\n[WARN] KV-cache append failed. Stopping generation.\n");
+            gen_rc = 1;
             break;
         }
 
@@ -236,6 +284,7 @@ int main(void) {
         double* logits = (double*)calloc(VOCAB_SIZE, sizeof(double));
         if (!logits) {
             printf("\nFATAL: OOM allocating logits\n");
+            gen_rc = 1;
             break;
         }
 
@@ -264,8 +313,11 @@ int main(void) {
         lancius_arena_reset(scratch);
     }
 
-    printf("\n================================================================\n");
-    printf("  LANCIUS v11A2 PREFILL/GENERATION DEMO COMPLETE.\n");
+    if (gen_rc != 0)
+        printf("\n  GENERATION STOPPED EARLY (see WARN above).\n");
+    else
+        printf("\n================================================================\n"
+               "  LANCIUS v11A2 PREFILL/GENERATION DEMO COMPLETE.\n");
     printf("  Final Sequence Length: %zu tokens\n",
            lancius_kv_cache_seq_len(cache));
     printf("================================================================\n");
@@ -287,5 +339,5 @@ int main(void) {
 
     lancius_kv_cache_destroy(cache);
 
-    return 0;
+    return gen_rc;
 }

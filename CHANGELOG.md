@@ -1,5 +1,56 @@
 # Lancius Changelog
 
+## despot audit V3 (2026-09-28) — every live bug found and implemented
+
+Four forensic sweeps, ~70 code-backed defects, all fixed and re-proven
+(`make check`, `check-sanitizers`, despot probe, pytorch parity 3.42e-07):
+
+- Kernels: matmul/conv index-overflow guards, bwd_in stride guards,
+  layernorm/rmsnorm degenerate is NUMERICAL (was silent beta/zeros), RoPE
+  int-wrap guard, KV-cache hidden/malloc guards, NULL paths set errors.
+- Scheduler: CE fwd R/C + shape guards, FP32/INT8 matmul K-match (was OOB),
+  FP64 M*K/K*N overflow, elementwise input-size checks, ROPE qk-size +
+  offset checks, softmax zero-guard + Inf, permute shape correspondence +
+  checked indices, static-plan skips failed assignments, peak/required set
+  errors (bounded executor cannot under-alloc), abort-free hot paths kept.
+- Vision: inputs/input_count guards on every branch (was NULL+0 deref),
+  conv H_out verification vs n->shape, pool index guards, INT8 scale NaN/Inf
+  rejected, silent returns set errors.
+- IR/autodiff: alloc_node rt-OOM returns NULL, matmul sets errors and stays
+  2D (executor is 2D), f32 ownership split (was: leak + free of external),
+  broadcast_4d true compat check, bwd_w validation, fused-clone rt attach +
+  no aliasing + id-cap guards, loss-node membership/range checks, seed NULL
+  aborts, inputs[2] guarded, INPUT clone keeps int8/f32/dtype/scale, NULL
+  grad aborts (was neutral-skip), unhandled forward op aborts, permute axes
+  validated, builders set SHAPE_MISMATCH (was silent NULL).
+- Planner/threadpool/VM/optimizer/quantize: zero-size plan aborts (was
+  offset-0 overlap), pool queue grows (was racy inline run) + shutdown
+  reject + OOM error, VM materializes CONST (was garbage regs) + inputs
+  checks, fusion validates stolen inputs, quantizer syncs rt scale + frees
+  stale int8 + skips non-finite max.
+- Persistence: v1 checked writes + tmp-less partials unlinked + NULL guards
+  + no abort() + ndim 1/3 loads (was 2D coercion) + view-source validation +
+  double-free removed (both weight paths + fail path); v2 tmp+rename saves,
+  streamed CRC (no 800MB malloc, no long truncation, no seek-bypass),
+  duplicate-NOP seen-list, invalid dtype fails, u64 narrowing kept.
+- Interop/python: converter true input ranks (was: padded count always 4),
+  Reshape rank from resolved dims, packed-field range checks, Gemm byte
+  context, write errors + crc0->1; ONNX exporter 2GB cap + header checks +
+  checksum==0 refuses (--allow-legacy opts in); pytorch exporter None/cap/
+  arity/perm/stride checks + multi-input trace dummies; datasets no-shell
+  git clone + cwd-jail cleanup + tar/zip-slip guards + download try/except.
+- Operator/examples: CLI fork+exec for user paths (was: 4 shell-injection
+  sites) + truncation fails + fread short-read fails + strtol topk/show +
+  TUI drain + TUI show passed; trainers validate files/magic/counts/sizes,
+  check OOM/graph/schedule, guard grad/loss NULLs, fix cifar eval counting
+  (+evaluated denominator) + save check, fix verifier arena use-after-reset
+  (heap copies) + worst-step max metric + per-iter g2 destroy + full cleanup
+  on fatal paths; run_edge caps + cleanup + rc=1; generate_text cleanup +
+  rc propagation; run_llm 3D builders + overflow + output checks.
+- Proven: `make check` green (73/73, 265/265, despot probe, verifier with
+  corrected worst-step 1.34→0.0013), `check-sanitizers` clean, pytorch
+  parity exact.
+
 ## operator TUI perfection (2026-09-28) — ordinary users guided, offline honest
 
 - New verbs: `status` (operational snapshot), `models [--check]` (list plus

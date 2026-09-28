@@ -3,10 +3,14 @@
 
 int main() {
     lancius_context ctx = lancius_create_context();
+    /* Despot truth: OOM handles misattributed to the matmul check (were unchecked). */
+    if (!ctx) { printf("ERROR: context OOM\n"); return 1; }
     lancius_graph_handle g = lancius_graph_create_stable(ctx);
+    if (!g) { printf("ERROR: graph OOM\n"); lancius_destroy_context(ctx); return 1; }
 
     lancius_tensor_handle A = lancius_add_input(g, 2, 3);
     lancius_tensor_handle B = lancius_add_input(g, 2, 3);
+    if (!A || !B) { printf("ERROR: input handles OOM\n"); lancius_graph_destroy_stable(g); lancius_destroy_context(ctx); return 1; }
 
     // THIS SHOULD FAIL - shapes don't match for MatMul
     lancius_tensor_handle C = lancius_add_matmul(g, A, B);

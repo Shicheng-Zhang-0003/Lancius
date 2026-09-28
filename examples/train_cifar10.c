@@ -16,17 +16,27 @@ double lr = 0.0003; // V12 Safe LR // V10: Bumped LR for He Init
 #define NUM_TRAIN 50000
 #define NUM_TEST 10000
 
+/* Despot truth: unchecked fread/system (was: truncated bins trained on
+ * uninit bytes, failed downloads proceeded anyway). */
 uint32_t read_int(FILE* f) {
-    uint8_t b[4]; size_t dr = fread(b, 1, 4, f); (void)dr;
+    uint8_t b[4];
+    if (!f || fread(b, 1, 4, f) != 4) { fprintf(stderr, "FATAL: truncated read\n"); exit(1); }
     return ((uint32_t)b[0] << 24) | ((uint32_t)b[1] << 16) | ((uint32_t)b[2] << 8) | (uint32_t)b[3];
+}
+
+static int cifar_step(const char* cmd) {
+    int rc = system(cmd);
+    if (rc != 0) { fprintf(stderr, "FATAL: step failed (%d): %s\n", rc, cmd); return 0; }
+    return 1;
 }
 
 void download_cifar10() {
     if (access("cifar-10-batches-bin/data_batch_1.bin", F_OK) == 0) return;
     printf("[1/5] Downloading CIFAR-10 Binary Dataset...\n");
-    int s1 = system("curl -s -L https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz -o cifar.tar.gz"); (void)s1;
-    int s2 = system("tar -xzf cifar.tar.gz"); (void)s2;
-    int s3 = system("rm cifar.tar.gz"); (void)s3;
+    if (!cifar_step("curl -s -L https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz -o cifar.tar.gz")) exit(1);
+    if (!cifar_step("tar -xzf cifar.tar.gz")) exit(1);
+    if (!cifar_step("rm cifar.tar.gz")) exit(1);
+    if (access("cifar-10-batches-bin/data_batch_1.bin", F_OK) != 0) { fprintf(stderr, "FATAL: CIFAR-10 download incomplete\n"); exit(1); }
 }
 
 void load_cifar10(uint8_t* X, uint8_t* Y, const char** files, int num_files) {
@@ -35,8 +45,8 @@ void load_cifar10(uint8_t* X, uint8_t* Y, const char** files, int num_files) {
         FILE* fp = fopen(files[f], "rb");
         if(!fp) { printf("Failed to open %s\n", files[f]); exit(1); }
         for(int i=0; i<10000; i++) {
-            size_t dr1 = fread(&Y[offset + i], 1, 1, fp); (void)dr1;
-            size_t dr2 = fread(&X[(offset + i) * 3072], 1, 3072, fp); (void)dr2;
+            if (fread(&Y[offset + i], 1, 1, fp) != 1) { fprintf(stderr, "FATAL: truncated %s label %d\n", files[f], i); fclose(fp); exit(1); }
+            if (fread(&X[(offset + i) * 3072], 1, 3072, fp) != 3072) { fprintf(stderr, "FATAL: truncated %s image %d\n", files[f], i); fclose(fp); exit(1); }
         }
         fclose(fp);
         offset += 10000;
@@ -71,10 +81,12 @@ int main() {
 
     download_cifar10();
 
-    uint8_t* tr_X = (uint8_t*)malloc(NUM_TRAIN * 3072);
-    uint8_t* tr_Y = (uint8_t*)malloc(NUM_TRAIN);
-    uint8_t* te_X = (uint8_t*)malloc(NUM_TEST  * 3072);
-    uint8_t* te_Y = (uint8_t*)malloc(NUM_TEST);
+    /* Despot truth: every malloc below is checked (was: OOM derefed). */
+#define CIFAR_NEED(ptr, what) do { if (!(ptr)) { fprintf(stderr, "FATAL: OOM %s\n", what); return 1; } } while(0)
+    uint8_t* tr_X = (uint8_t*)malloc(NUM_TRAIN * 3072); CIFAR_NEED(tr_X, "tr_X");
+    uint8_t* tr_Y = (uint8_t*)malloc(NUM_TRAIN); CIFAR_NEED(tr_Y, "tr_Y");
+    uint8_t* te_X = (uint8_t*)malloc(NUM_TEST  * 3072); CIFAR_NEED(te_X, "te_X");
+    uint8_t* te_Y = (uint8_t*)malloc(NUM_TEST); CIFAR_NEED(te_Y, "te_Y");
 
     const char* train_files[] = {
         "cifar-10-batches-bin/data_batch_1.bin", "cifar-10-batches-bin/data_batch_2.bin",
@@ -118,29 +130,29 @@ int main() {
     lancius_node* Y = lancius_input(g, BATCH_SIZE, 10);
     lancius_node* loss = lancius_cross_entropy(g, A2, Y);
 
-    double* x_batch = (double*)calloc(BATCH_SIZE * 3072, sizeof(double));
-    double* y_batch = (double*)calloc(BATCH_SIZE * 10, sizeof(double));
+    double* x_batch = (double*)calloc(BATCH_SIZE * 3072, sizeof(double)); CIFAR_NEED(x_batch, "x_batch");
+    double* y_batch = (double*)calloc(BATCH_SIZE * 10, sizeof(double)); CIFAR_NEED(y_batch, "y_batch");
 
-    double* w1 = (double*)calloc(16*3*5*5, sizeof(double)); he_init(w1, 16*3*5*5, 3*5*5);
-    double* w2 = (double*)calloc(32*16*5*5, sizeof(double)); he_init(w2, 32*16*5*5, 16*5*5);
-    double* w3 = (double*)calloc(2048*120, sizeof(double)); he_init(w3, 2048*120, 2048);
-    double* b1_d = (double*)calloc(120, sizeof(double));
-    double* w4 = (double*)calloc(120*10, sizeof(double)); he_init(w4, 120*10, 120);
-    double* b2_d = (double*)calloc(10, sizeof(double));
+    double* w1 = (double*)calloc(16*3*5*5, sizeof(double)); CIFAR_NEED(w1, "w1"); he_init(w1, 16*3*5*5, 3*5*5);
+    double* w2 = (double*)calloc(32*16*5*5, sizeof(double)); CIFAR_NEED(w2, "w2"); he_init(w2, 32*16*5*5, 16*5*5);
+    double* w3 = (double*)calloc(2048*120, sizeof(double)); CIFAR_NEED(w3, "w3"); he_init(w3, 2048*120, 2048);
+    double* b1_d = (double*)calloc(120, sizeof(double)); CIFAR_NEED(b1_d, "b1");
+    double* w4 = (double*)calloc(120*10, sizeof(double)); CIFAR_NEED(w4, "w4"); he_init(w4, 120*10, 120);
+    double* b2_d = (double*)calloc(10, sizeof(double)); CIFAR_NEED(b2_d, "b2");
 
-    double* m_w1 = (double*)calloc(16*3*5*5, sizeof(double)); double* v_w1 = (double*)calloc(16*3*5*5, sizeof(double));
-    double* m_w2 = (double*)calloc(32*16*5*5, sizeof(double)); double* v_w2 = (double*)calloc(32*16*5*5, sizeof(double));
-    double* m_w3 = (double*)calloc(2048*120, sizeof(double)); double* v_w3 = (double*)calloc(2048*120, sizeof(double));
-    double* m_b1 = (double*)calloc(120, sizeof(double)); double* v_b1 = (double*)calloc(120, sizeof(double));
-    double* m_w4 = (double*)calloc(120*10, sizeof(double)); double* v_w4 = (double*)calloc(120*10, sizeof(double));
-    double* m_b2 = (double*)calloc(10, sizeof(double)); double* v_b2 = (double*)calloc(10, sizeof(double));
+    double* m_w1 = (double*)calloc(16*3*5*5, sizeof(double)); CIFAR_NEED(m_w1, "m_w1"); double* v_w1 = (double*)calloc(16*3*5*5, sizeof(double)); CIFAR_NEED(v_w1, "v_w1");
+    double* m_w2 = (double*)calloc(32*16*5*5, sizeof(double)); CIFAR_NEED(m_w2, "m_w2"); double* v_w2 = (double*)calloc(32*16*5*5, sizeof(double)); CIFAR_NEED(v_w2, "v_w2");
+    double* m_w3 = (double*)calloc(2048*120, sizeof(double)); CIFAR_NEED(m_w3, "m_w3"); double* v_w3 = (double*)calloc(2048*120, sizeof(double)); CIFAR_NEED(v_w3, "v_w3");
+    double* m_b1 = (double*)calloc(120, sizeof(double)); CIFAR_NEED(m_b1, "m_b1"); double* v_b1 = (double*)calloc(120, sizeof(double)); CIFAR_NEED(v_b1, "v_b1");
+    double* m_w4 = (double*)calloc(120*10, sizeof(double)); CIFAR_NEED(m_w4, "m_w4"); double* v_w4 = (double*)calloc(120*10, sizeof(double)); CIFAR_NEED(v_w4, "v_w4");
+    double* m_b2 = (double*)calloc(10, sizeof(double)); CIFAR_NEED(m_b2, "m_b2"); double* v_b2 = (double*)calloc(10, sizeof(double)); CIFAR_NEED(v_b2, "v_b2");
 
-    double* grad_w1 = (double*)calloc(16*3*5*5, sizeof(double));
-    double* grad_w2 = (double*)calloc(32*16*5*5, sizeof(double));
-    double* grad_w3 = (double*)calloc(2048*120, sizeof(double));
-    double* grad_b1 = (double*)calloc(120, sizeof(double));
-    double* grad_w4 = (double*)calloc(120*10, sizeof(double));
-    double* grad_b2 = (double*)calloc(10, sizeof(double));
+    double* grad_w1 = (double*)calloc(16*3*5*5, sizeof(double)); CIFAR_NEED(grad_w1, "grad_w1");
+    double* grad_w2 = (double*)calloc(32*16*5*5, sizeof(double)); CIFAR_NEED(grad_w2, "grad_w2");
+    double* grad_w3 = (double*)calloc(2048*120, sizeof(double)); CIFAR_NEED(grad_w3, "grad_w3");
+    double* grad_b1 = (double*)calloc(120, sizeof(double)); CIFAR_NEED(grad_b1, "grad_b1");
+    double* grad_w4 = (double*)calloc(120*10, sizeof(double)); CIFAR_NEED(grad_w4, "grad_w4");
+    double* grad_b2 = (double*)calloc(10, sizeof(double)); CIFAR_NEED(grad_b2, "grad_b2");
 
     X->runtime_data = x_batch;
     Y->runtime_data = y_batch;
@@ -156,11 +168,15 @@ int main() {
     lancius_optimize_fusion(g);
 
     lancius_training_graph* tg = lancius_ir_autodiff(g, loss);
+    if (!tg) { fprintf(stderr, "FATAL: autodiff failed (see stderr)\n"); return 1; }
     lancius_schedule* sched = lancius_ir_schedule(tg->graph);
+    if (!sched) { fprintf(stderr, "FATAL: schedule failed\n"); return 1; }
     lancius_arena* scratch = lancius_arena_create(512 * 1024 * 1024);
+    if (!scratch) { fprintf(stderr, "FATAL: OOM scratch arena\n"); return 1; }
 
     printf("[4/5] Training for %d Epochs (Batch Size: %d)...\n\n", EPOCHS, BATCH_SIZE);
     int* indices = (int*)malloc(NUM_TRAIN * sizeof(int));
+    CIFAR_NEED(indices, "indices");
     for(int i=0; i<NUM_TRAIN; i++) indices[i] = i;
 
     int step = 0;
@@ -278,7 +294,7 @@ int main() {
     }
 
     printf("\n[5/5] Evaluating on 10,000 Test Images...\n");
-    int correct = 0;
+    int correct = 0, evaluated = 0;
     // Hostile fix: track A2 (logits) by pointer identity via loss inputs[0].
     // A2 is fwd_to_full[orig A2 id]; loss_node is full CE; its inputs[0] is full A2.
     lancius_node* A2_full = (tg->loss_node && tg->loss_node->input_count > 0) ? (lancius_node*)tg->loss_node->inputs[0] : NULL;
@@ -298,32 +314,40 @@ int main() {
 
         lancius_node* P_node = A2_full;
 
+        /* Despot truth: break on missing logits still counted stale pred=0 as
+         * correct when label was 0 (was: inflated accuracy). Skip instead. */
+        if (!P_node || !P_node->runtime_data) continue;
         for(int b=0; b<BATCH_SIZE; b++) {
             int pred = 0; double max_logit = -1e9;
             for(int c=0; c<10; c++) {
-                if(!P_node || !P_node->runtime_data) break;
                 if(P_node->runtime_data[b*10 + c] > max_logit) { max_logit = P_node->runtime_data[b*10 + c]; pred = c; }
             }
             if(pred == te_Y[i+b]) correct++;
+            evaluated++;
         }
         lancius_arena_reset(scratch);
     }
 
+    if (evaluated <= 0) { fprintf(stderr, "[TRAIN] FATAL: no test batches evaluated\n"); return 1; }
     printf("\n================================================================\n");
-    printf("  FINAL TEST ACCURACY: %.2f%% (%d / %d)\n", 100.0 * correct / NUM_TEST, correct, NUM_TEST);
+    printf("  FINAL TEST ACCURACY: %.2f%% (%d / %d)\n", 100.0 * correct / evaluated, correct, evaluated);
     printf("================================================================\n");
 
     /* Despot truth: trainers must earn exit 0. Chance is 10%%; anything at or
      * below chance means no learning (or a broken eval path). */
-    if (correct * 10 <= NUM_TEST) {
+    if (correct * 10 <= evaluated) {
         fprintf(stderr, "[TRAIN] FATAL: accuracy %.2f%% <= chance; refusing green exit.\n",
-            100.0 * correct / NUM_TEST);
+            100.0 * correct / evaluated);
         return 1;
     }
 
     printf("\n[PATH B] Freezing & Quantizing model to INT8...\n");
     lancius_quantize_graph(g);
-    lancius_graph_save(g, "cifar10_lenet.lancius");
+    /* Despot truth: failed save was reported as success. */
+    if (lancius_graph_save(g, "cifar10_lenet.lancius") != 0) {
+        fprintf(stderr, "[TRAIN] FATAL: model save failed\n");
+        return 1;
+    }
 
     printf("\n================================================================\n");
     printf("  V10S CIFAR-10 NOTEPAD COMPLETE. EDGE DEPLOYMENT READY.\n");

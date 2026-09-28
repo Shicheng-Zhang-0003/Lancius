@@ -14,37 +14,70 @@
 #define EPOCHS 10
 #define LR 0.001
 
+/* Despot truth: every fallible call below is checked (was: unchecked fopen,
+ * fread, malloc, system — offline runs segfaulted, corrupt files overflowed
+ * the heap, failed downloads crashed in load_*). */
+static int read_int_checked(FILE* f, uint32_t* out) {
+    uint8_t b[4];
+    if (!f || !out) return 0;
+    if (fread(b, 1, 4, f) != 4) return 0;
+    *out = ((uint32_t)b[0] << 24) | ((uint32_t)b[1] << 16) | ((uint32_t)b[2] << 8) | (uint32_t)b[3];
+    return 1;
+}
+
 uint32_t read_int(FILE* f) {
-    uint8_t b[4]; size_t dr = fread(b, 1, 4, f); (void)dr;
-    return ((uint32_t)b[0] << 24) | ((uint32_t)b[1] << 16) | ((uint32_t)b[2] << 8) | (uint32_t)b[3];
+    uint32_t v = 0;
+    if (!read_int_checked(f, &v)) { fprintf(stderr, "FATAL: truncated MNIST header\n"); exit(1); }
+    return v;
+}
+
+static int run_step(const char* cmd) {
+    int rc = system(cmd);
+    if (rc != 0) { fprintf(stderr, "FATAL: step failed (%d): %s\n", rc, cmd); return 0; }
+    return 1;
 }
 
 void download_mnist() {
     if (access("train-images-idx3-ubyte", F_OK) == 0) return;
     printf("[1/5] Downloading MNIST Dataset...\n");
-    int s1 = system("curl -s -o train-images-idx3-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/train-images-idx3-ubyte.gz"); (void)s1;
-    int s2 = system("curl -s -o train-labels-idx1-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/train-labels-idx1-ubyte.gz"); (void)s2;
-    int s3 = system("curl -s -o t10k-images-idx3-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/t10k-images-idx3-ubyte.gz"); (void)s3;
-    int s4 = system("curl -s -o t10k-labels-idx1-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/t10k-labels-idx1-ubyte.gz"); (void)s4;
-    int s5 = system("gunzip -f *.gz"); (void)s5;
+    if (!run_step("curl -s -o train-images-idx3-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/train-images-idx3-ubyte.gz")) exit(1);
+    if (!run_step("curl -s -o train-labels-idx1-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/train-labels-idx1-ubyte.gz")) exit(1);
+    if (!run_step("curl -s -o t10k-images-idx3-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/t10k-images-idx3-ubyte.gz")) exit(1);
+    if (!run_step("curl -s -o t10k-labels-idx1-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/t10k-labels-idx1-ubyte.gz")) exit(1);
+    if (!run_step("gunzip -f train-images-idx3-ubyte.gz train-labels-idx1-ubyte.gz t10k-images-idx3-ubyte.gz t10k-labels-idx1-ubyte.gz")) exit(1);
+    if (access("train-images-idx3-ubyte", F_OK) != 0) { fprintf(stderr, "FATAL: MNIST download incomplete\n"); exit(1); }
 }
 
 uint8_t* load_images(const char* path, int* num) {
     FILE* f = fopen(path, "rb");
-    uint32_t magic = read_int(f); (void)magic;
-    *num = read_int(f); int r = read_int(f); int c = read_int(f); (void)r; (void)c;
-    uint8_t* data = (uint8_t*)malloc(*num * 784);
-    size_t dr = fread(data, 1, *num * 784, f); (void)dr;
+    uint32_t magic, n, r, c;
+    size_t total;
+    uint8_t* data;
+    if (!f) { fprintf(stderr, "FATAL: cannot open %s (run download first)\n", path); exit(1); }
+    if (!read_int_checked(f, &magic) || magic != 0x803) { fprintf(stderr, "FATAL: bad MNIST image magic\n"); fclose(f); exit(1); }
+    if (!read_int_checked(f, &n) || !read_int_checked(f, &r) || !read_int_checked(f, &c)) { fprintf(stderr, "FATAL: truncated MNIST header\n"); fclose(f); exit(1); }
+    if (n == 0 || n > 100000 || r != 28 || c != 28) { fprintf(stderr, "FATAL: insane MNIST header (n=%u r=%u c=%u)\n", n, r, c); fclose(f); exit(1); }
+    *num = (int)n;
+    total = (size_t)n * 784;
+    data = (uint8_t*)malloc(total);
+    if (!data) { fprintf(stderr, "FATAL: OOM loading %s\n", path); fclose(f); exit(1); }
+    if (fread(data, 1, total, f) != total) { fprintf(stderr, "FATAL: truncated MNIST data %s\n", path); free(data); fclose(f); exit(1); }
     fclose(f);
     return data;
 }
 
 uint8_t* load_labels(const char* path, int* num) {
     FILE* f = fopen(path, "rb");
-    uint32_t magic = read_int(f); (void)magic;
-    *num = read_int(f);
-    uint8_t* data = (uint8_t*)malloc(*num);
-    size_t dr = fread(data, 1, *num, f); (void)dr;
+    uint32_t magic, n;
+    uint8_t* data;
+    if (!f) { fprintf(stderr, "FATAL: cannot open %s (run download first)\n", path); exit(1); }
+    if (!read_int_checked(f, &magic) || magic != 0x801) { fprintf(stderr, "FATAL: bad MNIST label magic\n"); fclose(f); exit(1); }
+    if (!read_int_checked(f, &n)) { fprintf(stderr, "FATAL: truncated MNIST label header\n"); fclose(f); exit(1); }
+    if (n == 0 || n > 100000) { fprintf(stderr, "FATAL: insane MNIST label count %u\n", n); fclose(f); exit(1); }
+    *num = (int)n;
+    data = (uint8_t*)malloc(n);
+    if (!data) { fprintf(stderr, "FATAL: OOM loading %s\n", path); fclose(f); exit(1); }
+    if (fread(data, 1, n, f) != n) { fprintf(stderr, "FATAL: truncated MNIST labels %s\n", path); free(data); fclose(f); exit(1); }
     fclose(f);
     return data;
 }
@@ -100,25 +133,29 @@ int main() {
 
     printf("[3/5] Compiling Backward Pass & Scheduling Waves...\n");
     lancius_training_graph* tg = lancius_ir_autodiff(g, loss);
+    if (!tg) { fprintf(stderr, "FATAL: autodiff failed (see stderr)\n"); return 1; }
     lancius_schedule* sched = lancius_ir_schedule(tg->graph);
+    if (!sched) { fprintf(stderr, "FATAL: schedule failed\n"); return 1; }
     lancius_arena* scratch = lancius_arena_create(256 * 1024 * 1024);
+    if (!scratch) { fprintf(stderr, "FATAL: OOM scratch arena\n"); return 1; }
 
-    double* x_batch = (double*)calloc(BATCH_SIZE * 784, sizeof(double));
-    double* y_batch = (double*)calloc(BATCH_SIZE * 10, sizeof(double));
-    double* w1 = (double*)calloc(784 * 128, sizeof(double)); he_init(w1, 784*128, 784);
-    double* b1_d = (double*)calloc(1 * 128, sizeof(double));
-    double* w2 = (double*)calloc(128 * 10, sizeof(double)); he_init(w2, 128*10, 128);
-    double* b2_d = (double*)calloc(1 * 10, sizeof(double));
+#define MNIST_NEED(ptr, what) do { if (!(ptr)) { fprintf(stderr, "FATAL: OOM %s\n", what); return 1; } } while(0)
+    double* x_batch = (double*)calloc(BATCH_SIZE * 784, sizeof(double)); MNIST_NEED(x_batch, "x_batch");
+    double* y_batch = (double*)calloc(BATCH_SIZE * 10, sizeof(double)); MNIST_NEED(y_batch, "y_batch");
+    double* w1 = (double*)calloc(784 * 128, sizeof(double)); MNIST_NEED(w1, "w1"); he_init(w1, 784*128, 784);
+    double* b1_d = (double*)calloc(1 * 128, sizeof(double)); MNIST_NEED(b1_d, "b1");
+    double* w2 = (double*)calloc(128 * 10, sizeof(double)); MNIST_NEED(w2, "w2"); he_init(w2, 128*10, 128);
+    double* b2_d = (double*)calloc(1 * 10, sizeof(double)); MNIST_NEED(b2_d, "b2");
 
-    double* m_w1 = (double*)calloc(784*128, sizeof(double)); double* v_w1 = (double*)calloc(784*128, sizeof(double));
-    double* m_w2 = (double*)calloc(128*10, sizeof(double));  double* v_w2 = (double*)calloc(128*10, sizeof(double));
-    double* m_b1 = (double*)calloc(1*128, sizeof(double)); double* v_b1 = (double*)calloc(1*128, sizeof(double));
-    double* m_b2 = (double*)calloc(1*10, sizeof(double));  double* v_b2 = (double*)calloc(1*10, sizeof(double));
+    double* m_w1 = (double*)calloc(784*128, sizeof(double)); MNIST_NEED(m_w1, "m_w1"); double* v_w1 = (double*)calloc(784*128, sizeof(double)); MNIST_NEED(v_w1, "v_w1");
+    double* m_w2 = (double*)calloc(128*10, sizeof(double)); MNIST_NEED(m_w2, "m_w2");  double* v_w2 = (double*)calloc(128*10, sizeof(double)); MNIST_NEED(v_w2, "v_w2");
+    double* m_b1 = (double*)calloc(1*128, sizeof(double)); MNIST_NEED(m_b1, "m_b1"); double* v_b1 = (double*)calloc(1*128, sizeof(double)); MNIST_NEED(v_b1, "v_b1");
+    double* m_b2 = (double*)calloc(1*10, sizeof(double)); MNIST_NEED(m_b2, "m_b2");  double* v_b2 = (double*)calloc(1*10, sizeof(double)); MNIST_NEED(v_b2, "v_b2");
 
-    double* grad_w1 = (double*)calloc(784*128, sizeof(double));
-    double* grad_w2 = (double*)calloc(128*10, sizeof(double));
-    double* grad_b1 = (double*)calloc(1*128, sizeof(double));
-    double* grad_b2 = (double*)calloc(1*10, sizeof(double));
+    double* grad_w1 = (double*)calloc(784*128, sizeof(double)); MNIST_NEED(grad_w1, "grad_w1");
+    double* grad_w2 = (double*)calloc(128*10, sizeof(double)); MNIST_NEED(grad_w2, "grad_w2");
+    double* grad_b1 = (double*)calloc(1*128, sizeof(double)); MNIST_NEED(grad_b1, "grad_b1");
+    double* grad_b2 = (double*)calloc(1*10, sizeof(double)); MNIST_NEED(grad_b2, "grad_b2");
 
     lancius_node *nW1=NULL, *nW2=NULL, *nb1=NULL, *nb2=NULL;
     // Hostile fix: bind by buffer identity (forward copies share runtime_data with originals),
@@ -159,7 +196,8 @@ int main() {
     }
 
     printf("[4/5] Training for %d Epochs (Batch Size: %d) via Sequential Executor...\n\n", EPOCHS, BATCH_SIZE);
-    int* indices = (int*)malloc(tr_n * sizeof(int));
+    int* indices = (int*)malloc((size_t)tr_n * sizeof(int));
+    MNIST_NEED(indices, "indices");
     for(int i=0; i<tr_n; i++) indices[i] = i;
 
     int step = 0;
@@ -191,10 +229,11 @@ int main() {
             memset(grad_w1, 0, 784*128*sizeof(double)); memset(grad_b1, 0, 1*128*sizeof(double));
             memset(grad_w2, 0, 128*10*sizeof(double)); memset(grad_b2, 0, 1*10*sizeof(double));
             // Extract gradients (Autodiff scales by 1/R = 1/64 via CE-mean, not 1/640)
-            if(tg->grad_nodes[nW1->id] && tg->grad_nodes[nW1->id]->runtime_data) memcpy(grad_w1, tg->grad_nodes[nW1->id]->runtime_data, 784*128*sizeof(double));
-            if(tg->grad_nodes[nb1->id] && tg->grad_nodes[nb1->id]->runtime_data) memcpy(grad_b1, tg->grad_nodes[nb1->id]->runtime_data, 1*128*sizeof(double));
-            if(tg->grad_nodes[nW2->id] && tg->grad_nodes[nW2->id]->runtime_data) memcpy(grad_w2, tg->grad_nodes[nW2->id]->runtime_data, 128*10*sizeof(double));
-            if(tg->grad_nodes[nb2->id] && tg->grad_nodes[nb2->id]->runtime_data) memcpy(grad_b2, tg->grad_nodes[nb2->id]->runtime_data, 1*10*sizeof(double));
+            /* Despot truth: param handles can be NULL when binding failed (was: deref). */
+            if(nW1 && tg->grad_nodes[nW1->id] && tg->grad_nodes[nW1->id]->runtime_data) memcpy(grad_w1, tg->grad_nodes[nW1->id]->runtime_data, 784*128*sizeof(double));
+            if(nb1 && tg->grad_nodes[nb1->id] && tg->grad_nodes[nb1->id]->runtime_data) memcpy(grad_b1, tg->grad_nodes[nb1->id]->runtime_data, 1*128*sizeof(double));
+            if(nW2 && tg->grad_nodes[nW2->id] && tg->grad_nodes[nW2->id]->runtime_data) memcpy(grad_w2, tg->grad_nodes[nW2->id]->runtime_data, 128*10*sizeof(double));
+            if(nb2 && tg->grad_nodes[nb2->id] && tg->grad_nodes[nb2->id]->runtime_data) memcpy(grad_b2, tg->grad_nodes[nb2->id]->runtime_data, 1*10*sizeof(double));
 
             adam_step(w1, grad_w1, m_w1, v_w1, 784*128, LR, 0.9, 0.999, 1e-8, step);
             adam_step(b1_d, grad_b1, m_b1, v_b1, 1*128, LR, 0.9, 0.999, 1e-8, step);
@@ -202,7 +241,13 @@ int main() {
             adam_step(b2_d, grad_b2, m_b2, v_b2, 1*10, LR, 0.9, 0.999, 1e-8, step);
 
             /* Despot truth: raw loss is the gate; NaN/explosion aborts now. */
-            double l_raw = tg->loss_node ? tg->loss_node->runtime_data[0] : 0.0;
+            /* (Also: runtime_data itself can be NULL — was: deref.) */
+            if (!tg->loss_node || !tg->loss_node->runtime_data) {
+                printf("\n[FATAL] loss node has no data at Epoch %d batch %d! Aborting.\n", ep+1, batches+1);
+                free(indices);
+                return 1;
+            }
+            double l_raw = tg->loss_node->runtime_data[0];
             if (isnan(l_raw) || l_raw < 0.0 || l_raw > 1000.0) {
                 printf("\n[FATAL] Raw loss diverged (raw=%g) at Epoch %d batch %d! Aborting.\n", l_raw, ep+1, batches+1);
                 free(indices);
@@ -213,6 +258,8 @@ int main() {
             lancius_arena_reset(scratch);
             if(batches % 100 == 0) printf("\r  Epoch %d | Batch %d/%d | Loss: %.4f", ep+1, batches, tr_n/BATCH_SIZE, epoch_loss/batches);
         }
+        /* Despot truth: tr_n < BATCH_SIZE meant batches==0 div-by-zero. */
+        if (batches == 0) { fprintf(stderr, "\n[FATAL] no batches (training set smaller than batch size)\n"); free(indices); return 1; }
         double avg = epoch_loss / batches;
         if (ep == 0) first_epoch_loss = avg;
         printf("\r  Epoch %d | Loss: %.4f                                     \n", ep+1, avg);
@@ -244,9 +291,11 @@ int main() {
     (void)A2_inf;
 
     lancius_program* prog = lancius_compile_graph(g_inf);
+    if (!prog) { fprintf(stderr, "FATAL: bytecode compile failed\n"); return 1; }
 
     int correct = 0;
     double* out_batch = (double*)malloc(BATCH_SIZE * 10 * sizeof(double));
+    MNIST_NEED(out_batch, "out_batch");
     double* vm_inputs[5] = {x_batch, w1, b1_d, w2, b2_d};
 
     for(int i=0; i<=te_n - BATCH_SIZE; i+=BATCH_SIZE) {
@@ -272,13 +321,15 @@ int main() {
     printf("  FINAL TEST ACCURACY: %.2f%% (%d / %d)\n", 100.0 * correct / te_n, correct, te_n);
     printf("================================================================\n");
     /* Despot truth: trainers must earn exit 0. Chance is 10%%. */
+    /* (Also: prog/g_inf were destroyed above AND here — double-free. The
+     * second destroy is gone; this path only frees out_batch.) */
     if (correct * 10 <= te_n) {
         fprintf(stderr, "[TRAIN] FATAL: accuracy %.2f%% <= chance; refusing green exit.\n",
             100.0 * correct / te_n);
-        lancius_program_destroy(prog);
-        lancius_graph_destroy(g_inf);
+        free(out_batch);
         return 1;
     }
+    free(out_batch);
     printf("  LANCIUS NOTEPAD COMPLETE. PATH C & D VERIFIED.\n");
     printf("================================================================\n\n");
 

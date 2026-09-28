@@ -60,9 +60,11 @@ int main(void) {
     srand(12345);
 
     /* Master weights (small uniform: safe for tanh). */
+    /* Despot truth: every alloc below is checked (was: OOM derefed). */
     double* W1 = (double*)malloc(DIN * DHID * sizeof(double));
     double* b1 = (double*)calloc(DHID, sizeof(double));
     double* W2 = (double*)malloc(DHID * sizeof(double));
+    if (!W1 || !b1 || !W2) { fprintf(stderr, "FATAL: OOM master weights\n"); return 1; }
     double b2 = 0.0;
     for (int i = 0; i < DIN * DHID; i++) W1[i] = (rand_u() * 2.0 - 1.0) * sqrt(1.0 / DIN);
     for (int i = 0; i < DHID; i++) W2[i] = (rand_u() * 2.0 - 1.0) * sqrt(1.0 / DHID);
@@ -75,34 +77,54 @@ int main(void) {
     }
 
     lancius_arena* scratch = lancius_arena_create(16 * 1024 * 1024);
+    if (!scratch) { fprintf(stderr, "FATAL: OOM scratch arena\n"); return 1; }
     double loss0 = -1.0, loss1 = -1.0, min0 = -1.0, min1 = -1.0;
 
     for (int it = 0; it < ITERS; it++) {
         /* ---- Forward: score every step in the batch ---- */
         lancius_graph* g = lancius_graph_create();
+        if (!g) { fprintf(stderr, "FATAL: OOM forward graph\n"); return 1; }
         lancius_node* Xn = lancius_input(g, BATCH, DIN);
         lancius_node* W1n = lancius_input(g, DIN, DHID);
         lancius_node* B1n = lancius_input(g, 1, DHID);
         lancius_node* W2n = lancius_input(g, DHID, 1);
         lancius_node* Sb = NULL;
+        lancius_node* Tn = NULL;
+        lancius_node* L = NULL;
+        lancius_schedule* fs = NULL;
+        double batch_loss = 0.0;
+        double scores[BATCH];
+        double min_err;
+        int weak;
+        lancius_graph* g2 = NULL;
+        lancius_schedule* fs2 = NULL;
+        lancius_training_graph* tg = NULL;
+        lancius_schedule* bs = NULL;
+        /* Heap copies of grads: arena buffers die at reset (were read after). */
+        double cW1[DIN * DHID], cb1[DHID], cW2[DHID];
+        if (!Xn || !W1n || !B1n || !W2n) { fprintf(stderr, "FATAL: forward inputs failed\n"); lancius_graph_destroy(g); return 1; }
         build_fwd(g, &Sb, Xn, W1n, B1n, W2n, b2, BATCH);
-        lancius_node* Tn = lancius_input(g, BATCH, 1);
+        Tn = lancius_input(g, BATCH, 1);
+        if (!Sb || !Tn) { fprintf(stderr, "FATAL: forward build failed\n"); lancius_graph_destroy(g); return 1; }
         Xn->runtime_data = X; W1n->runtime_data = W1;
         B1n->runtime_data = b1; W2n->runtime_data = W2; Tn->runtime_data = T;
-        lancius_node* L = lancius_mse(g, Sb, Tn);
-        lancius_schedule* fs = lancius_ir_schedule(g);
+        L = lancius_mse(g, Sb, Tn);
+        if (!L) { fprintf(stderr, "FATAL: MSE node failed\n"); lancius_graph_destroy(g); return 1; }
+        fs = lancius_ir_schedule(g);
+        if (!fs) { fprintf(stderr, "FATAL: forward schedule failed\n"); lancius_graph_destroy(g); return 1; }
         lancius_schedule_execute(fs, scratch);
-        double batch_loss = L->runtime_data[0];
+        if (!L->runtime_data || !Sb->runtime_data) { fprintf(stderr, "FATAL: forward executed with no data\n"); lancius_schedule_destroy(fs); lancius_graph_destroy(g); return 1; }
+        batch_loss = L->runtime_data[0];
         /* Snapshot scores NOW: later executions reuse the same arena. */
-        double scores[BATCH];
         memcpy(scores, Sb->runtime_data, sizeof(scores));
         lancius_arena_reset(scratch);
-        /* Weakest-link error: squared residual of the worst step. The credit
+        /* Weakest-link error: squared residual of the WORST step (was: best,
+         * min over residuals, while the comment claimed worst). The credit
          * mechanism optimizes THIS quantity, so the gate asserts on it. */
-        double min_err = -1.0;
+        min_err = -1.0;
         for (int b = 0; b < BATCH; b++) {
             double e = (scores[b] - T[b]) * (scores[b] - T[b]);
-            if (min_err < 0.0 || e < min_err) min_err = e;
+            if (min_err < 0.0 || e > min_err) min_err = e;
         }
         if (it == 0) loss0 = batch_loss;
         if (it == ITERS - 1) loss1 = batch_loss;
@@ -113,53 +135,82 @@ int main(void) {
         for (int b = 0; b < BATCH; b++) {
             if (fabs(scores[b]) > 1.0 + 1e-12) {
                 printf("  ❌ FAIL: score escaped [-1,1]: %f\n", scores[b]);
+                lancius_schedule_destroy(fs); lancius_graph_destroy(g);
                 return 1;
             }
         }
 
-        /* ---- Weakest link (models-side, plain C): argmin over scores ---- */
-        int weak = 0;
-        for (int b = 1; b < BATCH; b++)
-            if (scores[b] < scores[weak]) weak = b;
+        /* ---- Weakest link (models-side, plain C): largest residual ---- */
+        weak = 0;
+        {
+            double we = (scores[0] - T[0]) * (scores[0] - T[0]);
+            for (int b = 1; b < BATCH; b++) {
+                double e = (scores[b] - T[b]) * (scores[b] - T[b]);
+                if (e > we) { we = e; weak = b; }
+            }
+        }
 
         /* ---- Backward through the weakest step only ---- */
-        lancius_graph* g2 = lancius_graph_create();
-        lancius_node* x = lancius_input(g2, 1, DIN);
-        lancius_node* w1 = lancius_input(g2, DIN, DHID);
-        lancius_node* c1 = lancius_input(g2, 1, DHID);
-        lancius_node* w2 = lancius_input(g2, DHID, 1);
-        lancius_node* s2 = NULL;
-        build_fwd(g2, &s2, x, w1, c1, w2, b2, 1);
-        lancius_node* tt = lancius_input(g2, 1, 1);
-        x->runtime_data = &X[weak * DIN]; w1->runtime_data = W1;
-        c1->runtime_data = b1; w2->runtime_data = W2; tt->runtime_data = &T[weak];
-        lancius_node* l = lancius_mse(g2, s2, tt);
-        /* Forward the single step first (g2 nodes only get buffers by execution). */
-        lancius_schedule* fs2 = lancius_ir_schedule(g2);
-        lancius_schedule_execute(fs2, scratch);
-        double weak_score = s2->runtime_data[0];
-        lancius_arena_reset(scratch);
-        lancius_training_graph* tg = lancius_ir_autodiff(g2, l);
-        if (!tg) { printf("  ❌ FAIL: autodiff refused verifier graph\n"); return 1; }
-        lancius_schedule* bs = lancius_ir_schedule(tg->graph);
-        lancius_schedule_execute(bs, scratch);
-        double* gW1 = tg->grad_nodes[w1->id] ? tg->grad_nodes[w1->id]->runtime_data : NULL;
-        double* gB1 = tg->grad_nodes[c1->id] ? tg->grad_nodes[c1->id]->runtime_data : NULL;
-        double* gW2 = tg->grad_nodes[w2->id] ? tg->grad_nodes[w2->id]->runtime_data : NULL;
-        lancius_arena_reset(scratch);
-        if (!gW1 || !gB1 || !gW2) { printf("  ❌ FAIL: missing verifier gradients\n"); return 1; }
+        g2 = lancius_graph_create();
+        if (!g2) { fprintf(stderr, "FATAL: OOM backward graph\n"); lancius_schedule_destroy(fs); lancius_graph_destroy(g); return 1; }
+        {
+            lancius_node* x = lancius_input(g2, 1, DIN);
+            lancius_node* w1 = lancius_input(g2, DIN, DHID);
+            lancius_node* c1 = lancius_input(g2, 1, DHID);
+            lancius_node* w2 = lancius_input(g2, DHID, 1);
+            lancius_node* s2 = NULL;
+            lancius_node* tt = NULL;
+            lancius_node* l = NULL;
+            double* gW1;
+            double* gB1;
+            double* gW2;
+            double gb2;
+            if (!x || !w1 || !c1 || !w2) { fprintf(stderr, "FATAL: backward inputs failed\n"); lancius_schedule_destroy(fs); lancius_graph_destroy(g); lancius_graph_destroy(g2); return 1; }
+            build_fwd(g2, &s2, x, w1, c1, w2, b2, 1);
+            tt = lancius_input(g2, 1, 1);
+            if (!s2 || !tt) { fprintf(stderr, "FATAL: backward build failed\n"); lancius_schedule_destroy(fs); lancius_graph_destroy(g); lancius_graph_destroy(g2); return 1; }
+            x->runtime_data = &X[weak * DIN]; w1->runtime_data = W1;
+            c1->runtime_data = b1; w2->runtime_data = W2; tt->runtime_data = &T[weak];
+            l = lancius_mse(g2, s2, tt);
+            if (!l) { fprintf(stderr, "FATAL: backward MSE failed\n"); lancius_schedule_destroy(fs); lancius_graph_destroy(g); lancius_graph_destroy(g2); return 1; }
+            /* Forward the single step first (g2 nodes only get buffers by execution). */
+            fs2 = lancius_ir_schedule(g2);
+            if (!fs2) { fprintf(stderr, "FATAL: backward schedule failed\n"); lancius_schedule_destroy(fs); lancius_graph_destroy(g); lancius_graph_destroy(g2); return 1; }
+            lancius_schedule_execute(fs2, scratch);
+            if (!s2->runtime_data) { fprintf(stderr, "FATAL: weak step has no data\n"); lancius_schedule_destroy(fs); lancius_graph_destroy(g); lancius_schedule_destroy(fs2); lancius_graph_destroy(g2); return 1; }
+            {
+                double weak_score = s2->runtime_data[0];
+                lancius_arena_reset(scratch);
+                tg = lancius_ir_autodiff(g2, l);
+                if (!tg) { printf("  ❌ FAIL: autodiff refused verifier graph\n"); lancius_schedule_destroy(fs); lancius_graph_destroy(g); lancius_schedule_destroy(fs2); lancius_graph_destroy(g2); return 1; }
+                bs = lancius_ir_schedule(tg->graph);
+                if (!bs) { printf("  ❌ FAIL: backward schedule failed\n"); lancius_schedule_destroy(fs); lancius_graph_destroy(g); lancius_schedule_destroy(fs2); lancius_training_graph_destroy(tg); lancius_graph_destroy(g2); return 1; }
+                lancius_schedule_execute(bs, scratch);
+                gW1 = tg->grad_nodes[w1->id] ? tg->grad_nodes[w1->id]->runtime_data : NULL;
+                gB1 = tg->grad_nodes[c1->id] ? tg->grad_nodes[c1->id]->runtime_data : NULL;
+                gW2 = tg->grad_nodes[w2->id] ? tg->grad_nodes[w2->id]->runtime_data : NULL;
+                if (!gW1 || !gB1 || !gW2) { printf("  ❌ FAIL: missing verifier gradients\n"); lancius_schedule_destroy(fs); lancius_graph_destroy(g); lancius_schedule_destroy(fs2); lancius_schedule_destroy(bs); lancius_training_graph_destroy(tg); lancius_graph_destroy(g2); return 1; }
+                /* Despot truth: grads lived in the arena and were read AFTER
+                 * reset (was: dangling; worked only because reset keeps pages
+                 * mapped). Copy first. */
+                memcpy(cW1, gW1, sizeof(cW1));
+                memcpy(cb1, gB1, sizeof(cb1));
+                memcpy(cW2, gW2, sizeof(cW2));
+                gb2 = 2.0 * (weak_score - T[weak]);
+                lancius_arena_reset(scratch);
+            }
+            /* ---- SGD step on shared master weights ----
+             * b2 gradient through the single-step loss: dL/db2 = 2*(s-t). */
+            for (int i = 0; i < DIN * DHID; i++) W1[i] -= LR * cW1[i];
+            for (int i = 0; i < DHID; i++) b1[i] -= LR * cb1[i];
+            for (int i = 0; i < DHID; i++) W2[i] -= LR * cW2[i];
+            b2 -= LR * gb2;
 
-        /* ---- SGD step on shared master weights ----
-         * b2 gradient through the single-step loss: dL/db2 = 2*(s-t). */
-        double gb2 = 2.0 * (weak_score - T[weak]);
-        for (int i = 0; i < DIN * DHID; i++) W1[i] -= LR * gW1[i];
-        for (int i = 0; i < DHID; i++) b1[i] -= LR * gB1[i];
-        for (int i = 0; i < DHID; i++) W2[i] -= LR * gW2[i];
-        b2 -= LR * gb2;
+            lancius_schedule_destroy(bs); lancius_training_graph_destroy(tg);
+            lancius_schedule_destroy(fs2); lancius_graph_destroy(g2);
+        }
 
         lancius_schedule_destroy(fs); lancius_graph_destroy(g);
-        lancius_schedule_destroy(fs2);
-        lancius_schedule_destroy(bs); lancius_training_graph_destroy(tg);
     }
 
     printf("  batch-mean loss: %.6f -> %.6f over %d iters (weakest-link SGD)\n", loss0, loss1, ITERS);
@@ -180,8 +231,11 @@ int main(void) {
         x->runtime_data = X; w1->runtime_data = W1; c1->runtime_data = b1;
         w2->runtime_data = W2; tt->runtime_data = T;
         lancius_node* l = lancius_mse(g, s, tt);
+        if (!x || !w1 || !c1 || !w2 || !s || !tt || !l) { fprintf(stderr, "FATAL: spot-check graph build failed\n"); lancius_graph_destroy(g); return 1; }
         lancius_training_graph* tg = lancius_ir_autodiff(g, l);
+        if (!tg) { fprintf(stderr, "FATAL: spot-check autodiff failed\n"); lancius_graph_destroy(g); return 1; }
         lancius_schedule* bs = lancius_ir_schedule(tg->graph);
+        if (!bs) { fprintf(stderr, "FATAL: spot-check schedule failed\n"); lancius_training_graph_destroy(tg); lancius_graph_destroy(g); return 1; }
         lancius_schedule_execute(bs, scratch);
         double* ag = tg->grad_nodes[w2->id] ? tg->grad_nodes[w2->id]->runtime_data : NULL;
         double analytic[DHID];
@@ -199,6 +253,7 @@ int main(void) {
                         if (nn->op != LANCIUS_OP_INPUT && nn->op != LANCIUS_OP_CONST) nn->runtime_data = NULL;
                     }
                 lancius_schedule_execute(f1, scratch);
+                if (!l->runtime_data) { fprintf(stderr, "FATAL: FD forward has no data\n"); lancius_schedule_destroy(f1); lancius_schedule_destroy(bs); lancius_training_graph_destroy(tg); lancius_graph_destroy(g); return 1; }
                 double lp = l->runtime_data[0];
                 lancius_arena_reset(scratch);
                 W2[i] = save - eps;
@@ -209,6 +264,7 @@ int main(void) {
                         if (nn->op != LANCIUS_OP_INPUT && nn->op != LANCIUS_OP_CONST) nn->runtime_data = NULL;
                     }
                 lancius_schedule_execute(f2, scratch);
+                if (!l->runtime_data) { fprintf(stderr, "FATAL: FD forward has no data\n"); lancius_schedule_destroy(f1); lancius_schedule_destroy(f2); lancius_schedule_destroy(bs); lancius_training_graph_destroy(tg); lancius_graph_destroy(g); return 1; }
                 double lm = l->runtime_data[0];
                 lancius_arena_reset(scratch);
                 W2[i] = save;
