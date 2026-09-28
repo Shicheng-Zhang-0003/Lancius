@@ -245,12 +245,20 @@ int main() {
             adam_step(b1_d, grad_b1, m_b1, v_b1, 120, lr, 0.9, 0.999, 1e-8, step);
             adam_step(b2_d, grad_b2, m_b2, v_b2, 10, lr, 0.9, 0.999, 1e-8, step);
 
+            /* Despot truth: track raw loss honestly; clamped average is censored.
+             * Accumulate raw for the abort gate, clamped only for display. */
             if (tg->loss_node && tg->loss_node->runtime_data) {
                 double l_raw = tg->loss_node->runtime_data[0];
                 double l = l_raw;
                 if (l < 0.0 || isnan(l) || l > 1000.0) l = 2.3025;
                 if (l != l_raw) fprintf(stderr, "[TRAIN] clamped loss raw=%g -> %g\n", l_raw, l);
                 epoch_loss += l;
+                /* Raw gate: NaN or explosion aborts immediately, never hidden. */
+                if (isnan(l_raw) || l_raw > 1000.0 || l_raw < 0.0) {
+                    printf("\n[FATAL] Raw loss diverged (raw=%g) at Epoch %d batch %d! Aborting.\n", l_raw, ep+1, batches+1);
+                    free(indices);
+                    return 1;
+                }
             }
             batches++;
             lancius_arena_reset(scratch);
@@ -304,6 +312,14 @@ int main() {
     printf("\n================================================================\n");
     printf("  FINAL TEST ACCURACY: %.2f%% (%d / %d)\n", 100.0 * correct / NUM_TEST, correct, NUM_TEST);
     printf("================================================================\n");
+
+    /* Despot truth: trainers must earn exit 0. Chance is 10%%; anything at or
+     * below chance means no learning (or a broken eval path). */
+    if (correct * 10 <= NUM_TEST) {
+        fprintf(stderr, "[TRAIN] FATAL: accuracy %.2f%% <= chance; refusing green exit.\n",
+            100.0 * correct / NUM_TEST);
+        return 1;
+    }
 
     printf("\n[PATH B] Freezing & Quantizing model to INT8...\n");
     lancius_quantize_graph(g);

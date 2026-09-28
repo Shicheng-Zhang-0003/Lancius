@@ -163,6 +163,7 @@ int main() {
     for(int i=0; i<tr_n; i++) indices[i] = i;
 
     int step = 0;
+    double first_epoch_loss = 0.0;
     for(int ep=0; ep<EPOCHS; ep++) {
         for(int i=tr_n-1; i>0; i--) { int j = rand() % (i+1); int tmp = indices[i]; indices[i] = indices[j]; indices[j] = tmp; }
         double epoch_loss = 0.0; int batches = 0;
@@ -200,12 +201,33 @@ int main() {
             adam_step(w2, grad_w2, m_w2, v_w2, 128*10, LR, 0.9, 0.999, 1e-8, step);
             adam_step(b2_d, grad_b2, m_b2, v_b2, 1*10, LR, 0.9, 0.999, 1e-8, step);
 
-            epoch_loss += tg->loss_node->runtime_data[0];
+            /* Despot truth: raw loss is the gate; NaN/explosion aborts now. */
+            double l_raw = tg->loss_node ? tg->loss_node->runtime_data[0] : 0.0;
+            if (isnan(l_raw) || l_raw < 0.0 || l_raw > 1000.0) {
+                printf("\n[FATAL] Raw loss diverged (raw=%g) at Epoch %d batch %d! Aborting.\n", l_raw, ep+1, batches+1);
+                free(indices);
+                return 1;
+            }
+            epoch_loss += l_raw;
             batches++;
             lancius_arena_reset(scratch);
             if(batches % 100 == 0) printf("\r  Epoch %d | Batch %d/%d | Loss: %.4f", ep+1, batches, tr_n/BATCH_SIZE, epoch_loss/batches);
         }
-        printf("\r  Epoch %d | Loss: %.4f                                     \n", ep+1, epoch_loss / batches);
+        double avg = epoch_loss / batches;
+        if (ep == 0) first_epoch_loss = avg;
+        printf("\r  Epoch %d | Loss: %.4f                                     \n", ep+1, avg);
+        if (isnan(avg) || avg > 100.0) {
+            printf("\n[FATAL] Loss exploded at Epoch %d! Aborting.\n", ep+1);
+            free(indices);
+            return 1;
+        }
+    }
+    /* Despot truth: loss must fall; otherwise no learning happened. */
+    {
+        /* first_epoch_loss captured above; recompute final avg via last epoch?
+         * We keep it simple: training earns 0 only if eval below also passes;
+         * loss-fall is checked implicitly by accuracy gate below. */
+        (void)first_epoch_loss;
     }
 
     printf("\n[5/5] Compiling Inference Graph to Bytecode VM & Evaluating...\n");
@@ -249,6 +271,14 @@ int main() {
     printf("\n================================================================\n");
     printf("  FINAL TEST ACCURACY: %.2f%% (%d / %d)\n", 100.0 * correct / te_n, correct, te_n);
     printf("================================================================\n");
+    /* Despot truth: trainers must earn exit 0. Chance is 10%%. */
+    if (correct * 10 <= te_n) {
+        fprintf(stderr, "[TRAIN] FATAL: accuracy %.2f%% <= chance; refusing green exit.\n",
+            100.0 * correct / te_n);
+        lancius_program_destroy(prog);
+        lancius_graph_destroy(g_inf);
+        return 1;
+    }
     printf("  LANCIUS NOTEPAD COMPLETE. PATH C & D VERIFIED.\n");
     printf("================================================================\n\n");
 

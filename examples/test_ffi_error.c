@@ -11,14 +11,23 @@ int main() {
     // THIS SHOULD FAIL - shapes don't match for MatMul
     lancius_tensor_handle C = lancius_add_matmul(g, A, B);
 
+    /* Despot truth: this audit must fail CI if the invalid matmul is accepted. */
     if (lancius_get_last_error() != LANCIUS_OK) {
         const char* err = lancius_get_error_string(lancius_get_last_error());
         printf("Error caught: %s\n", err ? err : "NULL (SEGFAULT RISK)");
     } else {
         printf("ERROR: Should have failed but didn't!\n");
+        lancius_graph_destroy_stable(g);
+        lancius_destroy_context(ctx);
+        return 1;
     }
 
     lancius_graph_destroy_stable(g);
     lancius_destroy_context(ctx);
+    if (C != NULL) {
+        /* Invalid matmul produced a handle; that is a lie. */
+        printf("ERROR: invalid matmul returned non-NULL handle!\n");
+        return 1;
+    }
     return 0;
 }
