@@ -165,6 +165,15 @@ Binary compatibility is **guaranteed** for v2 models written by v11S and later.
   raw-vs-clamped loss logging, static ONNX export.
 - Stable API: widened error codes; `dtype_size`/`product_shape` fail loud.
 - False-green audits now exit non-zero on divergence.
+- Despot truth V2: `broadcast_to_shape` any 1..4-D; `SUM` (any ndim),
+  `SUM_AXIS0/1`, `RESHAPE` VJPs exact; N-dim partial broadcast fails loud
+  with whole-graph abort (no zero-grad lie); permute/batched offsets checked;
+  no abort on hot paths; INT8 Add row-bias-only; INT8 `scale=1.0` all-zero;
+  attention/KV/GQA NaN→NUMERICAL; GELU tanh-approx documented;
+  `LANCIUS_NORM_EPS` pinned; vision scale `NUMERICAL` + checked pool-bwd;
+  `u64→size_t` checked; ONNX dilation/group/pads/ceil rejected; trainers
+  raw-abort + chance-gate; `test_ffi_error` honest (see
+  `docs/DESPOT_TRUTH_V2.md`).
 
 ### Improved
 
@@ -172,11 +181,14 @@ Binary compatibility is **guaranteed** for v2 models written by v11S and later.
 - Bytecode VM validates registers, guards `rows*cols` overflow, and rejects
   unbroadcastable binary shapes instead of miscomputing.
 - Parity scripts fail CI on divergence.
+- `lancius_add/sub/mul` set `SHAPE_MISMATCH` (was silent NULL); autodiff
+  clears sticky errors at entry and aborts partial graphs.
 
 ### Deferred
 
 The following remain intentionally deferred:
 
+- per-axis N-dim broadcast grad reduction (`SUM_AXIS_ND`; currently fails loud)
 - full FP32 operator coverage (LLM ops are FP64-only)
 - FP32 KV-cache storage
 - general ONNX converter usability beyond LeNet-class graphs
