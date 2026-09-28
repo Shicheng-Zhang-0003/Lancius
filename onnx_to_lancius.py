@@ -78,11 +78,16 @@ def convert(onnx_path, lancius_path):
         next_id += 1
 
     # 2. Register Graph Inputs
+    # Despot truth: ndim is the TRUE rank (was: counted >0 on 4-padded shape,
+    # always 4, so [N,C] inputs became 4D and broke 2D MatMul).
     for inp in graph.input:
         if inp.name not in name_to_id:
+            true_rank = len(inp.type.tensor_type.shape.dim)
+            if true_rank < 1 or true_rank > 4:
+                raise ValueError(f"Graph input '{inp.name}' has unsupported rank {true_rank}.")
             shape = get_shape(inp.type.tensor_type)
             nodes.append({
-                'id': next_id, 'op': 1, 'ndim': len([s for s in shape if s > 0]), 'shape': shape,
+                'id': next_id, 'op': 1, 'ndim': true_rank, 'shape': shape,
                 'inputs': [], 'attr': 0.0, 'meta': [0,0,0,0], 'axes': [0,0,0,0],
                 'weights': None, 'dtype': 0, 'scale': 1.0
             })
@@ -104,6 +109,7 @@ def convert(onnx_path, lancius_path):
         inputs = [name_to_id[i] for i in node.input if i in name_to_id]
 
         out_shape = [1, 1, 1, 1]
+        reshape_rank = 2
 
         # Robust Reshape shape extraction
         if node.op_type == 'Reshape' and len(node.input) >= 2:
@@ -179,8 +185,10 @@ def convert(onnx_path, lancius_path):
 
                 if len(resolved_dims) == 2:
                     out_shape = [resolved_dims[0], resolved_dims[1], 1, 1]
+                    reshape_rank = 2
                 elif len(resolved_dims) == 4:
                     out_shape = [resolved_dims[0], resolved_dims[1], resolved_dims[2], resolved_dims[3]]
+                    reshape_rank = 4
                 else:
                     raise ValueError(f"Reshape '{node.output[0]}' resolved to unsupported rank {len(resolved_dims)}: {resolved_dims}.")
             else:
@@ -304,7 +312,11 @@ def convert(onnx_path, lancius_path):
                 nn['shape'] = [orig_shape[1], orig_shape[0], 1, 1]
                 nn['ndim'] = 2
                 if nn['weights']:
-                    data = np.frombuffer(w_node['weights'], dtype=np.float64).reshape(orig_shape[0], orig_shape[1])
+                    # Despot truth: raw reshape raised context-free ValueError.
+                    try:
+                        data = np.frombuffer(w_node['weights'], dtype=np.float64).reshape(orig_shape[0], orig_shape[1])
+                    except ValueError as e:
+                        raise ValueError(f"Gemm '{node.output[0]}' weight '{w_name}' bytes {len(w_node['weights'])} mismatch shape [{orig_shape[0]},{orig_shape[1]}]; refusing emit.") from e
                     nn['weights'] = np.ascontiguousarray(data.T).tobytes()
                 nn['_transposed_for'] = node.output[0]
                 nn['_used'] = True
@@ -361,10 +373,12 @@ def convert(onnx_path, lancius_path):
             else:
                 raise ValueError(f"Transpose '{node.output[0]}' has unsupported perm {perm}. Supports only [1,0] / [1,0,2,3].")
         else:
-            # V10S FIX: Force ndim=2 for Reshape to match C MatMul expectations
-            calc_ndim = len([s for s in out_shape if s > 0])
+            # Despot truth: Reshape ndim follows the resolved rank (was: forced
+            # to 2 even for 4D targets, dropping dims in C validation).
             if node.op_type == 'Reshape':
-                calc_ndim = 2
+                calc_ndim = reshape_rank
+            else:
+                calc_ndim = len([s for s in out_shape if s > 0])
 
             nodes.append({
                 'id': next_id, 'op': op, 'ndim': calc_ndim, 'shape': out_shape,
@@ -375,6 +389,19 @@ def convert(onnx_path, lancius_path):
             next_id += 1
 
     # 4. Write Binary (v2 format with CRC32 over body bytes 48..EOF)
+    # Despot truth: every packed field is range-checked (was: huge dims raised
+    # raw struct.error traceback); output open is guarded (was: traceback +
+    # partial file on bad dir/permission).
+    def _u32(v, what):
+        if not isinstance(v, int) or v < 0 or v > 0xFFFFFFFF:
+            raise ValueError(f"Node field {what}={v!r} out of u32 range; refusing emit.")
+        return v
+
+    def _u64(v, what):
+        if not isinstance(v, int) or v < 0 or v > 0xFFFFFFFFFFFFFFFF:
+            raise ValueError(f"Node field {what}={v!r} out of u64 range; refusing emit.")
+        return v
+
     body = io.BytesIO()
     for n in nodes:
         has_w = 1 if n['weights'] else 0
@@ -386,37 +413,45 @@ def convert(onnx_path, lancius_path):
                 weight_elems = len(n['weights']) // 8
         else:
             weight_elems = 0
+        if weight_elems > 100000000:
+            raise ValueError(f"Node id={n['id']} weight_elems={weight_elems} exceeds 100M cap; refusing emit.")
 
         body.write(struct.pack(
             '<IIB4QId4I4I3BdQ',
-            n['id'], n['op'], n['ndim'],
-            n['shape'][0], n['shape'][1], n['shape'][2], n['shape'][3],
-            len(n['inputs']),
+            _u32(n['id'], 'id'), _u32(n['op'], 'op'), n['ndim'],
+            _u64(n['shape'][0], 'shape0'), _u64(n['shape'][1], 'shape1'),
+            _u64(n['shape'][2], 'shape2'), _u64(n['shape'][3], 'shape3'),
+            _u32(len(n['inputs']), 'input_count'),
             float(n['attr']),
             n['meta'][0], n['meta'][1], n['meta'][2], n['meta'][3],
             n['axes'][0], n['axes'][1], n['axes'][2], n['axes'][3],
             0, n['dtype'], has_w,
             float(n['scale']),
-            weight_elems
+            _u64(weight_elems, 'weight_elems')
         ))
 
         for i in n['inputs']:
-            body.write(struct.pack('<I', i))
+            body.write(struct.pack('<I', _u32(i, 'input_id')))
 
         if has_w and weight_elems > 0:
             body.write(n['weights'])
 
     body_bytes = body.getvalue()
     checksum = zlib.crc32(body_bytes) & 0xFFFFFFFF
-    with open(lancius_path, 'wb') as f:
-        header = struct.pack(
-            '<8IQ2I',
-            LANCIUS_MAGIC_V2, LANCIUS_VERSION_V2, LANCIUS_FLAGS_V2,
-            len(nodes), len(nodes), 0, 48, 0,
-            0, checksum, 0
-        )
-        f.write(header)
-        f.write(body_bytes)
+    if checksum == 0:
+        checksum = 1  # 0 means legacy/unverified; never emit it (mirrors C saver)
+    try:
+        with open(lancius_path, 'wb') as f:
+            header = struct.pack(
+                '<8IQ2I',
+                LANCIUS_MAGIC_V2, LANCIUS_VERSION_V2, LANCIUS_FLAGS_V2,
+                len(nodes), len(nodes), 0, 48, 0,
+                0, checksum, 0
+            )
+            f.write(header)
+            f.write(body_bytes)
+    except OSError as e:
+        raise ValueError(f"Cannot write '{lancius_path}': {e}.") from e
 
     print(f"✅ Translated {len(nodes)} nodes to {lancius_path}")
 

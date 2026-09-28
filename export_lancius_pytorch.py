@@ -31,7 +31,10 @@ class LanciusModel(nn.Module):
 
 
 def _w_f32(n):
+    # Despot truth: has_w with zero weights (None) crashed with AttributeError.
     w = n['weights']
+    if w is None:
+        raise ValueError(f"node {n['id']}: marked has_w but carries no weight bytes")
     if n['dtype'] == 0:
         return w.astype(np.float32)
     if n['dtype'] == 1:
@@ -39,6 +42,20 @@ def _w_f32(n):
     if n['dtype'] == 2:
         return w.astype(np.float32)
     raise ValueError(f"node {n['id']}: INT32 weights not exportable")
+
+
+# Inline-literal cap: bigger weights would emit GB-scale .py files.
+_MAX_INLINE_ELEMS = 2000000
+
+
+def _checked_shape(n):
+    shp = lancius_shape(n)
+    e = 1
+    for d in shp:
+        e *= d
+    if e > _MAX_INLINE_ELEMS:
+        raise ValueError(f"node {n['id']}: {e} elems exceed inline-literal cap {_MAX_INLINE_ELEMS}; refusing emit.")
+    return shp, e
 
 
 def emit_module(parsed):
@@ -55,7 +72,7 @@ def emit_module(parsed):
     for n in nodes:
         op, nid = n['op'], n['id']
         if op == 1 and n['has_w']:
-            shp = lancius_shape(n)
+            shp, _e = _checked_shape(n)
             arr = _w_f32(n).reshape(shp)
             lines_init.append(
                 f"        self.p{nid} = nn.Parameter(torch.tensor({arr.ravel().tolist()!r}, "
@@ -77,6 +94,18 @@ def emit_module(parsed):
     for gi, an in zip(graph_inputs, arg_names):
         lines_fwd.append(f"        {T(gi['id'])} = {an}.float()")
 
+    # Despot truth: every input ref must resolve (was: missing ref emitted
+    # undefined t999; ADD with 1 input raised IndexError, not fail-loud).
+    def _need(n, k):
+        ins = n['inputs']
+        if len(ins) < k:
+            nm = OP_NAMES.get(n['op'], f"OP{n['op']}")
+            raise ValueError(f"lancius op {nm} (id {n['id']}) needs {k} inputs, has {len(ins)}; refusing emit.")
+        for i in ins[:k]:
+            if i not in by_id:
+                raise ValueError(f"lancius op {OP_NAMES.get(n['op'], n['op'])} (id {n['id']}) references missing node {i}; refusing emit.")
+        return [T(i) for i in ins[:k]]
+
     for n in nodes:
         op, nid = n['op'], n['id']
         o = T(nid)
@@ -88,7 +117,16 @@ def emit_module(parsed):
             elif op == 0:
                 pass
             continue
-        ins = [T(i) for i in n['inputs']]
+        if op in (3, 4, 5, 6):
+            ins = _need(n, 2)
+        elif op in (7, 38, 8, 9, 14, 15, 11, 18):
+            ins = _need(n, 1)
+        elif op in (22, 27, 10):
+            ins = _need(n, 1)
+        elif op in (16, 17, 40):
+            ins = _need(n, 2)
+        else:
+            ins = [T(i) for i in n['inputs']]
         if op == 3:
             lines_fwd.append(f"        {o} = {ins[0]} + {ins[1]}")
         elif op == 4:
@@ -113,6 +151,8 @@ def emit_module(parsed):
             lines_fwd.append(f"        {o} = {ins[0]}.t()")
         elif op == 22:
             perm = [int(a) for a in n['axes'][:n['ndim']]]
+            if sorted(perm) != list(range(len(perm))):
+                raise ValueError(f"lancius PERMUTE (id {nid}) has invalid perm {perm}; refusing emit.")
             lines_fwd.append(f"        {o} = {ins[0]}.permute({perm})")
         elif op == 18:
             lines_fwd.append(f"        {o} = {ins[0]}.flatten(start_dim=1)")
@@ -124,12 +164,14 @@ def emit_module(parsed):
             lines_fwd.append(f"        {o} = {ins[0]}.expand({shp})")
         elif op == 16:
             kh, kw, s, p = (int(x) for x in n['meta'])
-            lines_fwd.append(f"        {o} = F.conv2d({ins[0]}, {T(n['inputs'][1])}, stride={s}, padding={p})"
-                             if len(ins) >= 2 else
-                             f"        {o} = F.conv2d({ins[0]}, {params[n['inputs'][1]][0]}, stride={s}, padding={p})")
+            if s <= 0:
+                raise ValueError(f"lancius CONV2D (id {nid}) has non-positive stride {s}; refusing emit.")
+            lines_fwd.append(f"        {o} = F.conv2d({ins[0]}, {ins[1]}, stride={s}, padding={p})")
             _ = (kh, kw)
         elif op == 17:
             kh, kw, s, _p = (int(x) for x in n['meta'])
+            if kh <= 0 or s <= 0:
+                raise ValueError(f"lancius MAXPOOL2D (id {nid}) has bad kernel/stride; refusing emit.")
             lines_fwd.append(f"        {o} = F.max_pool2d({ins[0]}, kernel_size={kh}, stride={s})")
         elif op == 40:
             lines_fwd.append(f"        {o} = ((_p := {ins[0]} - {ins[1]}) * _p).mean().reshape(1, 1)")
@@ -187,9 +229,13 @@ def main():
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             m = mod.LanciusModel().eval()
-            shp = lancius_shape(primary)
-            dummy = torch.ones(*shp)
-            torch.onnx.export(m, dummy, onnx_out, input_names=['input'],
+            # Despot truth: single dummy crashed multi-input graphs (was:
+            # TypeError). Build one dummy per graph input.
+            graph_inputs = [n for n in parsed['nodes'] if n['op'] == 1 and not n['has_w']]
+            arg_names = [f"x{gi['id']}" for gi in graph_inputs]
+            dummies = tuple(torch.ones(*lancius_shape(gi)) for gi in graph_inputs)
+            torch.onnx.export(m, dummies if len(dummies) > 1 else dummies[0], onnx_out,
+                              input_names=arg_names,
                               output_names=['output'], opset_version=17,
                               do_constant_folding=True)
             print(f"OK: traced ONNX -> {onnx_out}")

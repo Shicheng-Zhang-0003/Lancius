@@ -18,6 +18,7 @@ cast is lossy. INT8 weights are dequantized (w*scale) on export.
 Usage:
   python3 export_lancius_onnx.py in.lancius out.onnx
 """
+import os
 import struct
 import sys
 import zlib
@@ -46,7 +47,13 @@ OP_NAMES = {
 }
 
 
-def parse_lancius(path):
+def parse_lancius(path, allow_legacy=False):
+    # Despot truth: whole-file read was uncapped (OOM on GB files).
+    try:
+        if os.path.getsize(path) > 2 * 1024 * 1024 * 1024:
+            raise ValueError(f"{path}: file exceeds 2GB cap; refusing parse.")
+    except OSError as e:
+        raise ValueError(f"{path}: cannot stat: {e}.") from e
     with open(path, 'rb') as f:
         blob = f.read()
     if len(blob) < 48:
@@ -60,13 +67,24 @@ def parse_lancius(path):
         raise ValueError(f"{path}: bad version {version}")
     if hsize != 48:
         raise ValueError(f"{path}: bad header_size {hsize}")
+    # Despot truth: flags/counters/reserved were ignored while C rejects them.
+    if not (flags & 0x1):
+        raise ValueError(f"{path}: missing little-endian flag (flags=0x{flags:08X})")
+    if flags & 0x4:
+        raise ValueError(f"{path}: EXTERNAL_WEIGHTS reserved flag set; refusing.")
+    if attr_count != 0 or woff != 0 or r0 != 0 or r1 != 0:
+        raise ValueError(f"{path}: reserved header fields must be 0 (attr={attr_count} woff={woff} r0={r0} r1={r1})")
+    if node_count > 1000000:
+        raise ValueError(f"{path}: node_count {node_count} exceeds 1M cap.")
     body = blob[48:]
     if checksum != 0:
         calc = zlib.crc32(body) & 0xFFFFFFFF
         if calc != checksum:
             raise ValueError(f"{path}: CRC32 mismatch header={checksum:08x} calc={calc:08x}")
-    elif len(body) > 0:
-        print("WARN: checksum==0 legacy unverified file", file=sys.stderr)
+    elif not allow_legacy:
+        # Despot truth: zero-4-bytes bypassed integrity in this path (was: WARN
+        # + continue, while C rejects by default).
+        raise ValueError(f"{path}: checksum==0 legacy unverified file; refusing (pass allow_legacy=True to override).")
     nodes = []
     off = 0
     for _ in range(node_count):
@@ -311,12 +329,14 @@ def convert(parsed, out_path):
 
 
 def main():
-    if len(sys.argv) != 3:
-        print(f"usage: {sys.argv[0]} in.lancius out.onnx", file=sys.stderr)
+    args = [a for a in sys.argv[1:] if a != '--allow-legacy']
+    allow_legacy = len(args) != len(sys.argv[1:])
+    if len(args) != 2:
+        print(f"usage: {sys.argv[0]} in.lancius out.onnx [--allow-legacy]", file=sys.stderr)
         return 2
     try:
-        parsed = parse_lancius(sys.argv[1])
-        convert(parsed, sys.argv[2])
+        parsed = parse_lancius(args[0], allow_legacy=allow_legacy)
+        convert(parsed, args[1])
     except Exception as e:
         print(f"FAIL: {e}", file=sys.stderr)
         return 1
