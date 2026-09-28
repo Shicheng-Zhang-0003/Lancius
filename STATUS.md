@@ -44,6 +44,15 @@ defect fixed and re-proven by independent execution (see CHANGELOG):
   trailing-rank cross-rank broadcast with compat guards, int64 conv indices,
   KV-cache OOM reporting, CE degenerate is NUMERICAL, Gemm always-clone,
   Reshape preserves batch, torture cycle test is real, GQA values verified
+- Despot truth V2 (2026-09-28): `broadcast_to_shape` any 1..4-D; `SUM`
+  (any ndim), `SUM_AXIS0/1`, `RESHAPE` VJPs exact; N-dim partial broadcast
+  fails loud with whole-graph abort; permute/batched-matmul offsets checked;
+  no abort on hot paths; INT8 Add row-bias-only; INT8 `scale=1.0` all-zero;
+  attention/KV/GQA NaN→NUMERICAL; GELU tanh-approx documented;
+  `LANCIUS_NORM_EPS` pinned; vision `NUMERICAL` scale + checked pool-bwd;
+  `u64→size_t` checked; ONNX dilation/group/pads/ceil rejected; trainers
+  raw-abort + chance-gate; `test_ffi_error` honest; see
+  `docs/DESPOT_TRUTH_V2.md` and `probe_v2` (`/tmp/opencode/lancius-despot-logs`)
 
 ## Feature freeze
 
@@ -59,8 +68,10 @@ only correctness within existing scope.
 ## Validation batch — v12R1
 
 Build clean under `-Wall -Wextra -Werror`; `audit_regression_13c` 49/49,
-`audit_known_answer` 67/67, `audit_transformer_known_answer` 265/265,
+`audit_known_answer` 73/73, `audit_transformer_known_answer` 265/265,
 `audit_fp32_path` 19/19, `audit_fault_injection` 11/11 green;
 `make check`, `make check-long`, and `make check-sanitizers` green with
 failure-propagating exit codes; broadcast/planner/softmax/CE fixes verified
-by the despot probe (`audit_despot_probe`, in the `make check` gate).
+by the despot probe (`audit_despot_probe`, in the `make check` gate);
+V2 fixes verified by `probe_v2` (SUM-3D, RESHAPE, SUM_AXIS, N-D fail-loud,
+attention NaN→NUMERICAL) + `test_grad_check` (`8.6e-10`, `5.8e-8`).

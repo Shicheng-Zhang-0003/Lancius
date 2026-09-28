@@ -64,16 +64,34 @@ and do NOT abort.
 -   ONNX converter: 9 ops only
     (`Conv/Relu/MaxPool/Flatten/MatMul/Add/Reshape/Gemm/Transpose`);
     anything else raises instead of emitting partial graphs.
+    Conv with `dilations!=1`/`group!=1`/`auto_pad!=NOTSET` raises;
+    MaxPool with `pads!=0`/`dilations!=1`/`ceil_mode!=0`/`auto_pad` raises.
+    MatMul is 2D-only (N-D batch would silently collapse — rejected by scope).
 -   Quantizer: 4D FP64 conv weights only; all-zero weights stay FP64.
+    INT8 Add is row-bias (`[1,N]+[R,N]`) only; other INT8 broadcasts fall
+    through to exact FP64 broadcast, never miscompute.
 -   `lancius_read_output` (stable API): FP64 outputs only; FP32/INT8
     outputs report `UNSUPPORTED_OP`.
 -   v2 models always carry non-zero CRC32; files with `checksum == 0`
     are rejected by default (set `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1` to
-    load legacy pre-hardening files).
--   Degenerate denominators fail loud: all-`-inf` softmax rows and
-    cross-entropy rows return `NUMERICAL` instead of values.
+    load legacy pre-hardening files). Saver never emits 0.
+-   Degenerate denominators fail loud: all-`-inf` softmax/CE rows and
+    attention/KV/GQA `NaN` denominators return `NUMERICAL` instead of values;
+    fully-masked zero-sum attention rows emit zeros for causal safety.
 -   Broadcast follows trailing-rank (NumPy) semantics for `ADD`/`SUB`/`MUL`;
     incompatible shapes are rejected, never read out of bounds.
+-   Autodiff: `SUM` (any 1..4-D via `broadcast_to_shape`), `SUM_AXIS0/1`,
+    `RESHAPE` VJPs exact. N-dim partial broadcast reduction (e.g.
+    `[2,1,4]` vs `[2,3,4]`) has no `SUM_AXIS_ND` op yet and **fails loud**
+    (returns NULL) instead of training as zero. Transformer and
+    `MATMUL_BATCHED` backward fail loud. See `docs/DESPOT_TRUTH_V2.md`.
+-   GELU is tanh-approx (GPT-2/BERT variant, ~2e-3 vs erf-exact), not erf-exact.
+-   Norm eps pinned to `LANCIUS_NORM_EPS=1e-5`; not per-node tunable.
+-   Trainers exit 1 on raw `NaN/>1000/<0` and on accuracy ≤ chance (10%);
+    `make check` does not run `train_mnist/cifar10` (green says nothing
+    about their convergence); LR parity across PyTorch/C batch/scale gaps
+    is unproven by design.
+-   `conv_bwd_w critical` FP-sum order is last-bit nondeterministic (training only).
 
 ## Philosophy
 

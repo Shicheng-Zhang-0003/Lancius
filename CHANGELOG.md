@@ -1,5 +1,39 @@
 # Lancius Changelog
 
+## despot truth V2 (2026-09-28) — every remaining lie closed, re-proven
+
+- Autodiff truth: `broadcast_to_shape` (any 1..4-D scalar lift); `SUM` grad
+  exact for any ndim (was `[1,1]`-for-3D); `SUM_AXIS0/1` + `RESHAPE` VJPs
+  added (were silent drops); transformer forward cloned so `fwd_to_full`
+  stays complete; `_BWD` in forward returns NULL; N-dim partial broadcast
+  reduction fails loud (no `SUM_AXIS_ND` yet) with sticky-error abort of the
+  whole training graph; `accum_grad` returns `1/0` with all `NULL` paths
+  checked; `add/sub/mul` set `SHAPE_MISMATCH` (was silent NULL).
+- Executors: permute stride products checked; batched-matmul batch offsets
+  checked (`M·K`, `K·N`, `M·N` + `batch·elems`); liveness/static/parallel
+  paths use `_checked` bytes/elements (no abort); `SUM`/`SUM_AXIS`/`TRANSPOSE`
+  shape-validated; INT8 Add row-bias-only with FP64 fallback; INT8 matmul
+  `scale_a=1.0` for all-zero (consistent with quantizer skip).
+- Kernels: attention/GQA `NaN→NUMERICAL` (was silent zeros); KV-cache
+  `max/sum NaN→NUMERICAL` (`-inf`/zero stay zeros); GELU documented as
+  tanh-approx; `LANCIUS_NORM_EPS=1e-5` pinned.
+- Vision: INT8 zero-scale reports `NUMERICAL` (was `INVALID_SHAPE`);
+  `MAXPOOL_BWD` output bytes checked.
+- Persistence: `checksum==0` doc fixed to rejected-by-default; `u64→size_t`
+  narrowing checked; `BROADCAST` loads any 1..4-D.
+- ONNX: Conv `dilations/group/auto_pad` rejected; MaxPool
+  `pads/dilations/ceil_mode/auto_pad` rejected; Reshape dead code removed.
+- Training honesty: CIFAR raw-loss abort (`NaN/>1000/<0` returns 1);
+  MNIST raw-loss abort + accuracy gate; both trainers exit 1 at ≤ chance;
+  `test_ffi_error` exits 1 on unexpected success/non-NULL handle.
+- Docs: new `docs/DESPOT_TRUTH_V2.md` (full math/programming/operational
+  audit with formulas and proofs); `ARCHITECTURE.md`, `KNOWN_LIMITATIONS.md`,
+  `MANIFEST.md`, `STATUS.md` updated; temp execution under
+  `/tmp/opencode/lancius-despot-logs`.
+- Proven: `make check` green; `test_grad_check` (`8.6e-10`, `5.8e-8`);
+  `probe_v2` (SUM-3D `BROADCAST ndim3`, RESHAPE, SUM_AXIS, `broadcast_to_shape`,
+  N-D partial fail-loud, attention NaN→NUMERICAL) all truth holds.
+
 ## v12R2 (unreleased) — learn to verify
 
 First work toward the R2 mandate (see `docs/v12R2_SCOPE.md`): the framework

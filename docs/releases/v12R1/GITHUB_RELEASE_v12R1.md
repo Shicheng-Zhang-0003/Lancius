@@ -43,8 +43,9 @@ This is a development milestone, not a stable release. `v11S` remains the stable
 
 ## Validation
 
-- `audit_known_answer` 67/67, `audit_transformer_known_answer` 265/265, `audit_regression_13c` 49/49, `audit_fp32_path` 19/19, `audit_fault_injection` 11/11
+- `audit_known_answer` 73/73, `audit_transformer_known_answer` 265/265, `audit_regression_13c` 49/49, `audit_fp32_path` 19/19, `audit_fault_injection` 11/11
 - `make check`, `make check-long` (soak 3/3, fuzz 500/0), `make check-sanitizers` green from a clean tree
+- Despot truth V2: `probe_v2` pins SUM-3D, RESHAPE, SUM_AXIS, `broadcast_to_shape`, N-D partial fail-loud, attention NaN→NUMERICAL; `test_grad_check` (`8.6e-10`, `5.8e-8`); see `docs/DESPOT_TRUTH_V2.md`
 
 ---
 
@@ -71,8 +72,9 @@ This is a development milestone, not a stable release. `v11S` remains the stable
 - Static graph execution only (no dynamic shapes)
 - Transformer inference is experimental (FP64-only KV-cache, no backward passes)
 - FP32 execution scoped to matmul only
-- ONNX conversion experimental (LeNet-class graphs only)
-- Training is not part of any release contract
+- ONNX conversion experimental (LeNet-class graphs only; dilations/groups/pads/ceil rejected loud)
+- Training is not part of any release contract; N-dim partial broadcast grads fail loud (no `SUM_AXIS_ND` yet); trainers exit 1 at ≤ chance
+- GELU is tanh-approx; norm eps pinned to `1e-5`
 
 See `KNOWN_LIMITATIONS.md` for the full list.
 
