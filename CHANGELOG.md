@@ -1,5 +1,28 @@
 # Lancius Changelog
 
+## operator TUI perfection (2026-09-28) — ordinary users guided, offline honest
+
+- New verbs: `status` (operational snapshot), `models [--check]` (list plus
+  validate local models), `demo` (one-command install proof), `help [verb]`
+  (plus per-verb `--help` everywhere; `run --help` no longer unknown-arg).
+- `doctor` tells the truth: core MISSING fails, training data absent is an
+  optional-data warning (was blanket READY), plus network (curl, 5s cap) and
+  disk-free sections.
+- `train` pre-checks data before work (suggests the exact pull command),
+  `--dry` shows binary plus data plus time hint; verifier seconds, mnist
+  minutes, cifar10 hours with an explicit are-you-sure in the TUI.
+- `run` validates mode/fill/topk/show with suggestions, checks model and
+  `--input` files first, explains `--input` size mismatches in bytes.
+- `info` flags training-only (`_BWD`) and reserved (`EMBEDDING`, `KV_*`)
+  ops, prints human dtype names, hints at `lancius models` on missing files.
+- `convert`/`export` pre-check inputs, scripts, and python deps (no raw
+  tracebacks); `datasets pull` validates names and refuses cleanly offline.
+- TUI rebuilt around direct calls (no `./lancius` re-exec for internal
+  verbs, error codes preserved), with header status, plain-language menu
+  plus time guide, `help` entry, per-prompt defaults and back (empty),
+  validation loops, cifar10 confirm, pause-after-command on ttys, last-status
+  line, and `NO_COLOR`/`TERM=dumb`/non-tty safe output.
+
 ## despot truth V2 (2026-09-28) — every remaining lie closed, re-proven
 
 - Autodiff truth: `broadcast_to_shape` (any 1..4-D scalar lift); `SUM` grad
