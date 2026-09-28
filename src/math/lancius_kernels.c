@@ -2,6 +2,7 @@
 #include "lancius/lancius_error.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <math.h>
 #include <omp.h>
 
@@ -14,10 +15,13 @@
 #endif
 
 void kernel_matmul(double* out, const double* a, const double* b, size_t M, size_t K, size_t N) {
-    if (!out || !a || !b) return;
-    if (M == 0 || K == 0 || N == 0) return;
-    if (M > SIZE_MAX / N) return;
-    if (M * N > SIZE_MAX / sizeof(double)) return;
+    if (!out || !a || !b) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (M == 0 || K == 0 || N == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    if (M > SIZE_MAX / N) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    /* Despot truth: a[r*K+k] and b[k*N+c] index M*K and K*N elements. */
+    if (M > SIZE_MAX / K) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (K > SIZE_MAX / N) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (M * N > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     memset(out, 0, M * N * sizeof(double));
     for(size_t r=0; r<M; r++) {
         for(size_t k=0; k<K; k++) {
@@ -45,6 +49,12 @@ void kernel_conv2d_fwd(double* out, const double* in, const double* w,
         if (N * C_out * H_out > SIZE_MAX / W_out) return;
         if (N * C_out * H_out * W_out > SIZE_MAX / sizeof(double)) return;
     }
+    /* Despot truth: in_idx ni*(C*H*W) and w_idx co*(C*Kh*Kw) must not wrap. */
+    if (C_in != 0 && H_in > SIZE_MAX / W_in) return;
+    if (C_in != 0 && K_h > SIZE_MAX / K_w) return;
+    if (C_in * H_in != 0 && W_in > SIZE_MAX / (C_in * H_in)) return;
+    if (C_in * K_h != 0 && K_w > SIZE_MAX / (C_in * K_h)) return;
+    if (C_out != 0 && (C_in * K_h * K_w) > SIZE_MAX / C_out) return;
     memset(out, 0, N*C_out*H_out*W_out*sizeof(double));
 
     #pragma omp parallel for collapse(2) schedule(static)
@@ -79,6 +89,9 @@ void kernel_conv2d_bwd_in(double* out, const double* grad, const double* w,
                           size_t C_out, size_t H_out, size_t W_out,
                           size_t K_h, size_t K_w, size_t stride, size_t pad) {
     if (!out || !grad || !w) return;
+    /* Despot truth: same stride/kernel/pad guards as fwd (was missing). */
+    if (stride == 0 || K_h == 0 || K_w == 0) return;
+    if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) return;
     if (N && C_in && H_in && W_in) {
         if (N > SIZE_MAX / C_in) return;
         if (N * C_in > SIZE_MAX / H_in) return;
@@ -282,6 +295,8 @@ void kernel_layernorm(double* out, const double* in, const double* gamma, const 
 
         double denom = sqrt(var + eps);
         if (denom <= 0.0 || denom != denom) {
+            /* Despot truth: degenerate norm denominator is NUMERICAL, not silent beta. */
+            lancius_set_error(LANCIUS_ERROR_NUMERICAL);
             for(size_t i=0; i<hidden_size; i++) y[i] = beta[i];
             continue;
         }
@@ -318,9 +333,13 @@ void kernel_rope(double* q, double* k, size_t batch_size, size_t seq_len, size_t
     if (!q || !k) return;
     if (batch_size == 0 || seq_len == 0 || n_heads == 0 || head_dim == 0) return;
     if (head_dim % 2 != 0) return; /* odd head_dim must be rejected by caller; refuse silent partial rotation */
+    /* Despot truth: s(size_t)+pos_offset(int) must not narrow/wrap through int. */
+    if (pos_offset < 0) return;
+    if (seq_len > (size_t)INT32_MAX) return;
+    if ((uint64_t)seq_len + (uint64_t)pos_offset > (uint64_t)INT32_MAX) return;
     for(size_t b=0; b<batch_size; b++) {
         for(size_t s=0; s<seq_len; s++) {
-            int pos = s + pos_offset;
+            int pos = (int)s + pos_offset;
             for(size_t h=0; h<n_heads; h++) {
                 for(size_t d=0; d<head_dim; d+=2) {
                     double freq = 1.0 / pow(10000.0, (double)d / (double)head_dim);
@@ -426,8 +445,12 @@ void kernel_attention_kv_cache(double* out, const double* q, const double* k_cac
                                size_t seq_len, size_t n_heads, size_t head_dim) {
     if (!out || !q || !k_cache || !v_cache) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
     if (seq_len == 0 || n_heads == 0 || head_dim == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    /* Despot truth: hidden_size and scores bytes are checked (was wrap + under-size). */
+    if (n_heads > SIZE_MAX / head_dim) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (seq_len > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     double scale = 1.0 / sqrt((double)head_dim);
     size_t hidden_size = n_heads * head_dim;
+    if (hidden_size > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
 
     memset(out, 0, hidden_size * sizeof(double));
     double* scores = (double*)malloc(seq_len * sizeof(double));
@@ -500,6 +523,8 @@ void kernel_rmsnorm(double* out, const double* in, const double* gamma, size_t n
         double rms = sqrt(sq_sum / hidden_size + eps);
         double* out_row = out + i * hidden_size;
         if (rms <= 0.0 || rms != rms) {
+            /* Despot truth: degenerate norm denominator is NUMERICAL, not silent zeros. */
+            lancius_set_error(LANCIUS_ERROR_NUMERICAL);
             for (size_t j = 0; j < hidden_size; j++) out_row[j] = 0.0;
             continue;
         }

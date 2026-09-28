@@ -73,7 +73,8 @@ lancius_kv_cache* lancius_kv_cache_create(
     cache->dtype = dtype;
 
     size_t total_elems = max_seq_len * hidden_size;
-    if (total_elems > SIZE_MAX / sizeof(double)) return NULL;
+    /* Despot truth: free the half-built cache instead of leaking it. */
+    if (total_elems > SIZE_MAX / sizeof(double)) { free(cache); return NULL; }
 
     cache->k = (double*)calloc(total_elems, sizeof(double));
     cache->v = (double*)calloc(total_elems, sizeof(double));
