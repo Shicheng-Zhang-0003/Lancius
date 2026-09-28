@@ -98,14 +98,21 @@ def _fetch(url, dest, optional=False):
 def clean_datasets():
     print("🧹 Cleaning up raw datasets and intermediate binaries...")
     freed = 0
+    # Despot truth: DATA_DIR is env-controlled; refuse to nuke outside cwd
+    # (was: LANCIUS_DATA_DIR=/ wiped arbitrary trees).
+    cwd = os.path.realpath(os.getcwd())
     for target in CLEANUP_TARGETS:
+        real = os.path.realpath(target)
+        if real != cwd and not real.startswith(cwd + os.sep):
+            print(f"  SKIP (outside cwd): {target}")
+            continue
         if os.path.exists(target):
-            if os.path.isdir(target):
+            if os.path.isdir(target) and not os.path.islink(target):
                 size = sum(os.path.getsize(os.path.join(dp, f)) for dp, dn, fn in os.walk(target) for f in fn)
                 shutil.rmtree(target)
                 freed += size
                 print(f"  🗑️  Deleted directory: {target}")
-            else:
+            elif os.path.isfile(target):
                 size = os.path.getsize(target)
                 os.remove(target)
                 freed += size
@@ -113,6 +120,29 @@ def clean_datasets():
 
     print(f"\n✅ Cleanup complete. Freed ~{freed / (1024*1024):.2f} MB.")
     print("💡 Note: Your trained .lancius, .onnx, and .gguf models are SAFE and untouched.")
+
+
+def _safe_members_tar(tar):
+    """Despot truth: tar.extractall is tar-slip (was: malicious member wrote
+    outside cwd on MITM/mirror)."""
+    for m in tar.getmembers():
+        if m.name.startswith('/') or '..' in m.name.split('/'):
+            raise ValueError(f"refusing unsafe tar member: {m.name!r}")
+        if m.issym() or m.islnk():
+            raise ValueError(f"refusing tar link: {m.name!r}")
+    return tar.getmembers()
+
+
+def _safe_extract_zip(z, dest_dir):
+    """Despot truth: ZipFile.extractall is zip-slip (was: unsanitized)."""
+    base = os.path.realpath(dest_dir)
+    for name in z.namelist():
+        if name.startswith('/') or '..' in name.split('/'):
+            raise ValueError(f"refusing unsafe zip member: {name!r}")
+        target = os.path.realpath(os.path.join(dest_dir, name))
+        if target != base and not target.startswith(base + os.sep):
+            raise ValueError(f"refusing zip escape: {name!r}")
+    z.extractall(dest_dir)
 
 
 def download_mnist():
@@ -124,16 +154,30 @@ def download_mnist():
         "t10k-images-idx3-ubyte.gz",
         "t10k-labels-idx1-ubyte.gz"
     ]
-    for f in files:
-        out_name = f.replace(".gz", "")
-        if not os.path.exists(out_name):
-            print(f"  Fetching {f}...")
-            urllib.request.urlretrieve(base_url + f, f)
-            with gzip.open(f, 'rb') as f_in:
-                with open(out_name, 'wb') as f_out:
-                    shutil.copyfileobj(f_in, f_out)
-            os.remove(f)
+    # Despot truth: bare urlretrieve/gzip with no try (was: traceback on
+    # network failure, partial files left behind).
+    try:
+        for f in files:
+            out_name = f.replace(".gz", "")
+            if not os.path.exists(out_name):
+                print(f"  Fetching {f}...")
+                urllib.request.urlretrieve(base_url + f, f)
+                with gzip.open(f, 'rb') as f_in:
+                    with open(out_name, 'wb') as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+                os.remove(f)
+    except Exception as e:
+        print(f"  !! MNIST download failed: {e}")
+        for f in files:
+            for p in (f, f.replace(".gz", "")):
+                try:
+                    if os.path.exists(p) and os.path.getsize(p) == 0:
+                        os.remove(p)
+                except OSError:
+                    pass
+        return False
     print("✅ MNIST ready.")
+    return True
 
 
 def download_cifar10():
@@ -141,12 +185,22 @@ def download_cifar10():
     url = "https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz"
     tar_name = "cifar-10-binary.tar.gz"
     if not os.path.exists("cifar-10-batches-bin/data_batch_1.bin"):
-        print(f"  Fetching {tar_name}...")
-        urllib.request.urlretrieve(url, tar_name)
-        with tarfile.open(tar_name, "r:gz") as tar:
-            tar.extractall()
-        os.remove(tar_name)
+        try:
+            print(f"  Fetching {tar_name}...")
+            urllib.request.urlretrieve(url, tar_name)
+            with tarfile.open(tar_name, "r:gz") as tar:
+                tar.extractall(members=_safe_members_tar(tar))
+            os.remove(tar_name)
+        except Exception as e:
+            print(f"  !! CIFAR-10 download failed: {e}")
+            try:
+                if os.path.exists(tar_name):
+                    os.remove(tar_name)
+            except OSError:
+                pass
+            return False
     print("✅ CIFAR-10 ready.")
+    return True
 
 
 # ---------------------------------------------------------------- math sets
@@ -241,7 +295,7 @@ def download_minif2f():
         if _fetch("https://github.com/openai/miniF2F/archive/refs/heads/v1.zip",
                   zip_path, optional=True):
             with zipfile.ZipFile(zip_path) as z:
-                z.extractall(DATA_DIR)
+                _safe_extract_zip(z, DATA_DIR)
             # Normalize top-level dir name
             for name in os.listdir(DATA_DIR):
                 full = os.path.join(DATA_DIR, name)
@@ -296,23 +350,42 @@ def download_proofwriter(sample_depths=("d3", "d5"), max_files=4):
         return False
 
 
+def _safe_dest(sub):
+    """Despot truth: DATA_DIR is env-controlled; resolve dest and refuse
+    escapes (was: unquoted os.system + rmtree targets from env)."""
+    base = os.path.realpath(DATA_DIR)
+    dest = os.path.realpath(os.path.join(DATA_DIR, sub))
+    if dest != base and not dest.startswith(base + os.sep):
+        raise ValueError(f"refusing path escape: {sub!r} -> {dest!r}")
+    return dest
+
+
 def download_ruletaker():
     """RuleTaker: clone AllenAI's theory generator (synthetic logic)."""
     print("📥 Fetching RuleTaker generator (synthetic NL theories)...")
     os.makedirs(DATA_DIR, exist_ok=True)
-    dest = os.path.join(DATA_DIR, "ruletaker-gen")
+    dest = _safe_dest("ruletaker-gen")
     if os.path.isdir(dest):
         print(f"  SKIP (exists): {dest}")
         return True
     if not shutil.which("git"):
         print("  !! git not found. Manual: git clone https://github.com/allenai/ruletaker")
         return False
-    rc = os.system(f"git clone --depth 1 https://github.com/allenai/ruletaker {dest}")
-    if rc == 0:
+    # Despot truth: unquoted os.system with env-controlled dest was command
+    # injection (LANCIUS_DATA_DIR='x;rm -rf ~'). No shell.
+    import subprocess
+    try:
+        r = subprocess.run(["git", "clone", "--depth", "1",
+                            "https://github.com/allenai/ruletaker", dest],
+                           capture_output=True, text=True, timeout=300)
+    except Exception as e:
+        print(f"  !! Clone failed: {e}")
+        return False
+    if r.returncode == 0:
         print("✅ RuleTaker generator ready. Generate theories per repo README")
         print("   (needs problog: pip install problog).")
         return True
-    print("  !! Clone failed.")
+    print(f"  !! Clone failed: {r.stderr.strip()[:200]}")
     return False
 
 
