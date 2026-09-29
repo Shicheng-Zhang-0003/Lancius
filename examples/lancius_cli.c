@@ -607,9 +607,10 @@ static int cmd_datasets(int argc, char **argv) {
             return 1;
         }
         {
-            char cmd[512];
-            snprintf(cmd, sizeof(cmd), "python3 manage_datasets.py download %s", argv[1]);
-            return run_shell(cmd);
+            char *xa[5];
+            xa[0] = "python3"; xa[1] = "manage_datasets.py";
+            xa[2] = "download"; xa[3] = argv[1]; xa[4] = NULL;
+            return run_argv(xa[0], xa);
         }
     }
     if (strcmp(argv[0], "distill") == 0) {
