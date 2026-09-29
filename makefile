@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -g -Werror -O3 -mavx2 -mfma -fopenmp -std=c11 -I./include -fPIC
+CFLAGS = -Wall -Wextra -g -Werror -O3 -mavx2 -mfma -fopenmp -std=c11 -I./include -fPIC -MMD -MP
 LDFLAGS = -lm
 SRCS = src/core/lancius_arena.c \
        src/core/lancius_serialize.c \
@@ -21,6 +21,7 @@ src/core/lancius_validate.c \
 src/compiler/lancius_quantize.c
 
 OBJS = $(SRCS:.c=.o)
+-include $(OBJS:.o=.d)
 all: liblancius.a lancius audit_internals stress_test test_torture generate_text run_llm train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_despot_probe train_verifier_head distill_prm800k
 lancius: examples/lancius_cli.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
@@ -43,7 +44,7 @@ clean:
 	rm -f audit_despot_probe train_verifier_head distill_prm800k lancius
 .PHONY: all clean check check-long check-sanitizers
 train_cifar10: examples/train_cifar10.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp
+	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 fuzz_lancius: examples/fuzz_lancius.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp
 test_path_bg: examples/test_path_bg.c liblancius.a
