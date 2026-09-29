@@ -14,6 +14,7 @@ for opset in model.opset_import:
     if opset.domain == '' or opset.domain == 'ai.onnx':
         opset.version = 17
 
-onnx.save(model, model_path)
-print(f"✅ Successfully patched {model_path} to Opset 17.")
+patched_path = model_path.replace(".onnx", "_patched.onnx")
+onnx.save(model, patched_path)
+print(f"✅ Successfully patched {patched_path} to Opset 17 (original {model_path} unchanged).")
 print("👉 Now run: python3 audit_pytorch_parity.py")

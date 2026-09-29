@@ -6,7 +6,7 @@ import numpy as np
 
 def main():
     print("================================================================")
-    print("  LANCIUS v10S: PYTORCH / ONNX RUNTIME PARITY AUDIT           ")
+    print("  LANCIUS v12R1: PYTORCH / ONNX RUNTIME PARITY AUDIT          ")
     print("================================================================\n")
 
     # Check dependencies
@@ -49,7 +49,10 @@ def main():
         "-I./include", "-o", "parity_runner",
         "examples/parity_runner.c", "liblancius.a", "-lm", "-lpthread"
     ]
-    subprocess.run(compile_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    result = subprocess.run(compile_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"❌ FATAL: Compilation failed:\n{result.stderr}")
+        sys.exit(1)
     subprocess.run(["./parity_runner"], check=True)
 
     # 5. Differential Comparison

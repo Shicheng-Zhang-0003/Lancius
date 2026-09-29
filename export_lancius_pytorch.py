@@ -194,7 +194,7 @@ def emit_module(parsed):
     lines_fwd.append(f"        return {T(out_node['id'])}")
     meta = (f"\n# LanciusMeta: nodes={len(nodes)} primary_input=t{primary['id']}{lancius_shape(primary)} "
             f"output=t{out_node['id']}{lancius_shape(out_node)}\n")
-    src = HEADER + "\n".join("        # params" if False else l for l in lines_init) + "\n\n" + "\n".join(lines_fwd) + "\n" + meta
+    src = HEADER + "\n".join(lines_init) + "\n\n" + "\n".join(lines_fwd) + "\n" + meta
     # fix init block when no params
     if not lines_init:
         src = src.replace("    def __init__(self):\n        super().__init__()\n\n",

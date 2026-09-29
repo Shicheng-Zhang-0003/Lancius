@@ -199,7 +199,6 @@ def convert(onnx_path, lancius_path):
                     out_shape = get_shape(vi.type.tensor_type)
                     break
 
-        print(f"  [DEBUG PY] Node: {node.op_type} | Inputs: {list(node.input)} | Out: {node.output[0]} | Shape: {out_shape}")
         meta = [0, 0, 0, 0]
         if node.op_type == 'Conv':
             for attr in node.attribute:
@@ -314,7 +313,10 @@ def convert(onnx_path, lancius_path):
                 if nn['weights']:
                     # Despot truth: raw reshape raised context-free ValueError.
                     try:
-                        data = np.frombuffer(w_node['weights'], dtype=np.float64).reshape(orig_shape[0], orig_shape[1])
+                        _dt = {0: np.float64, 1: np.int8, 2: np.float32, 3: np.int32}.get(w_node['dtype'])
+                        if _dt is None:
+                            raise ValueError(f"Gemm '{node.output[0]}' weight '{w_name}' has unsupported dtype {w_node['dtype']}.")
+                        data = np.frombuffer(w_node['weights'], dtype=_dt).reshape(orig_shape[0], orig_shape[1])
                     except ValueError as e:
                         raise ValueError(f"Gemm '{node.output[0]}' weight '{w_name}' bytes {len(w_node['weights'])} mismatch shape [{orig_shape[0]},{orig_shape[1]}]; refusing emit.") from e
                     nn['weights'] = np.ascontiguousarray(data.T).tobytes()

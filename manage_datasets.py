@@ -78,7 +78,7 @@ def _fetch(url, dest, optional=False):
         return True
     print(f"  Fetching {url} ...")
     try:
-        urllib.request.urlretrieve(url, dest)
+        urllib.request.urlretrieve(url, dest, timeout=60)
         print(f"  Saved: {dest} ({os.path.getsize(dest)} bytes)")
         return True
     except urllib.error.HTTPError as e:
@@ -161,7 +161,7 @@ def download_mnist():
             out_name = f.replace(".gz", "")
             if not os.path.exists(out_name):
                 print(f"  Fetching {f}...")
-                urllib.request.urlretrieve(base_url + f, f)
+                urllib.request.urlretrieve(base_url + f, f, timeout=60)
                 with gzip.open(f, 'rb') as f_in:
                     with open(out_name, 'wb') as f_out:
                         shutil.copyfileobj(f_in, f_out)
@@ -187,7 +187,7 @@ def download_cifar10():
     if not os.path.exists("cifar-10-batches-bin/data_batch_1.bin"):
         try:
             print(f"  Fetching {tar_name}...")
-            urllib.request.urlretrieve(url, tar_name)
+            urllib.request.urlretrieve(url, tar_name, timeout=60)
             with tarfile.open(tar_name, "r:gz") as tar:
                 tar.extractall(members=_safe_members_tar(tar))
             os.remove(tar_name)
@@ -339,7 +339,7 @@ def download_proofwriter(sample_depths=("d3", "d5"), max_files=4):
                 for i, row in enumerate(d):
                     if i >= 2000:
                         break
-                    f.write(json.dumps({k: str(v)[:2000] for k, v in row.items()}) + "\n")
+                    f.write(json.dumps({k: str(v) for k, v in row.items()}) + "\n")
             n += 1
             if n >= max_files:
                 break
