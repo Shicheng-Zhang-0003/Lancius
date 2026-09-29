@@ -9,7 +9,7 @@ import onnxruntime as ort
 
 def main():
     print("================================================================")
-    print("  LANCIUS v10S: TRAINED MODEL REALITY CHECK                   ")
+    print("  LANCIUS v12R1: TRAINED MODEL REALITY CHECK                  ")
     print("================================================================")
 
     if not os.path.exists("trained_lenet.onnx"):
@@ -36,11 +36,14 @@ def main():
 
     print("[4/4] Compiling and running Lancius C Engine on 100 images...")
     compile_cmd = [
-        "gcc", "-O3", "-march=native", "-fopenmp", "-std=c11",
+        "gcc", "-O3", "-mavx2", "-mfma", "-fopenmp", "-std=c11",
         "-I./include", "-o", "run_trained_batch",
         "examples/run_trained_batch.c", "liblancius.a", "-lm", "-lpthread"
     ]
-    subprocess.run(compile_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    result = subprocess.run(compile_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"FATAL: Compilation failed:\n{result.stderr}")
+        sys.exit(1)
     subprocess.run(["./run_trained_batch"], check=True)
 
     lancius_preds = np.fromfile("lancius_preds.bin", dtype=np.int32)
