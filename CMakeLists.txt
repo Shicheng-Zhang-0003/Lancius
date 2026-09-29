@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(Lancius VERSION 12.0.0 LANGUAGES C)
+project(Lancius VERSION 1.2.0 LANGUAGES C)
 
 set(LANCIUS_MILESTONE "v12R1")
 
@@ -8,13 +8,16 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Compiler Flags
-add_compile_options(-Wall -Wextra -O3)
+add_compile_options(-Wall -Wextra -Werror -O3)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64")
     add_compile_options(-mavx2 -mfma)
 endif()
 
 # Find OpenMP
 find_package(OpenMP REQUIRED)
+
+# Find Threads
+find_package(Threads REQUIRED)
 
 # Source Files
 file(GLOB_RECURSE LANCIUS_SRCS
