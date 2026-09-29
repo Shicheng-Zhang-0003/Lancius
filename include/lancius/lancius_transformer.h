@@ -18,6 +18,13 @@ extern "C" {
  *   - graph shapes remain static
  *   - active sequence length lives in the cache object
  *   - attention execution may consult the cache instead of mutated IR shapes
+ *
+ * SYNCHRONIZATION CONTRACT (v12R1):
+ *   The KV-cache is NOT thread-safe. Concurrent append/prefill/reset calls
+ *   from multiple threads race on seq_len and the k/v buffers. Callers
+ *   must serialize all cache access externally (e.g., a single generation
+ *   thread, or a mutex around every cache operation). The graph executor's
+ *   threadpool must never be allowed to touch a cache concurrently.
  */
 
 typedef struct lancius_kv_cache lancius_kv_cache;
