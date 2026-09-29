@@ -1,5 +1,39 @@
 # Lancius Changelog
 
+## hardening batch V4 (2026-09-28) — race conditions, memory safety, quantization, portability
+
+Comprehensive bug-fix campaign across autodiff, kernels, serialization, CLI,
+build system, and Python tooling. 26 defects fixed and re-proven by
+`make check`, `check-sanitizers`, and pytorch parity.
+
+- Autodiff: BROADCAST backward now correctly reduces over broadcast dimensions
+  (was passing grad_out unchanged); NULL checks on `fwd_n->inputs` throughout;
+  OOB reads on shape/axes arrays fixed (now pads to 4D); off-by-one in node
+  capacity check fixed.
+- Kernels: race condition in `kernel_conv2d_bwd_in` fixed (thread-local
+  accumulators); race condition in MaxPool2D backward fixed (thread-local
+  accumulators).
+- Memory: memory leaks in IR node allocation fixed; `abort()` removed from
+  library code (replaced with `lancius_set_error` returns); all `fprintf`/`printf`
+  in library code replaced with `lancius_set_error`.
+- Stable API: dangling `wrapper->sched` fixed; `set_owner` now updates
+  `int8_owner`.
+- Serialization: portability fixed (`uint64_t` sizing, byte swapping);
+  CRC32 table init race fixed (`call_once`); NOP IDs no longer mapped to NULL;
+  double-read for CRC eliminated (now computed during parsing).
+- Threadpool: `lancius_pool_wait` now accepts a timeout parameter.
+- Bytecode VM: overflow checks added.
+- Quantization: per-channel quantization support added; dequantization support
+  added.
+- CLI: command injection fixed (now uses `fork+execvp` instead of `system`).
+- Python scripts: security fixes, stale version references removed, error
+  handling improved.
+- Build system: version consistency enforced, `-Werror` added, Threads
+  dependency fixed; `train_cifar10` now links `-lpthread`; dependency tracking
+  improved; `.gitignore` updated with missing entries; `lancius.pc.in` version
+  fixed.
+- Code quality: magic numbers replaced with named constants throughout.
+
 ## despot audit V3 (2026-09-28) — every live bug found and implemented
 
 Four forensic sweeps, ~70 code-backed defects, all fixed and re-proven

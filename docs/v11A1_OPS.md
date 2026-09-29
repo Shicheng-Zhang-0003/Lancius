@@ -60,11 +60,11 @@ These ops must fail loudly at runtime:
 
 | Op | Status |
 |---|---|
-| Permute | implemented in Task 5 |
-| MatMulBatched | implemented in Task 5 |
-| Embedding | unsupported |
-| KVCacheRead | unsupported |
-| KVCacheWrite | unsupported |
+| Permute | implemented (v11A1 Task 5) |
+| MatMulBatched | implemented (v11A1 Task 5) |
+| Embedding | unsupported (reserved) |
+| KVCacheRead | unsupported (added in v11A2) |
+| KVCacheWrite | unsupported (added in v11A2) |
 
 ## Transformer honesty (Task 10)
 

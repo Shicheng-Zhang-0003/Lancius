@@ -53,6 +53,13 @@ defect fixed and re-proven by independent execution (see CHANGELOG):
   `u64→size_t` checked; ONNX dilation/group/pads/ceil rejected; trainers
   raw-abort + chance-gate; `test_ffi_error` honest; see
   `docs/DESPOT_TRUTH_V2.md` and `probe_v2` (`/tmp/opencode/lancius-despot-logs`)
+- Hardening batch V4 (2026-09-28): BROADCAST backward race-condition fixes
+  (thread-local accumulators in conv2d bwd_in + MaxPool2D bwd); autodiff
+  NULL checks + OOB fixes; IR memory leaks fixed; `abort()` removed from
+  library code; stable API dangling pointer fixed; serialization portability
+  (uint64_t, byte swapping, CRC32 call_once); threadpool timeout; VM overflow
+  checks; per-channel quant + dequant; CLI fork+execvp; Python security fixes;
+  build system hardening (-Werror, Threads, version consistency)
 
 ## Feature freeze
 
@@ -77,7 +84,10 @@ V2 fixes verified by `probe_v2` (SUM-3D, RESHAPE, SUM_AXIS, N-D fail-loud,
 attention NaN→NUMERICAL) + `test_grad_check` (`8.6e-10`, `5.8e-8`);
 V3 fixes verified by the same gate (no new gates needed: every finding was
 a hardening of an already-gated path) plus pytorch parity
-(`3.42e-07`, FP64 limits).
+(`3.42e-07`, FP64 limits);
+V4 fixes verified by the same gate plus new audits for race conditions,
+quantization (per-channel + dequant), serialization portability, and CLI
+security (fork+execvp).
 
 ## Operator status
 

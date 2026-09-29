@@ -63,25 +63,42 @@ with `NaN→NUMERICAL` (zero stays zeros for causal safety), tanh-approx GELU
 (documented, ~2e-3 vs erf), `LANCIUS_NORM_EPS=1e-5` norms, int64 INT8
 accumulation (`scale=1.0` for all-zero, not `1e-8`), and fail-loud autodiff
 (`broadcast_to_shape` for any 1..4-D scalar lift; `SUM/SUM_AXIS0/1/RESHAPE`
-VJPs exact; N-dim partial reduction fails loud instead of training as zero).
+VJPs exact; N-dim partial reduction fails loud instead of training as zero;
+BROADCAST backward correctly reduces over broadcast dimensions).
 Loaders enforce v2 CRC32 integrity (`checksum==0` rejected by default);
 corrupt shapes return errors, never silent values. ONNX strictly rejects
 dilations/groups/auto_pad/pads/ceil_mode instead of silent dense compute.
 Trainers abort on raw `NaN/>1000/<0` and exit 1 at ≤ chance accuracy.
+Per-channel quantization and dequantization are supported alongside
+per-tensor quantization.
 
-## Subsystem Contracts (despot V2)
+## Subsystem Contracts (despot V2 + hardening batch V4)
 
 - **Kernels:** pure pointers+dims, FP64-first, FP32 matmul with FP64 accum,
-  INT8 symmetric per-tensor, no hidden quantization.
+  INT8 symmetric per-tensor and per-channel, dequantization supported,
+  no hidden quantization. Thread-local accumulators in `kernel_conv2d_bwd_in`
+  and MaxPool2D backward eliminate race conditions.
 - **Scheduler:** strided N-dim broadcast, checked strides/offsets/bytes on
   every path (permute, batched-matmul, SUM, transpose, static executors).
   INT8 Add is row-bias only, else exact FP64 broadcast.
 - **Autodiff:** every forward op has an explicit VJP or fails loud;
   `accum_grad` returns `1/0`, sticky `SHAPE_MISMATCH` aborts the whole
-  training graph. See `docs/DESPOT_TRUTH_V2.md §3`.
+  training graph. BROADCAST backward correctly reduces over broadcast
+  dimensions. NULL checks on `fwd_n->inputs`; OOB reads on shape/axes arrays
+  fixed (pads to 4D). See `docs/DESPOT_TRUTH_V2.md §3`.
 - **Persistence:** v2 frozen, 48B header + 104B nodes, LE-only, CRC over
   `48..EOF`, sparse-ID bounds, O(1) duplicate detection, `u64→size_t`
-  narrowing checked, `BROADCAST` any 1..4-D.
+  narrowing checked, `BROADCAST` any 1..4-D. Serialization portability
+  fixed (`uint64_t`, byte swapping); CRC32 table init race fixed
+  (`call_once`); NOP IDs no longer mapped to NULL.
+- **Threadpool:** `lancius_pool_wait` timeout support; race conditions
+  eliminated via thread-local accumulators in backward kernels.
+- **Stable API:** opaque handles, widened error codes; dangling
+  `wrapper->sched` fixed; `set_owner` updates `int8_owner`.
+- **CLI:** user paths executed via `fork+execvp` (no shell injection).
+- **Quantization:** per-tensor and per-channel quantization; dequantization
+  support.
+- **Build:** `-Werror` enforced; version consistency; Threads dependency.
 - **Validation:** every audit in `make check` propagates failures; `probe_v2`
   pins SUM-3D, RESHAPE, SUM_AXIS, `broadcast_to_shape`, N-D partial fail-loud,
   attention NaN→NUMERICAL.

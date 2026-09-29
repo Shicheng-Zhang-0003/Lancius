@@ -1,6 +1,6 @@
 # Lancius Compatibility Manifest
 
-## v12R1 Milestone (development, 2026-09-21) + despot truth V2/V3 (2026-09-28)
+## v12R1 Milestone (development, 2026-09-21) + despot truth V2/V3 (2026-09-28) + hardening batch V4 (2026-09-28)
 
 v12R1 is the first development milestone of the v12 cycle, not a stable
 release. Public github tag: `V1.2RC1`. It inherits the v11S contract below, with the following additions:
@@ -36,6 +36,28 @@ release. Public github tag: `V1.2RC1`. It inherits the v11S contract below, with
   exits 1 on unexpected success.
 - No new operators, subsystems, training features, or format changes
   beyond additive `broadcast_to_shape` constructor (same `BROADCAST` opcode).
+
+Hardening batch V4 (2026-09-28) — 26 defects fixed:
+
+- Autodiff: BROADCAST backward correctly reduces over broadcast dimensions;
+  NULL checks on `fwd_n->inputs`; OOB reads on shape/axes arrays fixed (pads
+  to 4D); off-by-one in node capacity check fixed.
+- Kernels: race conditions in `kernel_conv2d_bwd_in` and MaxPool2D backward
+  fixed (thread-local accumulators).
+- Memory: IR node allocation leaks fixed; `abort()` removed from library code;
+  all `fprintf`/`printf` replaced with `lancius_set_error`.
+- Stable API: dangling `wrapper->sched` fixed; `set_owner` updates `int8_owner`.
+- Serialization: portability fixed (`uint64_t`, byte swapping); CRC32 table
+  init race fixed (`call_once`); NOP IDs no longer mapped to NULL; double-read
+  for CRC eliminated.
+- Threadpool: `lancius_pool_wait` timeout support added.
+- Bytecode VM: overflow checks added.
+- Quantization: per-channel quantization and dequantization support added.
+- CLI: command injection fixed (`fork+execvp`).
+- Python: security fixes, stale versions removed, error handling improved.
+- Build: version consistency, `-Werror`, Threads dependency; `train_cifar10`
+  links `-lpthread`; `.gitignore` updated; `lancius.pc.in` version fixed.
+- Code quality: magic numbers replaced with named constants.
 
 Internal headers and experimental paths (transformer builders, training
 loops, ONNX converter, quantizer) may change in v12R2 without notice.

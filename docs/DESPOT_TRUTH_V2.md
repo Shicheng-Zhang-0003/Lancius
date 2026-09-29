@@ -111,3 +111,40 @@ Behavioral deltas vs §1–§8:
 - Doc drift fixed as part of this batch: single-owner rule per file (see
   README § Documentation), stale v11A1 format/ops claims bannered,
   duplicate release note removed.
+
+## 10. Hardening batch V4 (2026-09-28) — race conditions, memory safety, quantization, portability
+
+Comprehensive bug-fix campaign: 26 defects fixed across autodiff, kernels,
+serialization, CLI, build system, and Python tooling. All re-proven by
+`make check`, `check-sanitizers`, and pytorch parity.
+
+Behavioral deltas vs §1–§9:
+
+- **Autodiff:** BROADCAST backward now correctly reduces over broadcast
+  dimensions (was passing `grad_out` unchanged). NULL checks on
+  `fwd_n->inputs` throughout. OOB reads on shape/axes arrays fixed (pads
+  to 4D). Off-by-one in node capacity check fixed.
+- **Kernels:** Race condition in `kernel_conv2d_bwd_in` fixed (thread-local
+  accumulators). Race condition in MaxPool2D backward fixed (thread-local
+  accumulators).
+- **Memory:** Memory leaks in IR node allocation fixed. `abort()` removed
+  from library code (replaced with `lancius_set_error` returns). All
+  `fprintf`/`printf` in library code replaced with `lancius_set_error`.
+- **Stable API:** Dangling `wrapper->sched` fixed. `set_owner` now updates
+  `int8_owner`.
+- **Serialization:** Portability fixed (`uint64_t` sizing, byte swapping).
+  CRC32 table init race fixed (`call_once`). NOP IDs no longer mapped to NULL.
+  Double-read for CRC eliminated (now computed during parsing).
+- **Threadpool:** `lancius_pool_wait` now accepts a timeout parameter.
+- **Bytecode VM:** Overflow checks added.
+- **Quantization:** Per-channel quantization support added. Dequantization
+  support added.
+- **CLI:** Command injection fixed (now uses `fork+execvp` instead of
+  `system`).
+- **Python scripts:** Security fixes, stale version references removed,
+  error handling improved.
+- **Build system:** Version consistency enforced, `-Werror` added, Threads
+  dependency fixed. `train_cifar10` now links `-lpthread`. Dependency
+  tracking improved. `.gitignore` updated with missing entries.
+  `lancius.pc.in` version fixed.
+- **Code quality:** Magic numbers replaced with named constants throughout.

@@ -23,7 +23,6 @@ The following areas are intentionally not considered stable:
 -   Dynamic shape execution
 -   Distributed execution
 -   Full training ecosystem
--   Advanced quantization workflows
 -   GGUF export pipeline
 
 ## Training Status
@@ -68,8 +67,9 @@ and do NOT abort.
     MaxPool with `pads!=0`/`dilations!=1`/`ceil_mode!=0`/`auto_pad` raises.
     MatMul is 2D-only (N-D batch would silently collapse — rejected by scope).
 -   Quantizer: 4D FP64 conv weights only; all-zero weights stay FP64.
-    INT8 Add is row-bias (`[1,N]+[R,N]`) only; other INT8 broadcasts fall
-    through to exact FP64 broadcast, never miscompute.
+    Per-tensor and per-channel quantization supported; dequantization
+    supported. INT8 Add is row-bias (`[1,N]+[R,N]`) only; other INT8
+    broadcasts fall through to exact FP64 broadcast, never miscompute.
 -   `lancius_read_output` (stable API): FP64 outputs only; FP32/INT8
     outputs report `UNSUPPORTED_OP`.
 -   v2 models always carry non-zero CRC32; files with `checksum == 0`
@@ -87,7 +87,8 @@ and do NOT abort.
     `RESHAPE` VJPs exact. N-dim partial broadcast reduction (e.g.
     `[2,1,4]` vs `[2,3,4]`) has no `SUM_AXIS_ND` op yet and **fails loud**
     (returns NULL) instead of training as zero. Transformer and
-    `MATMUL_BATCHED` backward fail loud. See `docs/DESPOT_TRUTH_V2.md`.
+    `MATMUL_BATCHED` backward fail loud. BROADCAST backward now correctly
+    reduces over broadcast dimensions. See `docs/DESPOT_TRUTH_V2.md`.
 -   GELU is tanh-approx (GPT-2/BERT variant, ~2e-3 vs erf-exact), not erf-exact.
 -   Norm eps pinned to `LANCIUS_NORM_EPS=1e-5`; not per-node tunable.
 -   Trainers exit 1 on raw `NaN/>1000/<0` and on accuracy ≤ chance (10%);

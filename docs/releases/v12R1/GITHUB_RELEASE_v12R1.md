@@ -109,6 +109,21 @@ cmake -B build && cmake --build build
 
 ---
 
+## Bug-Fix Campaign (pre-R2)
+
+A comprehensive bug-fix campaign closed **20 defect classes** across the
+codebase before R2 development began:
+
+- **Autodiff**: BROADCAST backward, race conditions in conv2d_bwd_in/maxpool2d_bwd, NULL checks, OOB reads on shape/axes, off-by-one in node capacity, dangling pointer in stable API
+- **Safety**: command injection in CLI, `abort()` removed from library code, memory leaks in IR, overflow checks in bytecode VM
+- **Correctness**: `fprintf`/`printf` → `lancius_set_error`, serialization portability, CRC32 race condition, NOP handling in serializer, threadpool timeout
+- **Quantization**: per-channel quantization, dequantization
+- **Build**: Python scripts, build system, Makefile
+
+All fixes validated by `make check`, `check-sanitizers`, and despot truth probes.
+
+---
+
 ## Full Changelog
 
 See `CHANGELOG.md` for the complete v12R1 changelog.
