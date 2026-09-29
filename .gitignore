@@ -41,8 +41,15 @@ distill_prm800k
 *.bin
 audit_known_answer
 audit_regression_13c
+test_model.lancius
+
+# Dataset directories
+data/
+data_text/
 
 # Repair harness droppings (dev tooling, never part of a release)
 repair/repair.log
 __pycache__/
 *.pyc
+*.d
+build/

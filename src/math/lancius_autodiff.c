@@ -2,7 +2,6 @@
 #include "lancius/lancius_validate.h"
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -174,12 +173,14 @@ lancius_training_graph* lancius_ir_autodiff(lancius_graph* fwd_g, lancius_node* 
         const lancius_node* in2 = (old->input_count > 2 && old->inputs && old->inputs[2]) ? fwd_to_full[old->inputs[2]->id] : NULL;
 
         switch(old->op) {
-            case LANCIUS_OP_INPUT:
+            case LANCIUS_OP_INPUT: {
 /* v12R1-204: handle 3D inputs so matmul_batched reconstructs correctly */
-if (old->ndim == 4) n = lancius_input_4d(tg->graph, old->shape[0], old->shape[1], old->shape[2], old->shape[3]);
-else if (old->ndim == 3) n = lancius_input_3d(tg->graph, old->shape[0], old->shape[1], old->shape[2]);
-else n = lancius_input(tg->graph, old->shape[0], old->shape[1]);
-/* Despot truth: clone kept only FP64 (quantized models silently dequantized). */
+/* Pad shape to 4D to avoid OOB reads when ndim < 4 */
+size_t s[4] = {1,1,1,1};
+for (uint8_t _i = 0; _i < old->ndim && _i < 4; _i++) s[_i] = old->shape[_i];
+if (old->ndim == 4) n = lancius_input_4d(tg->graph, s[0], s[1], s[2], s[3]);
+else if (old->ndim == 3) n = lancius_input_3d(tg->graph, s[0], s[1], s[2]);
+else n = lancius_input(tg->graph, s[0], s[1]);
 if(n) {
     n->runtime_data = old->runtime_data;
     n->runtime_data_int8 = old->runtime_data_int8;
@@ -189,8 +190,11 @@ if(n) {
     if (n->rt) { n->rt->int8_owner = old->rt ? old->rt->int8_owner : LANCIUS_MEMORY_EXTERNAL; n->rt->f32_owner = old->rt ? old->rt->f32_owner : LANCIUS_MEMORY_EXTERNAL; }
 }
 break;
+            }
             case LANCIUS_OP_CONST: {
-                if (old->ndim == 2) n = lancius_const(tg->graph, old->attr_val, old->shape[0], old->shape[1]);
+                size_t s[4] = {1,1,1,1};
+                for (uint8_t _i = 0; _i < old->ndim && _i < 4; _i++) s[_i] = old->shape[_i];
+                if (old->ndim == 2) n = lancius_const(tg->graph, old->attr_val, s[0], s[1]);
                 else if (old->ndim >= 1 && old->ndim <= 4) {
                     n = lancius_const_scalar(tg->graph, old->attr_val, old->ndim);
                     if (n) {
@@ -209,21 +213,34 @@ break;
             case LANCIUS_OP_SUM: n = lancius_sum(tg->graph, in0); break;
             case LANCIUS_OP_SUM_AXIS0: n = lancius_sum_axis0(tg->graph, in0); break;
             case LANCIUS_OP_SUM_AXIS1: n = lancius_sum_axis1(tg->graph, in0); break;
-            case LANCIUS_OP_BROADCAST:
-                if (old->ndim == 4) n = lancius_broadcast_4d(tg->graph, in0, old->shape[0], old->shape[1], old->shape[2], old->shape[3]);
-                else if (old->ndim == 2) n = lancius_broadcast(tg->graph, in0, old->shape[0], old->shape[1]);
-                else n = lancius_broadcast_to_shape(tg->graph, in0, old->shape, old->ndim);
+            case LANCIUS_OP_BROADCAST: {
+                size_t s[4] = {1,1,1,1};
+                for (uint8_t _i = 0; _i < old->ndim && _i < 4; _i++) s[_i] = old->shape[_i];
+                if (old->ndim == 4) n = lancius_broadcast_4d(tg->graph, in0, s[0], s[1], s[2], s[3]);
+                else if (old->ndim == 2) n = lancius_broadcast(tg->graph, in0, s[0], s[1]);
+                else n = lancius_broadcast_to_shape(tg->graph, in0, s, old->ndim);
                 break;
+            }
             case LANCIUS_OP_SOFTMAX: n = lancius_softmax(tg->graph, in0); break;
             case LANCIUS_OP_CROSS_ENTROPY: n = lancius_cross_entropy(tg->graph, in0, in1); break;
             case LANCIUS_OP_TANH: n = lancius_tanh(tg->graph, in0); break;
             case LANCIUS_OP_MSE: n = lancius_mse(tg->graph, in0, in1); break;
-            case LANCIUS_OP_PERMUTE: n = lancius_permute(tg->graph, in0, old->axes[0], old->axes[1], old->axes[2], old->axes[3]); break;
+            case LANCIUS_OP_PERMUTE: {
+                uint32_t axes[4] = {0,0,0,0};
+                for (uint8_t _i = 0; _i < old->ndim && _i < 4; _i++) axes[_i] = old->axes[_i];
+                n = lancius_permute(tg->graph, in0, axes[0], axes[1], axes[2], axes[3]);
+                break;
+            }
             case LANCIUS_OP_MATMUL_BATCHED: n = lancius_matmul_batched(tg->graph, in0, in1); break;
             case LANCIUS_OP_CONV2D: n = lancius_conv2d(tg->graph, in0, in1, old->stride, old->pad); break;
             case LANCIUS_OP_MAXPOOL2D: n = lancius_maxpool2d(tg->graph, in0, old->kernel_h, old->stride); break;
             case LANCIUS_OP_FLATTEN: n = lancius_flatten(tg->graph, in0); break;
-            case LANCIUS_OP_RESHAPE: n = lancius_reshape(tg->graph, in0, old->ndim, old->shape[0], old->shape[1], old->shape[2], old->shape[3]); break;
+            case LANCIUS_OP_RESHAPE: {
+                size_t s[4] = {1,1,1,1};
+                for (uint8_t _i = 0; _i < old->ndim && _i < 4; _i++) s[_i] = old->shape[_i];
+                n = lancius_reshape(tg->graph, in0, old->ndim, s[0], s[1], s[2], s[3]);
+                break;
+            }
             /* Despot truth: transformer forward ops clone exactly so fwd_to_full
              * stays complete; backward still fails loud (no wrong grads). */
             case LANCIUS_OP_LAYERNORM: n = lancius_layernorm(tg->graph, in0, in1, in2); break;
@@ -231,7 +248,12 @@ break;
             case LANCIUS_OP_GELU: n = lancius_gelu(tg->graph, in0); break;
             case LANCIUS_OP_SWIGLU: n = lancius_swiglu(tg->graph, in0, in1); break;
             case LANCIUS_OP_GQA: n = lancius_gqa(tg->graph, in0, in1, in2, old->kernel_h, old->kernel_w); break;
-            case LANCIUS_OP_ROPE: n = lancius_rope(tg->graph, in0, old->shape[0], old->shape[1], old->shape[2] / 2); break;
+            case LANCIUS_OP_ROPE: {
+                size_t s[4] = {1,1,1,1};
+                for (uint8_t _i = 0; _i < old->ndim && _i < 4; _i++) s[_i] = old->shape[_i];
+                n = lancius_rope(tg->graph, in0, s[0], s[1], s[2] / 2);
+                break;
+            }
             case LANCIUS_OP_ATTENTION: n = lancius_attention(tg->graph, in0, in1, in2); break;
             case LANCIUS_OP_NOP: n = NULL; break; // V9 Fix: Skip neutralized nodes
             /* Despot truth: _BWD nodes must never appear in the forward graph.
@@ -244,7 +266,7 @@ break;
             case LANCIUS_OP_CONV2D_BWD:
             case LANCIUS_OP_CONV2D_BWD_W:
             case LANCIUS_OP_MAXPOOL2D_BWD:
-                fprintf(stderr, "[AUTODIFF FATAL] Backward op %d in forward graph; refusing silent clone.\n", old->op);
+                lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
                 free(fwd_to_full);
                 free(tg->grad_nodes);
                 lancius_graph_destroy(tg->graph); free(tg);
@@ -254,7 +276,7 @@ break;
                 // Despot truth: rt attach checked (was NULL), output NOT aliased
                 // (was shared with fwd graph: UAF + cross-execution overwrite).
                 if (tg->graph->next_id == UINT32_MAX) {
-                    fprintf(stderr, "[AUTODIFF FATAL] node id space exhausted.\n");
+                    lancius_set_error(LANCIUS_ERROR_INTERNAL);
                     free(fwd_to_full);
                     free(tg->grad_nodes);
                     lancius_graph_destroy(tg->graph); free(tg);
@@ -265,7 +287,7 @@ break;
                     memset(n, 0, sizeof(lancius_node));
                     n->id = tg->graph->next_id++;
                     if (!lancius_node_attach_runtime(tg->graph, n)) {
-                        fprintf(stderr, "[AUTODIFF FATAL] fused-clone runtime attach failed.\n");
+                        lancius_set_error(LANCIUS_ERROR_INTERNAL);
                         free(fwd_to_full);
                         free(tg->grad_nodes);
                         lancius_graph_destroy(tg->graph); free(tg);
@@ -276,14 +298,17 @@ break;
                     n->input_count = 2;
                     n->inputs = (const lancius_node**)lancius_arena_alloc(tg->graph->arena, sizeof(lancius_node*) * 2, 8);
                     if (!n->inputs) {
-                        fprintf(stderr, "[AUTODIFF FATAL] fused-clone inputs alloc failed.\n");
+                        lancius_set_error(LANCIUS_ERROR_INTERNAL);
                         free(fwd_to_full);
                         free(tg->grad_nodes);
                         lancius_graph_destroy(tg->graph); free(tg);
                         return NULL;
                     }
                     n->inputs[0] = in0; n->inputs[1] = in1;
-                    n->shape[0] = old->shape[0]; n->shape[1] = old->shape[1]; n->shape[2] = old->shape[2]; n->shape[3] = old->shape[3];
+                    /* Pad shape to 4D to avoid OOB reads when ndim < 4 */
+                    size_t s[4] = {1,1,1,1};
+                    for (uint8_t _i = 0; _i < old->ndim && _i < 4; _i++) s[_i] = old->shape[_i];
+                    n->shape[0] = s[0]; n->shape[1] = s[1]; n->shape[2] = s[2]; n->shape[3] = s[3];
                     n->kernel_h = old->kernel_h; n->kernel_w = old->kernel_w; n->stride = old->stride; n->pad = old->pad;
                     n->dtype = LANCIUS_DTYPE_FP64;
                     n->scale = 1.0;
@@ -292,8 +317,8 @@ break;
                     // Track node in training graph
                     if (tg->graph->node_count >= tg->graph->node_cap) {
                         size_t new_cap = tg->graph->node_cap == 0 ? 1024 : (size_t)tg->graph->node_cap * 2;
-                        if (new_cap > (size_t)UINT32_MAX + 1) {
-                            fprintf(stderr, "[AUTODIFF FATAL] training graph node cap exhausted.\n");
+                        if (new_cap >= (size_t)UINT32_MAX + 1) {
+                            lancius_set_error(LANCIUS_ERROR_INTERNAL);
                             free(fwd_to_full);
                             free(tg->grad_nodes);
                             lancius_graph_destroy(tg->graph); free(tg);
@@ -301,7 +326,7 @@ break;
                         }
                         lancius_node** nn = (lancius_node**)realloc(tg->graph->nodes, sizeof(lancius_node*) * new_cap);
                         if (!nn) {
-                            fprintf(stderr, "[AUTODIFF FATAL] training graph track OOM.\n");
+                            lancius_set_error(LANCIUS_ERROR_OOM);
                             free(fwd_to_full);
                             free(tg->grad_nodes);
                             lancius_graph_destroy(tg->graph); free(tg);
@@ -316,7 +341,7 @@ break;
             default:
                 /* Despot truth: storing NULL and continuing builds a broken
                  * graph (was: silent). Fail loud. */
-                fprintf(stderr, "[AUTODIFF FATAL] Unhandled op %d\n", old->op);
+                lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
                 free(fwd_to_full);
                 free(tg->grad_nodes);
                 lancius_graph_destroy(tg->graph); free(tg);
@@ -327,8 +352,7 @@ break;
 
     /* Despot truth: foreign loss_node id OOB-read/wrote grad_map (was unchecked). */
     if (loss_node->id >= fwd_g->next_id) {
-        fprintf(stderr, "[AUTODIFF FATAL] loss node id %u outside forward graph (max %u).\n",
-            loss_node->id, fwd_g->next_id);
+        lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
         free(fwd_to_full); free(tg->grad_nodes);
         lancius_graph_destroy(tg->graph); free(tg);
         return NULL;
@@ -339,7 +363,7 @@ break;
             if (fwd_g->nodes[_i] == loss_node) { member = true; break; }
         }
         if (!member) {
-            fprintf(stderr, "[AUTODIFF FATAL] loss node is not a member of the forward graph.\n");
+            lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
             free(fwd_to_full); free(tg->grad_nodes);
             lancius_graph_destroy(tg->graph); free(tg);
             return NULL;
@@ -352,7 +376,7 @@ break;
     if (!grad_map[loss_node->id]) {
         /* Despot truth: NULL seed (OOM) made the whole loop skip and return
          * an empty grad graph as success (was unchecked). */
-        fprintf(stderr, "[AUTODIFF FATAL] gradient seed alloc failed.\n");
+        lancius_set_error(LANCIUS_ERROR_OOM);
         free(grad_map); free(fwd_to_full); free(tg->grad_nodes);
         lancius_graph_destroy(tg->graph); free(tg);
         return NULL;
@@ -364,6 +388,15 @@ break;
         if (!grad_out) continue;
         if (fwd_n->op == LANCIUS_OP_INPUT || fwd_n->op == LANCIUS_OP_CONST) continue;
         if (fwd_n->op == LANCIUS_OP_NOP) continue; // V9 Fix: Skip neutralized nodes
+
+        /* Despot truth: all backward ops below access fwd_n->inputs[N]->id.
+         * Validate inputs exist before dereferencing. */
+        if (!fwd_n->inputs) {
+            lancius_set_error(LANCIUS_ERROR_INTERNAL);
+            free(grad_map); free(fwd_to_full);
+            lancius_graph_destroy(tg->graph); free(tg);
+            return NULL;
+        }
 
         if (fwd_n->op == LANCIUS_OP_ADD) {
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, grad_out, fwd_to_full);
@@ -415,7 +448,7 @@ break;
         fwd_n->op == LANCIUS_OP_EMBEDDING
     ) {
             // v10S HONESTY: Fail loudly instead of passing mathematically incorrect gradients.
-            fprintf(stderr, "[AUTODIFF FATAL] Transformer backward pass is not implemented in v11A1.\n");
+            lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
             free(grad_map); free(fwd_to_full); 
             lancius_graph_destroy(tg->graph); free(tg); 
             return NULL;
@@ -446,7 +479,7 @@ break;
                     bcast = lancius_broadcast_to_shape(tg->graph, grad_out, full_input->shape, full_input->ndim);
                 }
                 if (!bcast) {
-                    fprintf(stderr, "[AUTODIFF FATAL] SUM grad broadcast to input shape failed.\n");
+                    lancius_set_error(LANCIUS_ERROR_INTERNAL);
                     free(grad_map); free(fwd_to_full);
                     lancius_graph_destroy(tg->graph); free(tg);
                     return NULL;
@@ -456,14 +489,81 @@ break;
                 accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, grad_out, fwd_to_full);
             }
         } else if (fwd_n->op == LANCIUS_OP_BROADCAST) {
-            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, grad_out, fwd_to_full);
+            /* Despot truth: BROADCAST backward must reduce grad_out over the
+             * broadcast dimensions. For y = broadcast(x, shape), dx = sum over
+             * dimensions where input_dim == 1 and output_dim > 1. */
+            if (!fwd_n->inputs || !fwd_n->inputs[0]) {
+                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
+            lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
+            if (!full_input) {
+                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
+            /* Pad input shape to 4D */
+            size_t in_shape[4] = {1,1,1,1};
+            for (uint8_t _i = 0; _i < full_input->ndim && _i < 4; _i++) in_shape[_i] = full_input->shape[_i];
+            /* Pad output shape to 4D */
+            size_t out_shape[4] = {1,1,1,1};
+            for (uint8_t _i = 0; _i < fwd_n->ndim && _i < 4; _i++) out_shape[_i] = fwd_n->shape[_i];
+            /* Reduce over dimensions where input_dim == 1 and output_dim > 1.
+             * Process from last dim to first to maintain axis indices.
+             * Track running shape since each reduction changes ndim. */
+            lancius_node* grad = grad_out;
+            size_t cur_shape[4] = {out_shape[0], out_shape[1], out_shape[2], out_shape[3]};
+            uint8_t cur_ndim = fwd_n->ndim;
+            for (int d = 3; d >= 0; d--) {
+                if (d < (int)fwd_n->ndim && in_shape[d] == 1 && out_shape[d] > 1) {
+                    if (d == 0) {
+                        grad = lancius_sum_axis0(tg->graph, grad);
+                        cur_shape[0] = 1;
+                        if (cur_ndim == 1) cur_ndim = 2;
+                    } else if (d == 1) {
+                        grad = lancius_sum_axis1(tg->graph, grad);
+                        cur_shape[1] = 1;
+                    } else {
+                        /* For dims 2,3: reshape to 2D, sum, reshape back */
+                        size_t pre = 1, post = 1;
+                        for (uint8_t _i = 0; _i < (uint8_t)d; _i++) pre *= cur_shape[_i];
+                        for (uint8_t _i = (uint8_t)(d+1); _i < 4; _i++) post *= cur_shape[_i];
+                        lancius_node* reshaped = lancius_reshape(tg->graph, grad, 2, pre, cur_shape[d] * post, 1, 1);
+                        if (!reshaped) {
+                            lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                            free(grad_map); free(fwd_to_full);
+                            lancius_graph_destroy(tg->graph); free(tg);
+                            return NULL;
+                        }
+                        lancius_node* summed = lancius_sum_axis1(tg->graph, reshaped);
+                        if (!summed) {
+                            lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                            free(grad_map); free(fwd_to_full);
+                            lancius_graph_destroy(tg->graph); free(tg);
+                            return NULL;
+                        }
+                        grad = lancius_reshape(tg->graph, summed, 4, cur_shape[0], cur_shape[1], cur_shape[2], cur_shape[3]);
+                        cur_shape[d] = 1;
+                    }
+                    if (!grad) {
+                        lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                        free(grad_map); free(fwd_to_full);
+                        lancius_graph_destroy(tg->graph); free(tg);
+                        return NULL;
+                    }
+                }
+            }
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, grad, fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_TRANSPOSE) {
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_transpose(tg->graph, grad_out), fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_MATMUL_BATCHED) {
             /* v12R1-203: correct batched-matmul backward needs a batched
                transpose that the IR does not provide. Fail loudly rather
                than emit mathematically wrong gradients. */
-            fprintf(stderr, "[AUTODIFF FATAL] MATMUL_BATCHED backward is not implemented.\n");
+            lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
             free(grad_map); free(fwd_to_full);
             lancius_graph_destroy(tg->graph); free(tg);
             return NULL;
@@ -471,7 +571,7 @@ break;
             /* Despot truth: corrupt axes[i]>=4 wrote past inv_axes (stack OOB). */
             uint32_t inv_axes[4] = {0,0,0,0};
             if (lancius_validate_permutation(fwd_n->axes, 4) != LANCIUS_ERROR_OK) {
-                fprintf(stderr, "[AUTODIFF FATAL] corrupt permute axes in forward graph.\n");
+                lancius_set_error(LANCIUS_ERROR_INVALID_PERMUTATION);
                 free(grad_map); free(fwd_to_full);
                 lancius_graph_destroy(tg->graph); free(tg);
                 return NULL;
@@ -480,7 +580,7 @@ break;
             {
                 lancius_node* pg = lancius_permute(tg->graph, grad_out, inv_axes[0], inv_axes[1], inv_axes[2], inv_axes[3]);
                 if (!pg || !accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, pg, fwd_to_full)) {
-                    fprintf(stderr, "[AUTODIFF FATAL] PERMUTE grad failed.\n");
+                    lancius_set_error(LANCIUS_ERROR_INTERNAL);
                     free(grad_map); free(fwd_to_full);
                     lancius_graph_destroy(tg->graph); free(tg);
                     return NULL;
@@ -499,8 +599,23 @@ break;
             lancius_node* T = fwd_to_full[fwd_n->inputs[1]->id];
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_mse_bwd(tg->graph, P, T, grad_out), fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_FLATTEN) {
+            if (!fwd_n->inputs || !fwd_n->inputs[0]) {
+                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
             lancius_node* A = fwd_to_full[fwd_n->inputs[0]->id];
-            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_reshape(tg->graph, grad_out, A->ndim, A->shape[0], A->shape[1], A->shape[2], A->shape[3]), fwd_to_full);
+            if (!A) {
+                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
+            /* Pad shape to 4D to avoid OOB reads */
+            size_t s[4] = {1,1,1,1};
+            for (uint8_t _i = 0; _i < A->ndim && _i < 4; _i++) s[_i] = A->shape[_i];
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_reshape(tg->graph, grad_out, A->ndim, s[0], s[1], s[2], s[3]), fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_MAXPOOL2D) {
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_maxpool2d_bwd(tg->graph, grad_out, fwd_to_full[fwd_n->inputs[0]->id], fwd_n->kernel_h, fwd_n->stride), fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_CONV2D) {
@@ -521,14 +636,14 @@ break;
              * Exact: d_input[r,c] = grad_out[0,c]. */
             lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
             if (!full_input || full_input->ndim != 2) {
-                fprintf(stderr, "[AUTODIFF FATAL] SUM_AXIS0 input not 2D.\n");
+                lancius_set_error(LANCIUS_ERROR_INVALID_RANK);
                 free(grad_map); free(fwd_to_full);
                 lancius_graph_destroy(tg->graph); free(tg);
                 return NULL;
             }
             lancius_node* b = lancius_broadcast(tg->graph, grad_out, full_input->shape[0], full_input->shape[1]);
             if (!b) {
-                fprintf(stderr, "[AUTODIFF FATAL] SUM_AXIS0 grad broadcast failed.\n");
+                lancius_set_error(LANCIUS_ERROR_INTERNAL);
                 free(grad_map); free(fwd_to_full);
                 lancius_graph_destroy(tg->graph); free(tg);
                 return NULL;
@@ -539,14 +654,14 @@ break;
              * Exact: d_input[r,c] = grad_out[r,0]. */
             lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
             if (!full_input || full_input->ndim != 2) {
-                fprintf(stderr, "[AUTODIFF FATAL] SUM_AXIS1 input not 2D.\n");
+                lancius_set_error(LANCIUS_ERROR_INVALID_RANK);
                 free(grad_map); free(fwd_to_full);
                 lancius_graph_destroy(tg->graph); free(tg);
                 return NULL;
             }
             lancius_node* b = lancius_broadcast(tg->graph, grad_out, full_input->shape[0], full_input->shape[1]);
             if (!b) {
-                fprintf(stderr, "[AUTODIFF FATAL] SUM_AXIS1 grad broadcast failed.\n");
+                lancius_set_error(LANCIUS_ERROR_INTERNAL);
                 free(grad_map); free(fwd_to_full);
                 lancius_graph_destroy(tg->graph); free(tg);
                 return NULL;
@@ -555,18 +670,26 @@ break;
         } else if (fwd_n->op == LANCIUS_OP_RESHAPE) {
             /* Despot truth: RESHAPE is a pure reorder; grad reshapes back to
              * input shape. Element counts already validated at build. */
-            lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
-            if (!full_input) {
-                fprintf(stderr, "[AUTODIFF FATAL] RESHAPE input missing.\n");
+            if (!fwd_n->inputs || !fwd_n->inputs[0]) {
+                lancius_set_error(LANCIUS_ERROR_INTERNAL);
                 free(grad_map); free(fwd_to_full);
                 lancius_graph_destroy(tg->graph); free(tg);
                 return NULL;
             }
+            lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
+            if (!full_input) {
+                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
+            /* Pad shape to 4D to avoid OOB reads */
+            size_t s[4] = {1,1,1,1};
+            for (uint8_t _i = 0; _i < full_input->ndim && _i < 4; _i++) s[_i] = full_input->shape[_i];
             lancius_node* rg = lancius_reshape(tg->graph, grad_out, full_input->ndim,
-                full_input->shape[0], full_input->shape[1],
-                full_input->shape[2], full_input->shape[3]);
+                s[0], s[1], s[2], s[3]);
             if (!rg) {
-                fprintf(stderr, "[AUTODIFF FATAL] RESHAPE grad reshape failed.\n");
+                lancius_set_error(LANCIUS_ERROR_INTERNAL);
                 free(grad_map); free(fwd_to_full);
                 lancius_graph_destroy(tg->graph); free(tg);
                 return NULL;
@@ -575,8 +698,7 @@ break;
         } else {
             /* Despot truth: every forward op reaching backward must have an
              * explicit VJP above. Silent drop is a mathematical lie. */
-            fprintf(stderr, "[AUTODIFF FATAL] No VJP for forward op %d (node %u); refusing silent drop.\n",
-                (int)fwd_n->op, fwd_n->id);
+            lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
             free(grad_map); free(fwd_to_full);
             lancius_graph_destroy(tg->graph); free(tg);
             return NULL;
@@ -584,8 +706,7 @@ break;
         /* Despot truth: any sticky shape error from accum_grad or builders
          * aborts the whole training graph. A NULL grad must never train as zero. */
         if (lancius_get_error() != LANCIUS_ERROR_OK) {
-            fprintf(stderr, "[AUTODIFF FATAL] Gradient construction failed for op %d (node %u); refusing partial graph.\n",
-                (int)fwd_n->op, fwd_n->id);
+            lancius_set_error(LANCIUS_ERROR_INTERNAL);
             free(grad_map); free(fwd_to_full);
             lancius_graph_destroy(tg->graph); free(tg);
             return NULL;

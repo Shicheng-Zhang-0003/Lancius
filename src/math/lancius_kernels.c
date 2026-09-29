@@ -99,28 +99,40 @@ void kernel_conv2d_bwd_in(double* out, const double* grad, const double* w,
         if (N * C_in * H_in * W_in > SIZE_MAX / sizeof(double)) return;
     }
     memset(out, 0, N*C_in*H_in*W_in*sizeof(double));
-    #pragma omp parallel for schedule(static)
-    for(size_t ni=0; ni<N; ni++) {
-        for(size_t co=0; co<C_out; co++) {
-            for(size_t ho=0; ho<H_out; ho++) {
-                for(size_t wo=0; wo<W_out; wo++) {
-                    size_t grad_idx = ni*(C_out*H_out*W_out) + co*(H_out*W_out) + ho*W_out + wo;
-                    double g = grad[grad_idx];
-                    for(size_t ci=0; ci<C_in; ci++) {
-                        for(size_t kh=0; kh<K_h; kh++) {
-                            for(size_t kw=0; kw<K_w; kw++) {
-                                int64_t ih = (int64_t)ho * (int64_t)stride - (int64_t)pad + (int64_t)kh;
-                                int64_t iw = (int64_t)wo * (int64_t)stride - (int64_t)pad + (int64_t)kw;
-                                if(ih >= 0 && (uint64_t)ih < (uint64_t)H_in && iw >= 0 && (uint64_t)iw < (uint64_t)W_in) {
-                                    size_t in_idx = ni*(C_in*H_in*W_in) + ci*(H_in*W_in) + ((size_t)ih)*W_in + ((size_t)iw);
-                                    size_t w_idx = co*(C_in*K_h*K_w) + ci*(K_h*K_w) + kh*K_w + kw;
-                                    out[in_idx] += g * w[w_idx];
+    #pragma omp parallel
+    {
+        double* local_in = (double*)calloc(N*C_in*H_in*W_in, sizeof(double));
+        if (!local_in) { lancius_set_error(LANCIUS_ERROR_OOM); }
+        else {
+            #pragma omp for collapse(2) schedule(static)
+            for(size_t ni=0; ni<N; ni++) {
+                for(size_t co=0; co<C_out; co++) {
+                    for(size_t ho=0; ho<H_out; ho++) {
+                        for(size_t wo=0; wo<W_out; wo++) {
+                            size_t grad_idx = ni*(C_out*H_out*W_out) + co*(H_out*W_out) + ho*W_out + wo;
+                            double g = grad[grad_idx];
+                            for(size_t ci=0; ci<C_in; ci++) {
+                                for(size_t kh=0; kh<K_h; kh++) {
+                                    for(size_t kw=0; kw<K_w; kw++) {
+                                        int64_t ih = (int64_t)ho * (int64_t)stride - (int64_t)pad + (int64_t)kh;
+                                        int64_t iw = (int64_t)wo * (int64_t)stride - (int64_t)pad + (int64_t)kw;
+                                        if(ih >= 0 && (uint64_t)ih < (uint64_t)H_in && iw >= 0 && (uint64_t)iw < (uint64_t)W_in) {
+                                            size_t in_idx = ni*(C_in*H_in*W_in) + ci*(H_in*W_in) + ((size_t)ih)*W_in + ((size_t)iw);
+                                            size_t w_idx = co*(C_in*K_h*K_w) + ci*(K_h*K_w) + kh*K_w + kw;
+                                            local_in[in_idx] += g * w[w_idx];
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+            #pragma omp critical
+            {
+                for(size_t i=0; i<N*C_in*H_in*W_in; i++) out[i] += local_in[i];
+            }
+            free(local_in);
         }
     }
 }
@@ -626,6 +638,8 @@ void kernel_matmul_f32(float* out, const float* a, const float* b, size_t M, siz
     if (!out || !a || !b) return;
     if (M == 0 || K == 0 || N == 0) return;
     if (M > SIZE_MAX / N) return;
+    if (M > SIZE_MAX / K) return;
+    if (K > SIZE_MAX / N) return;
     if (M * N > SIZE_MAX / sizeof(float)) return;
     memset(out, 0, M * N * sizeof(float));
 #pragma omp parallel for collapse(2) schedule(static)
