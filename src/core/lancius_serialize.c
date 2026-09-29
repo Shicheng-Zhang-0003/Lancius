@@ -17,6 +17,46 @@ lancius_graph* lancius_graph_load_v2(const char* path);
 #define CHECKED_WRITE(ptr, size, nmemb, stream) \
     do { if (fwrite(ptr, size, nmemb, stream) != (size_t)(nmemb)) goto wfail; } while(0)
 
+/*
+ * v12R1 fix: the v1 on-disk format is fixed-width little-endian.
+ * size_t fields are serialized as uint64_t (portable across 32/64-bit
+ * hosts), and every multi-byte field is byte-swapped on big-endian systems
+ * so files load identically on either endianness.
+ */
+static int ser_is_little_endian(void) {
+    uint16_t x = 1;
+    return *(const uint8_t*)&x == 1;
+}
+
+static uint32_t ser_bswap32(uint32_t v) {
+    return ((v & 0xFF000000u) >> 24) |
+           ((v & 0x00FF0000u) >> 8) |
+           ((v & 0x0000FF00u) << 8) |
+           ((v & 0x000000FFu) << 24);
+}
+
+static uint64_t ser_bswap64(uint64_t v) {
+    return ((uint64_t)ser_bswap32((uint32_t)(v & 0xFFFFFFFFu)) << 32) |
+           (uint64_t)ser_bswap32((uint32_t)(v >> 32));
+}
+
+static double ser_bswap_double(double d) {
+    uint64_t u;
+    memcpy(&u, &d, sizeof(u));
+    u = ser_bswap64(u);
+    double r;
+    memcpy(&r, &u, sizeof(r));
+    return r;
+}
+
+/* Host -> disk (little-endian) and disk -> host conversions. */
+static uint32_t ser_to_le32(uint32_t v) { return ser_is_little_endian() ? v : ser_bswap32(v); }
+static uint64_t ser_to_le64(uint64_t v) { return ser_is_little_endian() ? v : ser_bswap64(v); }
+static double ser_to_le_double(double v) { return ser_is_little_endian() ? v : ser_bswap_double(v); }
+static uint32_t ser_from_le32(uint32_t v) { return ser_to_le32(v); }
+static uint64_t ser_from_le64(uint64_t v) { return ser_to_le64(v); }
+static double ser_from_le_double(double v) { return ser_to_le_double(v); }
+
 int lancius_graph_save(lancius_graph* g, const char* path) {
     if (lancius_graph_save_v2(g, path) == 0) return 0;
 
@@ -26,9 +66,10 @@ int lancius_graph_save(lancius_graph* g, const char* path) {
     if (!g || !path || !g->nodes) return -1;
     FILE* f = fopen(path, "wb");
     if (!f) return -1;
-    uint32_t magic = LANCIUS_MAGIC;
+    uint32_t magic = ser_to_le32(LANCIUS_MAGIC);
     CHECKED_WRITE(&magic, sizeof(uint32_t), 1, f);
-    CHECKED_WRITE(&g->node_count, sizeof(uint32_t), 1, f);
+    uint32_t node_count_le = ser_to_le32(g->node_count);
+    CHECKED_WRITE(&node_count_le, sizeof(uint32_t), 1, f);
 
     for (uint32_t i = 0; i < g->node_count; i++) {
         lancius_node* n = g->nodes[i];
@@ -39,28 +80,43 @@ int lancius_graph_save(lancius_graph* g, const char* path) {
         uint8_t dtype;
         if (!n) goto wfail;
         lancius_runtime_sync_from_legacy(n); /* A1 */
-        CHECKED_WRITE(&n->id, sizeof(uint32_t), 1, f);
-        CHECKED_WRITE(&n->op, sizeof(lancius_opcode), 1, f);
+        uint32_t id_le = ser_to_le32(n->id);
+        CHECKED_WRITE(&id_le, sizeof(uint32_t), 1, f);
+        uint32_t op_le = ser_to_le32((uint32_t)n->op);
+        CHECKED_WRITE(&op_le, sizeof(uint32_t), 1, f);
         CHECKED_WRITE(&n->ndim, sizeof(uint8_t), 1, f);
-        CHECKED_WRITE(n->shape, sizeof(size_t), 4, f);
+        /* v12R1 fix: shape serialized as fixed-width uint64_t (was native size_t). */
+        uint64_t shape_le[4];
+        for (int s = 0; s < 4; s++) shape_le[s] = ser_to_le64((uint64_t)n->shape[s]);
+        CHECKED_WRITE(shape_le, sizeof(uint64_t), 4, f);
         if (n->input_count > 16) goto wfail;
         if (n->input_count > 0 && !n->inputs) goto wfail;
-        CHECKED_WRITE(&n->input_count, sizeof(uint32_t), 1, f);
+        uint32_t input_count_le = ser_to_le32(n->input_count);
+        CHECKED_WRITE(&input_count_le, sizeof(uint32_t), 1, f);
         for(uint32_t j=0; j<n->input_count; j++) {
             if (!n->inputs[j]) goto wfail;
-            CHECKED_WRITE(&n->inputs[j]->id, sizeof(uint32_t), 1, f);
+            uint32_t in_id_le = ser_to_le32(n->inputs[j]->id);
+            CHECKED_WRITE(&in_id_le, sizeof(uint32_t), 1, f);
         }
-        CHECKED_WRITE(&n->attr_val, sizeof(double), 1, f);
-        meta[0] = n->kernel_h; meta[1] = n->kernel_w; meta[2] = n->stride; meta[3] = n->pad;
+        double attr_le = ser_to_le_double(n->attr_val);
+        CHECKED_WRITE(&attr_le, sizeof(double), 1, f);
+        meta[0] = ser_to_le32(n->kernel_h); meta[1] = ser_to_le32(n->kernel_w);
+        meta[2] = ser_to_le32(n->stride); meta[3] = ser_to_le32(n->pad);
         CHECKED_WRITE(meta, sizeof(uint32_t), 4, f);
-        CHECKED_WRITE(n->axes, sizeof(uint32_t), 4, f);
+        uint32_t axes_le[4];
+        for (int a = 0; a < 4; a++) axes_le[a] = ser_to_le32(n->axes[a]);
+        CHECKED_WRITE(axes_le, sizeof(uint32_t), 4, f);
         // V9.5: Write view flag (0 for non-views, maintains backward compat)
         is_view_flag = n->is_view ? 1 : 0;
         CHECKED_WRITE(&is_view_flag, sizeof(uint8_t), 1, f);
         if (is_view_flag) {
             uint32_t source_id = n->view_source ? n->view_source->id : UINT32_MAX;
-            CHECKED_WRITE(n->strides, sizeof(size_t), 4, f);
-            CHECKED_WRITE(&source_id, sizeof(uint32_t), 1, f);
+            /* v12R1 fix: strides serialized as fixed-width uint64_t (was native size_t). */
+            uint64_t strides_le[4];
+            for (int s = 0; s < 4; s++) strides_le[s] = ser_to_le64((uint64_t)n->strides[s]);
+            CHECKED_WRITE(strides_le, sizeof(uint64_t), 4, f);
+            uint32_t source_id_le = ser_to_le32(source_id);
+            CHECKED_WRITE(&source_id_le, sizeof(uint32_t), 1, f);
         }
 
         has_weights = (n->op == LANCIUS_OP_INPUT && (n->runtime_data != NULL || n->runtime_data_int8 != NULL)) ? 1 : 0;
@@ -73,13 +129,22 @@ int lancius_graph_save(lancius_graph* g, const char* path) {
             /* A3: clamp unknown dtypes to FP64 for serialization safety */
             if (!lancius_dtype_is_valid(dtype)) dtype = LANCIUS_DTYPE_FP64;
             CHECKED_WRITE(&dtype, sizeof(uint8_t), 1, f);
-            CHECKED_WRITE(&n->scale, sizeof(double), 1, f);
+            double scale_le = ser_to_le_double(n->scale);
+            CHECKED_WRITE(&scale_le, sizeof(double), 1, f);
             if (dtype == LANCIUS_DTYPE_INT8) {
                 if (!n->runtime_data_int8) goto wfail;
                 CHECKED_WRITE(n->runtime_data_int8, sizeof(int8_t), elems, f);
             } else {
                 if (!n->runtime_data) goto wfail;
-                CHECKED_WRITE(n->runtime_data, sizeof(double), elems, f);
+                if (ser_is_little_endian()) {
+                    CHECKED_WRITE(n->runtime_data, sizeof(double), elems, f);
+                } else {
+                    /* v12R1 fix: byte-swap FP64 payload on big-endian hosts. */
+                    for (size_t j = 0; j < elems; j++) {
+                        double sv = ser_bswap_double(n->runtime_data[j]);
+                        CHECKED_WRITE(&sv, sizeof(double), 1, f);
+                    }
+                }
             }
         }
     }
@@ -104,8 +169,10 @@ lancius_graph* lancius_graph_load(const char* path) {
     if (!f) return NULL;
     uint32_t magic, node_count;
     if (fread(&magic, sizeof(uint32_t), 1, f) != 1) { fclose(f); return NULL; }
+    magic = ser_from_le32(magic);
     if (magic != LANCIUS_MAGIC) { lancius_set_error(LANCIUS_ERROR_INVALID_MODEL); /* A4 magic */ fclose(f); return NULL; }
     if (fread(&node_count, sizeof(uint32_t), 1, f) != 1) { fclose(f); return NULL; }
+    node_count = ser_from_le32(node_count);
     if (node_count > 1000000) { lancius_set_error(LANCIUS_ERROR_INVALID_MODEL); /* A4 node_count */ fprintf(stderr, "[SERIAL FATAL] Node count exceeds sanity limit.\n"); fclose(f); return NULL; }
 
     lancius_graph* g = lancius_graph_create();
@@ -119,17 +186,27 @@ lancius_graph* lancius_graph_load(const char* path) {
         uint32_t id, op, input_count;
         uint8_t ndim;
         size_t shape[4];
+        uint64_t shape_u64[4];
 
         if (fread(&id, sizeof(uint32_t), 1, f) != 1) goto fail;
+        id = ser_from_le32(id);
         if (id >= map_size) goto fail;
 
-        if (fread(&op, sizeof(lancius_opcode), 1, f) != 1) goto fail;
+        if (fread(&op, sizeof(uint32_t), 1, f) != 1) goto fail;
+        op = ser_from_le32(op);
         if (op > LANCIUS_OP_MSE_BWD) goto fail;
         if (fread(&ndim, sizeof(uint8_t), 1, f) != 1) goto fail;
         if (ndim == 0 || ndim > 4) goto fail;
-        if (fread(shape, sizeof(size_t), 4, f) != 4) goto fail;
+        /* v12R1 fix: shape read as fixed-width uint64_t (was native size_t). */
+        if (fread(shape_u64, sizeof(uint64_t), 4, f) != 4) goto fail;
+        for (int s = 0; s < 4; s++) {
+            shape_u64[s] = ser_from_le64(shape_u64[s]);
+            if (shape_u64[s] > (uint64_t)SIZE_MAX) goto fail;
+            shape[s] = (size_t)shape_u64[s];
+        }
 
         if (fread(&input_count, sizeof(uint32_t), 1, f) != 1) goto fail;
+        input_count = ser_from_le32(input_count);
         if (input_count > 16) goto fail; // Hard limit: max 16 inputs per node
 
         uint32_t* in_ids = NULL;
@@ -141,6 +218,7 @@ lancius_graph* lancius_graph_load(const char* path) {
                 goto fail;
             }
             for (uint32_t j = 0; j < input_count; j++) {
+                in_ids[j] = ser_from_le32(in_ids[j]);
                 if (in_ids[j] >= map_size) {
                     free(in_ids);
                     goto fail;
@@ -150,19 +228,30 @@ lancius_graph* lancius_graph_load(const char* path) {
 
         double attr_val;
         if (fread(&attr_val, sizeof(double), 1, f) != 1) { free(in_ids); goto fail; }
+        attr_val = ser_from_le_double(attr_val);
 
         uint32_t meta[4], axes[4];
         if (fread(meta, sizeof(uint32_t), 4, f) != 4) { free(in_ids); goto fail; }
         if (fread(axes, sizeof(uint32_t), 4, f) != 4) { free(in_ids); goto fail; }
+        for (int m = 0; m < 4; m++) meta[m] = ser_from_le32(meta[m]);
+        for (int a = 0; a < 4; a++) axes[a] = ser_from_le32(axes[a]);
 
         uint8_t is_view = 0;
         if (fread(&is_view, sizeof(uint8_t), 1, f) != 1) { free(in_ids); goto fail; }
 
         size_t view_strides[4] = {0};
+        uint64_t view_strides_u64[4] = {0};
         uint32_t view_source_id = UINT32_MAX;
         if (is_view) {
-            if (fread(view_strides, sizeof(size_t), 4, f) != 4) { free(in_ids); goto fail; }
+            /* v12R1 fix: view strides read as fixed-width uint64_t (was native size_t). */
+            if (fread(view_strides_u64, sizeof(uint64_t), 4, f) != 4) { free(in_ids); goto fail; }
             if (fread(&view_source_id, sizeof(uint32_t), 1, f) != 1) { free(in_ids); goto fail; }
+            view_source_id = ser_from_le32(view_source_id);
+            for (int s = 0; s < 4; s++) {
+                view_strides_u64[s] = ser_from_le64(view_strides_u64[s]);
+                if (view_strides_u64[s] > (uint64_t)SIZE_MAX) { free(in_ids); goto fail; }
+                view_strides[s] = (size_t)view_strides_u64[s];
+            }
         }
 
         uint8_t has_weights;
@@ -267,6 +356,7 @@ lancius_graph* lancius_graph_load(const char* path) {
                 }
                 n->dtype = (lancius_dtype)dtype;
                 if (fread(&n->scale, sizeof(double), 1, f) != 1) { free(in_ids); goto fail; }
+                n->scale = ser_from_le_double(n->scale);
                 if (n->dtype == LANCIUS_DTYPE_INT8) {
                     n->runtime_data_int8 = (int8_t*)malloc(elems);
                     if (!n->runtime_data_int8) { free(in_ids); goto fail; }
@@ -276,6 +366,11 @@ lancius_graph* lancius_graph_load(const char* path) {
                     n->runtime_data = (double*)malloc(elems * sizeof(double));
                     if (!n->runtime_data) { free(in_ids); goto fail; }
                     if (fread(n->runtime_data, sizeof(double), elems, f) != elems) { free(in_ids); goto fail; }
+                    if (!ser_is_little_endian()) {
+                        /* v12R1 fix: byte-swap FP64 payload on big-endian hosts. */
+                        for (size_t j = 0; j < elems; j++)
+                            n->runtime_data[j] = ser_bswap_double(n->runtime_data[j]);
+                    }
                     lancius_node_bind_owned_heap(n, n->runtime_data); /* A2 */
                 }
             }

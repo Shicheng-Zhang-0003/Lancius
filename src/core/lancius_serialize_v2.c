@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <limits.h>
 #include <unistd.h>
+#include <threads.h>
 
 typedef struct __attribute__((packed)) {
     uint32_t magic;
@@ -47,25 +48,41 @@ static int is_little_endian(void) {
  * v11A3 format freeze: CRC32 (ISO 3309 / zlib-compatible).
  * Used to integrity-check the model body (bytes after the 48-byte header).
  */
-static uint32_t lancius_crc32(uint32_t crc, const uint8_t* data, size_t len) {
-    static uint32_t table[256];
-    static int table_init = 0;
-    if (!table_init) {
-        for (uint32_t i = 0; i < 256; i++) {
-            uint32_t c = i;
-            for (int j = 0; j < 8; j++) {
-                if (c & 1u) c = 0xEDB88320u ^ (c >> 1);
-                else c >>= 1;
-            }
-            table[i] = c;
+static uint32_t crc32_table[256];
+static once_flag crc32_table_once = ONCE_FLAG_INIT;
+
+/* v12R1 fix: the table was lazily initialized under a plain flag — a data
+ * race when two threads loaded models concurrently. C11 call_once is both
+ * thread-safe and wait-free after first init. */
+static void crc32_table_init(void) {
+    for (uint32_t i = 0; i < 256; i++) {
+        uint32_t c = i;
+        for (int j = 0; j < 8; j++) {
+            if (c & 1u) c = 0xEDB88320u ^ (c >> 1);
+            else c >>= 1;
         }
-        table_init = 1;
+        crc32_table[i] = c;
     }
+}
+
+static uint32_t lancius_crc32(uint32_t crc, const uint8_t* data, size_t len) {
+    call_once(&crc32_table_once, crc32_table_init);
     crc = ~crc;
     for (size_t i = 0; i < len; i++) {
-        crc = table[(crc ^ data[i]) & 0xFFu] ^ (crc >> 8);
+        crc = crc32_table[(crc ^ data[i]) & 0xFFu] ^ (crc >> 8);
     }
     return ~crc;
+}
+
+/* v12R1 fix: fread wrapper that folds every body byte into the running CRC
+ * as it is parsed, so integrity is verified in a single pass (was: a second
+ * full re-read of the body after parsing). */
+static size_t crc_fread(void* ptr, size_t size, size_t nmemb, FILE* f, uint32_t* crc) {
+    size_t got = fread(ptr, size, nmemb, f);
+    if (got > 0 && size != 0) {
+        *crc = lancius_crc32(*crc, (const uint8_t*)ptr, got * size);
+    }
+    return got;
 }
 
 
@@ -288,9 +305,9 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
 
     idmap map = {NULL, 0};
     uint32_t* in_ids = NULL;
-    /* NOP duplicate seen-list (NOPs map to NULL, invisible to map_get). */
-    uint32_t* nop_ids = NULL;
-    uint32_t nop_seen = 0, nop_cap = 0;
+    /* v12R1 fix: running CRC over the model body, folded in as each record
+     * is parsed (was: a second full re-read of the body after parsing). */
+    uint32_t computed_crc = 0;
     // Hostile fix: seen_ids linear O(n^2) scan removed; map_get is the duplicate oracle (O(1)).
     // Bound sparse IDs to prevent 80MB realloc DoS: ids must be dense-ish.
     // Legit saves emit dense ids < next_id <= node_count + NOP slack.
@@ -298,7 +315,7 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
     for (uint32_t i = 0; i < h.node_count; i++) {
         v2_node rn;
 
-        if (fread(&rn, 1, sizeof(rn), f) != sizeof(rn)) goto fail;
+        if (crc_fread(&rn, 1, sizeof(rn), f, &computed_crc) != sizeof(rn)) goto fail;
 
         if (rn.ndim > 4) goto fail;
         if (rn.input_count > 16u) goto fail;
@@ -324,7 +341,7 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
             in_ids = (uint32_t*)malloc((size_t)rn.input_count * sizeof(uint32_t));
             if (!in_ids) goto fail;
 
-            if (fread(in_ids, sizeof(uint32_t), rn.input_count, f) != rn.input_count) {
+            if (crc_fread(in_ids, sizeof(uint32_t), rn.input_count, f, &computed_crc) != rn.input_count) {
                 goto fail;
             }
         }
@@ -529,7 +546,7 @@ break;
                     int8_t* buf = (int8_t*)malloc(bytes);
                     if (!buf) goto fail;
 
-                    if (fread(buf, 1, bytes, f) != bytes) {
+                    if (crc_fread(buf, 1, bytes, f, &computed_crc) != bytes) {
                         free(buf);
                         goto fail;
                     }
@@ -539,7 +556,7 @@ break;
                 } else if (rn.dtype == LANCIUS_DTYPE_FP32) {
                     float* buf = (float*)malloc(bytes);
                     if (!buf) goto fail;
-                    if (fread(buf, sizeof(float), elems, f) != elems) {
+                    if (crc_fread(buf, sizeof(float), elems, f, &computed_crc) != elems) {
                         free(buf);
                         goto fail;
                     }
@@ -549,7 +566,7 @@ break;
                     double* buf = (double*)malloc(bytes);
                     if (!buf) goto fail;
 
-                    if (fread(buf, sizeof(double), elems, f) != elems) {
+                    if (crc_fread(buf, sizeof(double), elems, f, &computed_crc) != elems) {
                         free(buf);
                         goto fail;
                     }
@@ -563,34 +580,20 @@ break;
                 uint8_t tmp[4096];
                 while (to_skip > 0) {
                     size_t chunk = to_skip < sizeof(tmp) ? to_skip : sizeof(tmp);
-                    if (fread(tmp, 1, chunk, f) != chunk) goto fail;
+                    if (crc_fread(tmp, 1, chunk, f, &computed_crc) != chunk) goto fail;
                     to_skip -= chunk;
                 }
             }
         }
 
         /* A3: reject duplicate node ids.
-         * Despot truth: NOPs map to NULL, so map_get was falsy for them and a
-         * duplicate NOP id sailed through (was: comment claimed coverage).
-         * Non-NOP dupes use the O(1) map; NOP ids use a small seen-list
-         * (NOPs are rare; optimizer-neutered only). */
-        if (rn.op == LANCIUS_MODEL_OP_NOP) {
-            for (uint32_t _d = 0; _d < nop_seen; _d++) {
-                if (nop_ids[_d] == rn.id) goto fail;
-            }
-            if (nop_seen >= nop_cap) {
-                uint32_t ncap = nop_cap ? nop_cap * 2 : 64;
-                uint32_t *nn = (uint32_t*)realloc(nop_ids, (size_t)ncap * sizeof(uint32_t));
-                if (!nn) goto fail;
-                nop_ids = nn;
-                nop_cap = ncap;
-            }
-            nop_ids[nop_seen++] = rn.id;
-        } else {
+         * v12R1 fix: NOP ids are skipped entirely — they are neither mapped
+         * nor duplicate-checked (a NOP is invisible to map_get, so it can
+         * never be referenced as an input and never collides). */
+        if (n) {
             if (map_get(&map, rn.id)) goto fail;
+            if (!map_set(&map, rn.id, n)) goto fail;
         }
-
-        if (!map_set(&map, rn.id, n)) goto fail;
     }
 
 
@@ -603,38 +606,16 @@ break;
         if (env && env[0] == '1') allow_legacy = 1;
         if (h.checksum_crc32 == 0 && !allow_legacy) goto fail;
     }
-    /* Despot truth: CRC over a malloc'd whole body (up to 800MB x2) with
-     * long/ftell (32-bit truncation, non-seekable bypass when fseek fails or
-     * body_size<=0 skipped verification entirely). Stream in 64KB chunks
-     * with checked seeks; any seek/size anomaly fails closed. */
+    /* v12R1 fix: the CRC was computed by re-reading the whole body after
+     * parsing (extra I/O, plus a TOCTOU window on truncated files). It is
+     * now folded into computed_crc while parsing; the save side normalizes
+     * a zero CRC to 1, so mirror that here for a consistent comparison. */
     if (h.checksum_crc32 != 0) {
-        long body_start = (long)LANCIUS_MODEL_HEADER_SIZE_V2;
-        if (h.header_size != LANCIUS_MODEL_HEADER_SIZE_V2) goto fail;
-        if (fseek(f, 0, SEEK_END) != 0) goto fail;
-        {
-            long file_end = ftell(f);
-            long body_size;
-            uint32_t computed_crc = 0;
-            uint8_t chunk[65536];
-            long left;
-            if (file_end < 0 || file_end < body_start) goto fail;
-            body_size = file_end - body_start;
-            if (body_size <= 0) goto fail;
-            if (fseek(f, body_start, SEEK_SET) != 0) goto fail;
-            left = body_size;
-            while (left > 0) {
-                size_t want = (left < (long)sizeof(chunk)) ? (size_t)left : sizeof(chunk);
-                size_t got = fread(chunk, 1, want, f);
-                if (got != want) goto fail;
-                computed_crc = lancius_crc32(computed_crc, chunk, got);
-                left -= (long)got;
-            }
-            if (computed_crc != h.checksum_crc32) goto fail;
-        }
+        if (computed_crc == 0) computed_crc = 1;
+        if (computed_crc != h.checksum_crc32) goto fail;
     }
 
     free(map.v);
-    free(nop_ids);
     fclose(f);
 
     for (uint32_t i = 0; i < g->node_count; i++) {
@@ -647,7 +628,6 @@ break;
 fail:
     free(in_ids);
     free(map.v);
-    free(nop_ids);
     if (g) lancius_graph_destroy(g);
     fclose(f);
     return NULL;

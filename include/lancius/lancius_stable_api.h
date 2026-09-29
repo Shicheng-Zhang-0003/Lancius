@@ -36,7 +36,9 @@ typedef enum {
     LANCIUS_ERR_GRAPH_CYCLE = -7,
     LANCIUS_ERR_OVERFLOW = -8,
     LANCIUS_ERR_NUMERICAL = -9,
-    LANCIUS_ERR_INVALID_HANDLE = -10
+    LANCIUS_ERR_INVALID_HANDLE = -10,
+    // v12R1 fix: distinguish dtype failures from unsupported-op failures
+    LANCIUS_ERR_UNSUPPORTED_DTYPE = -11
 } lancius_status;
 
 // Error Handling

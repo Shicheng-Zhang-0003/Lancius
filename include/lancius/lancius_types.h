@@ -51,6 +51,9 @@ typedef struct lancius_runtime_state {
     float* buffer_f32;
     lancius_dtype dtype;
     double scale;
+    /* v12R1: per-channel quantization scales (NULL = per-tensor .scale) */
+    double* scale_per_channel;
+    uint32_t scale_channels;
     lancius_memory_owner owner;
 
     /* A2: split ownership for legacy FP64 and INT8 buffers */
