@@ -94,6 +94,23 @@ cmake -B build && cmake --build build
 
 ---
 
+## Post-Release Fixes
+
+After the v11S stable release, a comprehensive bug-fix campaign (applied
+during v12R1 development) addressed **20 defect classes** discovered during
+the v12R1 hardening and numerical-correctness audits. These fixes are
+included in v12R1+ but were not backported to the v11S stable branch:
+
+- Autodiff: BROADCAST backward, race conditions, NULL checks, OOB reads, off-by-one, dangling pointer
+- Safety: command injection, `abort()` removal, memory leaks, overflow checks
+- Correctness: error reporting, serialization portability, CRC32 race, NOP handling, threadpool timeout
+- Quantization: per-channel quantization, dequantization
+- Build: Python scripts, build system, Makefile
+
+Users are encouraged to upgrade to v12R1 or later for these fixes.
+
+---
+
 ## Full Changelog
 
 See `CHANGELOG.md` for the complete v11 cycle changelog.

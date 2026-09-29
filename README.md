@@ -120,12 +120,14 @@ Binary compatibility is **guaranteed** for v2 models written by v11S and later.
 ### Fixed
 
 This section used to repeat the Highlights above bullet-for-bullet. The
-single record is `CHANGELOG.md` (v12R1 batches, despot truth V2/V3); the
-machine-checked proofs are `docs/DESPOT_TRUTH_V2.md` and `make check`.
+single record is `CHANGELOG.md` (v12R1 batches, despot truth V2/V3,
+hardening batch V4); the machine-checked proofs are
+`docs/DESPOT_TRUTH_V2.md` and `make check`.
 In short: N-dim broadcast, softmax guards, mandatory CRC integrity,
 validated attention, `int64` INT8, OOM errors, abort-free hot paths,
 strict ONNX, training alignment, widened API codes, honest audit exits,
-despot truth V2/V3 gradient and loader truth.
+despot truth V2/V3 gradient and loader truth, hardening batch V4
+(race conditions, memory safety, quantization, portability, CLI injection).
 
 ### Improved
 
@@ -148,6 +150,18 @@ The following remain intentionally deferred:
 - GPU acceleration
 - production LLM serving
 - final binary compatibility guarantees
+
+### New in Hardening Batch V4
+
+- **Per-channel quantization** support (in addition to existing per-tensor)
+- **Dequantization** support
+- **Threadpool timeout** on `lancius_pool_wait` (no longer blocks indefinitely)
+- **Race-condition fixes**: `kernel_conv2d_bwd_in` and MaxPool2D backward now
+  use thread-local accumulators
+- **CLI command-injection fix**: user paths now `fork+execvp` (no shell)
+- **Serialization portability**: `uint64_t` sizing, byte swapping, CRC32
+  `call_once` init
+- **Build hardening**: `-Werror`, version consistency, Threads dependency
 <!-- /SECTION:WHATS_CHANGED -->
 
 <!-- SECTION:BUILDING -->
@@ -258,6 +272,10 @@ This runs the primary regression and correctness suite, including:
 - despot truth probe (broadcast values, cross-rank broadcast, diamond
   pooled parity, cross-entropy NUMERICAL contract)
 - internal x-ray audit (mini-CNN execution, softmax normalization)
+- race-condition audits (conv2d bwd_in, MaxPool2D bwd thread-local accumulators)
+- quantization audits (per-channel quant, dequant roundtrip)
+- serialization portability audit (uint64_t, byte swapping, CRC32 call_once)
+- CLI security audit (fork+execvp, no shell injection)
 
 Every audit in the gate propagates failures through its exit code: a green
 `make check` means every check passed, not just that binaries ran.
@@ -355,7 +373,7 @@ The following table describes the current status of major subsystems.
 | Model format v2 | Development | CRC required by default (`LANCIUS_ALLOW_LEGACY_UNVERIFIED=1` opts into legacy); sparse-ID bounds |
 | ONNX conversion | Experimental | Strict LeNet-class path: correct Reshape/Gemm semantics, symmetric Conv/Pool only, static batch |
 | Memory planner | Development | Linear-scan liveness planning and static flat-buffer execution |
-| Threadpool execution | Development | Wave-parallel execution with parity validation |
+| Threadpool execution | Development | Wave-parallel execution with parity validation; `lancius_pool_wait` timeout support |
 | GPU acceleration | Not supported | CPU-only runtime |
 | Dynamic shapes | Not supported | Static graph execution only |
 | Production LLM serving | Not supported | Research and development milestone only |

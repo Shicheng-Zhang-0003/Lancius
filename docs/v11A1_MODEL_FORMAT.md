@@ -7,20 +7,21 @@
 > `checksum_crc32 == 0` files are **rejected by default** (opt-in via
 > `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1`), not accepted without verification.
 
-## Active format before Task 6b
+## Active format (v2 — frozen since v11A3)
 
-Until Task 6b is applied, the active model format is **v1**.
+The active model format is **v2** (frozen since v11A3). The v1 format
+described below is deprecated legacy best-effort.
 
 Active components:
 
-- C writer: `lancius_graph_save()`
-- C loader: `lancius_graph_load()`
-- Python converter: `onnx_to_lancius.py`
-- Magic: `0x21434E41`
+- C writer: `lancius_graph_save_stable()` (v2)
+- C loader: `lancius_graph_load_stable()` (v2 preferred, v1 legacy fallback)
+- Python converter: `onnx_to_lancius.py` (writes v2)
+- Magic: `0x32434E41`
 
-## Known v1 limitations
+## v1 format (deprecated)
 
-The v1 format is usable but not stable:
+The v1 format is deprecated and may be removed in v12:
 
 - uses native `size_t` fields
 - depends on native enum size

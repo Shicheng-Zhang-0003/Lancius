@@ -1,5 +1,10 @@
 # Lancius v11A2 Scope
 
+> **Historical document.** v11A2 is a completed development milestone.
+> The current stable release is `v11S` (V1.1); the current development
+> milestone is `v12R1` (V1.2RC1). This file is preserved for historical
+> reference only.
+
 > v11A2 is a development milestone.
 > It is not a stable release.
 
