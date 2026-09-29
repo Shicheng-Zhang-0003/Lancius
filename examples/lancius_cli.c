@@ -30,17 +30,20 @@
 #include <unistd.h>
 
 static void print_version(void) {
-    printf("lancius %s (public tag reserved for github releases)\n", LANCIUS_VERSION_STRING);
+    printf("lancius %s (github tag: %s)\n", LANCIUS_VERSION_STRING, LANCIUS_VERSION_PUBLIC);
 }
 
 static void print_usage(void) {
-    printf("lancius — Lancius runtime operator\n");
-    printf("quickstart (new here? run these three):\n");
-    printf("  lancius doctor              check binaries, python, data, network\n");
-    printf("  lancius demo                prove the install end-to-end in one command\n");
-    printf("  lancius tui                 guided menus, nothing to memorize\n");
+    printf("lancius %s — bare-metal ML inference runtime\n", LANCIUS_VERSION_STRING);
+    printf("\n");
+    printf("welcome! new here? run these in order:\n");
+    printf("  1. lancius doctor              check everything is ready\n");
+    printf("  2. lancius demo                prove the install in one command\n");
+    printf("  3. lancius tui                 guided menus, nothing to memorize\n");
+    printf("\n");
     printf("usage:\n");
-    printf("  lancius help [verb]         show help (also: lancius <verb> --help)\n");
+    printf("  lancius quickstart            guided setup for new users\n");
+    printf("  lancius help [verb]           show help (also: lancius <verb> --help)\n");
     printf("  lancius doctor              readiness check (binaries, python, data, network, disk)\n");
     printf("  lancius status              operational snapshot (version, cwd, models, data, disk, net)\n");
     printf("  lancius models [--check]    list .lancius files here (--check fully validates each)\n");
@@ -54,11 +57,15 @@ static void print_usage(void) {
     printf("  lancius export pytorch <in.lancius> <out.py> [--onnx out.onnx]\n");
     printf("  lancius generate            transformer prefill/generation demo\n");
     printf("  lancius tui                 guided menus for everything above\n");
+    printf("\n");
     printf("examples:\n");
+    printf("  lancius quickstart\n");
     printf("  lancius info test_model.lancius --nodes\n");
     printf("  lancius run test_model.lancius --mode static --fill zero\n");
     printf("  lancius datasets pull vision && lancius train verifier\n");
 }
+
+static int cmd_quickstart(void);
 
 static int file_exists(const char *p) {
     struct stat st;
@@ -222,6 +229,8 @@ static int is_help_arg(const char *a) {
 }
 
 /* Forward declarations: demo/TUI call verbs defined later in this TU. */
+static int cmd_tui(void);
+static int tui_read(char *buf, size_t cap);
 static int cmd_datasets(int argc, char **argv);
 static int cmd_info(int argc, char **argv);
 static int cmd_run(int argc, char **argv);
@@ -525,6 +534,56 @@ static int cmd_demo(void) {
         return 1;
     }
     printf("demo: OK — install proven. next: lancius tui | lancius train verifier\n");
+    return 0;
+}
+
+/* ---------------- quickstart ---------------- */
+
+static int cmd_quickstart(void) {
+    char buf[256];
+    int step = 1;
+    printf("== lancius quickstart: guided setup ==\n");
+    printf("this walks you through the basics. press Enter to continue, 0 to skip.\n");
+    printf("\n");
+
+    /* Step 1: doctor */
+    printf("[step %d/4] checking your install...\n", step++);
+    if (!tui_read(buf, sizeof(buf))) return 0;
+    if (buf[0] == '0') return 0;
+    cmd_doctor();
+    printf("\n");
+
+    /* Step 2: demo */
+    printf("[step %d/4] proving the install with a demo run...\n", step++);
+    if (!tui_read(buf, sizeof(buf))) return 0;
+    if (buf[0] == '0') return 0;
+    cmd_demo();
+    printf("\n");
+
+    /* Step 3: train */
+    printf("[step %d/4] training a small model (verifier, seconds)...\n", step++);
+    printf("this trains a tiny model to verify training works.\n");
+    if (!tui_read(buf, sizeof(buf))) return 0;
+    if (buf[0] == '0') return 0;
+    {
+        char *av[1];
+        av[0] = "verifier";
+        cmd_train(1, av);
+    }
+    printf("\n");
+
+    /* Step 4: TUI */
+    printf("[step %d/4] exploring the TUI...\n", step++);
+    printf("the TUI has guided menus for everything.\n");
+    if (!tui_read(buf, sizeof(buf))) return 0;
+    if (buf[0] == '0') return 0;
+    cmd_tui();
+
+    printf("\nquickstart complete! you now know the basics.\n");
+    printf("next steps:\n");
+    printf("  lancius datasets pull vision   # get training data\n");
+    printf("  lancius train mnist           # train on MNIST (minutes)\n");
+    printf("  lancius tui                   # explore everything\n");
     return 0;
 }
 
@@ -1317,6 +1376,10 @@ static void print_verb_help(const char *verb) {
         print_usage();
         return;
     }
+    if (strcmp(verb, "quickstart") == 0) {
+        printf("usage: lancius quickstart\n  guided setup for new users: doctor, demo, train, TUI.\n");
+        return;
+    }
     if (strcmp(verb, "doctor") == 0) {
         printf("usage: lancius doctor\n  readiness check; exits 1 when core pieces are MISSING.\n");
         return;
@@ -1450,15 +1513,16 @@ static void tui_header(void) {
 
 static void tui_menu(void) {
     tui_line();
-    printf(" 1 demo            prove the install in one command (seconds)\n");
-    printf(" 2 doctor          readiness check (binaries, python, data, network)\n");
-    printf(" 3 status/models   snapshot + list local models\n");
-    printf(" 4 datasets        pull or check training data (needs network to pull)\n");
-    printf(" 5 train           train mnist (minutes) | cifar10 (hours!) | verifier (seconds)\n");
-    printf(" 6 run             run a model (outputs + top classes)\n");
-    printf(" 7 info            inspect a model file\n");
-    printf(" 8 convert/export  onnx <-> lancius, lancius -> pytorch\n");
-    printf(" 9 generate        transformer demo text\n");
+    printf(" 1 quickstart      guided setup for new users (doctor, demo, train, TUI)\n");
+    printf(" 2 demo            prove the install in one command (seconds)\n");
+    printf(" 3 doctor          readiness check (binaries, python, data, network)\n");
+    printf(" 4 status/models   snapshot + list local models\n");
+    printf(" 5 datasets        pull or check training data (needs network to pull)\n");
+    printf(" 6 train           train mnist (minutes) | cifar10 (hours!) | verifier (seconds)\n");
+    printf(" 7 run             run a model (outputs + top classes)\n");
+    printf(" 8 info            inspect a model file\n");
+    printf(" 9 convert/export  onnx <-> lancius, lancius -> pytorch\n");
+    printf("10 generate        transformer demo text\n");
     printf(" 0 quit\n");
     tui_line();
 }
@@ -1680,7 +1744,7 @@ static int cmd_tui(void) {
     char buf[256];
     int last = 0;
     tui_header();
-    printf("welcome — option 1 proves the install, 5 starts with verifier (seconds).\n");
+    printf("welcome — option 1 is a guided quickstart, 6 starts with verifier (seconds).\n");
     for (;;) {
         tui_menu();
         printf("last: %s%s%s | select (help, 0 quit): ",
@@ -1692,30 +1756,33 @@ static int cmd_tui(void) {
             tui_help();
             tui_pause();
         } else if (strcmp(buf, "1") == 0) {
-            last = tui_do_demo();
+            last = cmd_quickstart();
             tui_pause();
         } else if (strcmp(buf, "2") == 0) {
-            last = tui_do_doctor();
+            last = tui_do_demo();
             tui_pause();
         } else if (strcmp(buf, "3") == 0) {
-            last = tui_do_status_models();
+            last = tui_do_doctor();
             tui_pause();
         } else if (strcmp(buf, "4") == 0) {
-            last = tui_do_datasets();
+            last = tui_do_status_models();
             tui_pause();
         } else if (strcmp(buf, "5") == 0) {
-            last = tui_do_train();
+            last = tui_do_datasets();
             tui_pause();
         } else if (strcmp(buf, "6") == 0) {
-            last = tui_do_run();
+            last = tui_do_train();
             tui_pause();
         } else if (strcmp(buf, "7") == 0) {
-            last = tui_do_info();
+            last = tui_do_run();
             tui_pause();
         } else if (strcmp(buf, "8") == 0) {
-            last = tui_do_convert();
+            last = tui_do_info();
             tui_pause();
         } else if (strcmp(buf, "9") == 0) {
+            last = tui_do_convert();
+            tui_pause();
+        } else if (strcmp(buf, "10") == 0) {
             if (!file_exists("./generate_text")) {
                 printf("FAIL: ./generate_text missing — run `make`.\n");
                 last = 1;
@@ -1746,6 +1813,13 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "version") == 0) {
         print_version();
         return 0;
+    }
+    if (strcmp(argv[1], "quickstart") == 0) {
+        if (argc >= 3 && is_help_arg(argv[2])) {
+            printf("usage: lancius quickstart\n  guided setup for new users: doctor, demo, train, TUI.\n");
+            return 0;
+        }
+        return cmd_quickstart();
     }
     if (strcmp(argv[1], "doctor") == 0) {
         if (argc >= 3 && is_help_arg(argv[2])) {
