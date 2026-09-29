@@ -78,7 +78,8 @@ def _fetch(url, dest, optional=False):
         return True
     print(f"  Fetching {url} ...")
     try:
-        urllib.request.urlretrieve(url, dest, timeout=60)
+        with urllib.request.urlopen(url, timeout=60) as response, open(dest, 'wb') as out:
+            out.write(response.read())
         print(f"  Saved: {dest} ({os.path.getsize(dest)} bytes)")
         return True
     except urllib.error.HTTPError as e:
@@ -161,7 +162,8 @@ def download_mnist():
             out_name = f.replace(".gz", "")
             if not os.path.exists(out_name):
                 print(f"  Fetching {f}...")
-                urllib.request.urlretrieve(base_url + f, f, timeout=60)
+                with urllib.request.urlopen(base_url + f, timeout=60) as response, open(f, 'wb') as out:
+                    out.write(response.read())
                 with gzip.open(f, 'rb') as f_in:
                     with open(out_name, 'wb') as f_out:
                         shutil.copyfileobj(f_in, f_out)
@@ -187,7 +189,8 @@ def download_cifar10():
     if not os.path.exists("cifar-10-batches-bin/data_batch_1.bin"):
         try:
             print(f"  Fetching {tar_name}...")
-            urllib.request.urlretrieve(url, tar_name, timeout=60)
+            with urllib.request.urlopen(url, timeout=60) as response, open(tar_name, 'wb') as out:
+                out.write(response.read())
             with tarfile.open(tar_name, "r:gz") as tar:
                 tar.extractall(members=_safe_members_tar(tar))
             os.remove(tar_name)
