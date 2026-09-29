@@ -249,35 +249,56 @@ void lancius_execute_vision_op(lancius_node* n) {
         if (out_elems > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
         memset(n->runtime_data, 0, out_elems * sizeof(double));
 
-        #pragma omp parallel for schedule(static)
-        for(size_t ni=0; ni<N; ni++) {
-            for(size_t c=0; c<C; c++) {
-                for(size_t ho=0; ho<H_out; ho++) {
-                    for(size_t wo=0; wo<W_out; wo++) {
-                        size_t grad_idx = ni*(C*H_out*W_out) + c*(H_out*W_out) + ho*W_out + wo;
-                        double g = grad[grad_idx];
+        /* v12R1 fix: with stride < K, overlapping pooling windows scatter
+         * several output positions into the same input element, so the
+         * gradient scatter `runtime_data[in_idx] += g` is a data race when
+         * parallelized. Each thread now accumulates into a private buffer
+         * and the partial sums are reduced under a critical section. */
+        int omp_alloc_failed = 0;
+        #pragma omp parallel
+        {
+            double* local_acc = (double*)calloc(out_elems ? out_elems : 1, sizeof(double));
+            if (!local_acc) {
+                #pragma omp atomic write
+                omp_alloc_failed = 1;
+            } else {
+                #pragma omp for schedule(static)
+                for(size_t ni=0; ni<N; ni++) {
+                    for(size_t c=0; c<C; c++) {
+                        for(size_t ho=0; ho<H_out; ho++) {
+                            for(size_t wo=0; wo<W_out; wo++) {
+                                size_t grad_idx = ni*(C*H_out*W_out) + c*(H_out*W_out) + ho*W_out + wo;
+                                double g = grad[grad_idx];
 
-                        double max_val = -INFINITY;
-                        size_t max_ih = 0, max_iw = 0;
-                        for(size_t kh=0; kh<K; kh++) {
-                            for(size_t kw=0; kw<K; kw++) {
-                                size_t ih = ho*stride + kh;
-                                size_t iw = wo*stride + kw;
-                                size_t in_idx = ni*(C*H_in*W_in) + c*(H_in*W_in) + ih*W_in + iw;
-                                double v = fwd_in[in_idx];
-                                if (v != v) { max_val = v; max_ih = ih; max_iw = iw; break; }
-                                if (v > max_val) {
-                                    max_val = v;
-                                    max_ih = ih; max_iw = iw;
+                                double max_val = -INFINITY;
+                                size_t max_ih = 0, max_iw = 0;
+                                for(size_t kh=0; kh<K; kh++) {
+                                    for(size_t kw=0; kw<K; kw++) {
+                                        size_t ih = ho*stride + kh;
+                                        size_t iw = wo*stride + kw;
+                                        size_t in_idx = ni*(C*H_in*W_in) + c*(H_in*W_in) + ih*W_in + iw;
+                                        double v = fwd_in[in_idx];
+                                        if (v != v) { max_val = v; max_ih = ih; max_iw = iw; break; }
+                                        if (v > max_val) {
+                                            max_val = v;
+                                            max_ih = ih; max_iw = iw;
+                                        }
+                                    }
+                                    if (max_val != max_val) break;
                                 }
+                                size_t in_idx = ni*(C*H_in*W_in) + c*(H_in*W_in) + max_ih*W_in + max_iw;
+                                local_acc[in_idx] += g;
                             }
-                            if (max_val != max_val) break;
                         }
-                        size_t in_idx = ni*(C*H_in*W_in) + c*(H_in*W_in) + max_ih*W_in + max_iw;
-                        n->runtime_data[in_idx] += g;
                     }
                 }
+                #pragma omp critical
+                {
+                    for (size_t i = 0; i < out_elems; i++) n->runtime_data[i] += local_acc[i];
+                }
+                free(local_acc);
             }
         }
+        if (omp_alloc_failed) { lancius_set_error(LANCIUS_ERROR_OOM); return; }
     }
 }

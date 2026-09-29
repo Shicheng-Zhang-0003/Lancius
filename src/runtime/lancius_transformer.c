@@ -6,6 +6,8 @@
 #include <string.h>
 #include <stdint.h>
 
+/* v12R1: the KV-cache is NOT thread-safe — all access must be serialized
+ * by the caller (see lancius_transformer.h SYNCHRONIZATION CONTRACT). */
 struct lancius_kv_cache {
     size_t max_seq_len;
     size_t seq_len;
@@ -217,6 +219,13 @@ int lancius_transformer_apply_rope_token(
     int position
 ) {
     if (!cache || !q || !k || position < 0) {
+        return -1;
+    }
+
+    /* v12R1 fix: upper bound on the RoPE position. A position at or beyond
+     * max_seq_len would rotate with frequencies the cache was never sized
+     * for and desync the caller's position bookkeeping. */
+    if ((size_t)position >= cache->max_seq_len) {
         return -1;
     }
 

@@ -3,6 +3,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
+#include <errno.h>
+
+/* v12R1 fix: named constants (were magic numbers). */
+#define LANCIUS_POOL_DEFAULT_THREADS 4
+#define LANCIUS_POOL_MAX_THREADS 256
+#define LANCIUS_POOL_QUEUE_INIT_CAP 1024
+#define LANCIUS_POOL_QUEUE_MAX_CAP 1000000
 
 struct lancius_pool {
     pthread_t* threads;
@@ -49,13 +57,13 @@ static void* worker_loop(void* arg) {
 }
 
 lancius_pool* lancius_pool_create(int num_threads) {
-    if (num_threads <= 0) num_threads = 4;
-    if (num_threads > 256) num_threads = 256;
+    if (num_threads <= 0) num_threads = LANCIUS_POOL_DEFAULT_THREADS;
+    if (num_threads > LANCIUS_POOL_MAX_THREADS) num_threads = LANCIUS_POOL_MAX_THREADS;
     lancius_pool* pool = (lancius_pool*)calloc(1, sizeof(lancius_pool));
     /* Despot truth: creation failure sets OOM (was silent NULL). */
     if (!pool) { lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
     pool->num_threads = num_threads;
-    pool->queue_cap = 1024;
+    pool->queue_cap = LANCIUS_POOL_QUEUE_INIT_CAP;
     pool->queue = (lancius_task*)malloc(sizeof(lancius_task) * (size_t)pool->queue_cap);
     pool->threads = (pthread_t*)malloc(sizeof(pthread_t) * (size_t)num_threads);
     if (!pool->queue || !pool->threads) { free(pool->queue); free(pool->threads); free(pool); return NULL; }
@@ -90,7 +98,7 @@ void lancius_pool_submit(lancius_pool* pool, lancius_task_fn fn, void* arg) {
     if (pool->count >= pool->queue_cap) {
         int new_cap = pool->queue_cap * 2;
         lancius_task *nq;
-        if (new_cap <= 0 || new_cap > 1000000) { pthread_mutex_unlock(&pool->mutex); return; }
+        if (new_cap <= 0 || new_cap > LANCIUS_POOL_QUEUE_MAX_CAP) { pthread_mutex_unlock(&pool->mutex); return; }
         nq = (lancius_task*)realloc(pool->queue, sizeof(lancius_task) * (size_t)new_cap);
         if (!nq) { pthread_mutex_unlock(&pool->mutex); return; }
         /* Re-linearize ring into the grown buffer. */
@@ -117,13 +125,38 @@ void lancius_pool_submit(lancius_pool* pool, lancius_task_fn fn, void* arg) {
     pthread_mutex_unlock(&pool->mutex);
 }
 
-void lancius_pool_wait(lancius_pool* pool) {
-    if (!pool) return;
+int lancius_pool_wait(lancius_pool* pool, uint32_t timeout_ms) {
+    if (!pool) return -1;
     pthread_mutex_lock(&pool->mutex);
-    while (pool->active_tasks > 0 || pool->count > 0) {
-        pthread_cond_wait(&pool->cond_wait, &pool->mutex);
+    if (timeout_ms == 0) {
+        /* Infinite wait (legacy behavior). */
+        while (pool->active_tasks > 0 || pool->count > 0) {
+            pthread_cond_wait(&pool->cond_wait, &pool->mutex);
+        }
+        pthread_mutex_unlock(&pool->mutex);
+        return 0;
+    }
+    /* v12R1 fix: bounded wait — an infinite cond_wait could hang the caller
+     * forever if a task deadlocks or a worker dies. */
+    struct timespec deadline;
+    if (clock_gettime(CLOCK_REALTIME, &deadline) != 0) {
+        pthread_mutex_unlock(&pool->mutex);
+        return -1;
+    }
+    deadline.tv_sec += (time_t)(timeout_ms / 1000u);
+    deadline.tv_nsec += (long)(timeout_ms % 1000u) * 1000000L;
+    if (deadline.tv_nsec >= 1000000000L) {
+        deadline.tv_sec += 1;
+        deadline.tv_nsec -= 1000000000L;
+    }
+    int rc = 0;
+    while ((pool->active_tasks > 0 || pool->count > 0) && rc == 0) {
+        rc = pthread_cond_timedwait(&pool->cond_wait, &pool->mutex, &deadline);
     }
     pthread_mutex_unlock(&pool->mutex);
+    if (rc == 0) return 0;
+    /* ETIMEDOUT (or any other wait error) — caller decides how to proceed. */
+    return -1;
 }
 
 void lancius_pool_destroy(lancius_pool* pool) {

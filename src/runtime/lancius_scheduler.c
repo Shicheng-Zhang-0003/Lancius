@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -42,7 +41,6 @@ lancius_schedule* lancius_ir_schedule(lancius_graph* g) {
             }
         }
         if (q_tail == 0) {
-            fprintf(stderr, "[SCHEDULER FATAL] Cycle or disconnect! Processed %u / %u\n", processed, g->node_count);
             lancius_set_error(LANCIUS_ERROR_GRAPH_CYCLE);
             for (uint32_t w = 0; w < sched->wave_count; w++) free(sched->waves[w].nodes);
             free(sched->waves); free(sched);
@@ -353,7 +351,6 @@ static void execute_node_math(lancius_node* n) {
         if (q_seq == kv_seq) {
             kernel_attention(n->runtime_data, q, k, v, q_seq, n_heads, head_dim);
         } else {
-            fprintf(stderr, "[LANCIUS EXEC FATAL] unsupported attention shape: q_seq=%zu kv_seq=%zu\n", q_seq, kv_seq);
             lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
             return; /* v11S: do not abort — return error to caller */
         }
@@ -962,7 +959,6 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
 
                     if (!buf_f32) {
                         lancius_set_error(LANCIUS_ERROR_OOM);
-                        fprintf(stderr, "[EXEC FATAL] FP32 OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, nbytes_checked);
                         continue;
                     }
                 }
@@ -976,7 +972,6 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
                 lancius_node_set_owner(n, (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
                 if (!n->runtime_data) {
                     lancius_set_error(LANCIUS_ERROR_OOM); /* A4 OOM */
-                    fprintf(stderr, "[EXEC FATAL] OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, nbytes_checked);
                     continue;
                 }
             }
@@ -984,6 +979,17 @@ void lancius_schedule_execute(lancius_schedule* schedule, lancius_arena* scratch
             execute_node_math(n);
         }
     }
+}
+
+typedef struct {
+    lancius_node* node;
+    lancius_error error;
+} lancius_parallel_task;
+
+static void execute_node_math_trampoline(void* arg) {
+    lancius_parallel_task* task = (lancius_parallel_task*)arg;
+    execute_node_math(task->node);
+    task->error = lancius_get_error();
 }
 
 void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena* scratch, lancius_pool* pool) {
@@ -1041,7 +1047,6 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
 
                     if (!buf_f32) {
                         lancius_set_error(LANCIUS_ERROR_OOM);
-                        fprintf(stderr, "[EXEC FATAL] FP32 OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, nbytes_checked);
                         continue;
                     }
                 }
@@ -1055,11 +1060,12 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
                 lancius_node_set_owner(n, (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled && n->id < schedule->plan->max_id && schedule->plan->is_pooled[n->id] && schedule->static_pool) ? LANCIUS_MEMORY_POOL : LANCIUS_MEMORY_ARENA);
                 if (!n->runtime_data) {
                     lancius_set_error(LANCIUS_ERROR_OOM);
-                    fprintf(stderr, "[EXEC FATAL] OOM at Node %u (op=%d) size=%zu\n", n->id, n->op, nbytes_checked);
                     continue;
                 }
             }
         }
+
+        uint32_t task_count = 0;
         for (uint32_t i = 0; i < wave->node_count; i++) {
             lancius_node* n = wave->nodes[i];
             if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST) continue;
@@ -1068,9 +1074,37 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
             } else {
                 if (!n->runtime_data) continue;
             }
-            lancius_pool_submit(pool, (lancius_task_fn)execute_node_math, n);
+            task_count++;
         }
-        lancius_pool_wait(pool);
+
+        if (task_count == 0) { lancius_pool_wait(pool, 0); continue; }
+
+        lancius_parallel_task* tasks = (lancius_parallel_task*)malloc(sizeof(lancius_parallel_task) * task_count);
+        if (!tasks) { lancius_set_error(LANCIUS_ERROR_OOM); return; }
+
+        uint32_t t = 0;
+        for (uint32_t i = 0; i < wave->node_count; i++) {
+            lancius_node* n = wave->nodes[i];
+            if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST) continue;
+            if (n->dtype == LANCIUS_DTYPE_FP32) {
+                if (!n->runtime_data_f32) continue;
+            } else {
+                if (!n->runtime_data) continue;
+            }
+            tasks[t].node = n;
+            tasks[t].error = LANCIUS_ERROR_OK;
+            lancius_pool_submit(pool, execute_node_math_trampoline, &tasks[t]);
+            t++;
+        }
+        lancius_pool_wait(pool, 0);
+
+        for (uint32_t i = 0; i < task_count; i++) {
+            if (tasks[i].error != LANCIUS_ERROR_OK) {
+                lancius_set_error(tasks[i].error);
+                break;
+            }
+        }
+        free(tasks);
     }
 }
 
@@ -1125,10 +1159,9 @@ lancius_liveness_profile lancius_analyze_liveness(lancius_graph* g) {
         for(uint32_t i=0; i<sched->waves[w].node_count; i++) {
             lancius_node* n = sched->waves[w].nodes[i];
             if (n->op != LANCIUS_OP_INPUT && n->op != LANCIUS_OP_CONST) {
-                /* Despot truth: never abort on corrupt shapes in profiling. */
                 size_t b = 0;
-                if (!lancius_node_bytes_checked(n, &b)) continue;
-                if (b > SIZE_MAX - wave_mem) continue;
+                if (!lancius_node_bytes_checked(n, &b)) { lancius_set_error(LANCIUS_ERROR_LIMIT); lancius_schedule_destroy(sched); return profile; }
+                if (b > SIZE_MAX - wave_mem) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); lancius_schedule_destroy(sched); return profile; }
                 wave_mem += b;
                 profile.tensor_count++;
             }
@@ -1248,14 +1281,12 @@ void lancius_schedule_execute_static(lancius_schedule* schedule, void* flat_buff
 /* v11S H2 fix: bounded static executor validates buffer size */
 void lancius_schedule_execute_static_bounded(lancius_schedule* schedule, void* flat_buffer, size_t buffer_size) {
     if (!schedule || !flat_buffer) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
-    lancius_clear_error();
     size_t required = lancius_schedule_static_memory_required(schedule);
     /* Despot truth: required==0 with sticky error means sizing failed;
      * executing anyway would under-alloc and OOB. */
     if (lancius_get_error() != LANCIUS_ERROR_OK) return;
     if (buffer_size < required) {
         lancius_set_error(LANCIUS_ERROR_OVERFLOW);
-        fprintf(stderr, "[EXEC FATAL] static buffer too small: need %zu, got %zu\n", required, buffer_size);
         return;
     }
     lancius_schedule_execute_static(schedule, flat_buffer);

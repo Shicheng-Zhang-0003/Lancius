@@ -19,6 +19,13 @@ typedef struct lancius_pool lancius_pool;
 
 lancius_pool* lancius_pool_create(int num_threads);
 void lancius_pool_submit(lancius_pool* pool, lancius_task_fn fn, void* arg);
-void lancius_pool_wait(lancius_pool* pool);
+
+/*
+ * Block until all submitted tasks have drained.
+ * timeout_ms == 0 waits indefinitely; otherwise the wait aborts after
+ * timeout_ms milliseconds. Returns 0 on success, -1 on timeout/error.
+ */
+int lancius_pool_wait(lancius_pool* pool, uint32_t timeout_ms);
+
 void lancius_pool_destroy(lancius_pool* pool);
 #endif
