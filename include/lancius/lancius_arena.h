@@ -1,6 +1,7 @@
 /**
  * @file lancius_arena.h
- * @brief O(1) Block-Arena Allocator: Bump-pointer memory management with strict 32-byte SIMD alignment.
+ * @brief Block-Arena Allocator: Bump-pointer memory management with strict 32-byte SIMD alignment.
+ *         Allocation is amortized O(1); worst case is O(n) when a new block must be grown.
  */
 #ifndef Lancius_LANCIUS_ARENA_H
 #define Lancius_LANCIUS_ARENA_H

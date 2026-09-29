@@ -1,7 +1,6 @@
 #include "lancius/lancius_arena.h"
 #include "lancius/lancius_error.h"
 #include <stdlib.h>
-#include <stdio.h>
 #include <stdint.h>
 
 #define ALIGN_UP(x, align) (((x) + ((align) - 1)) & ~((align) - 1))
@@ -65,12 +64,10 @@ void* lancius_arena_alloc(lancius_arena* a, size_t size, size_t alignment) {
     if (total_needed > SIZE_MAX - b->used) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }
 
     if (b->used + total_needed > b->size) {
-        size_t grow = 0;
-        if (size > SIZE_MAX - alignment) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }
-        grow = size + alignment;
+        size_t grow = size + alignment;
         size_t new_size = (grow > a->default_block_size) ? grow : a->default_block_size;
         lancius_block* nb = block_create(new_size);
-        if (!nb) { fprintf(stderr, "[ARENA FATAL] Failed to allocate block of size %zu!", new_size); lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
+        if (!nb) { lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
         b->next = nb;
         a->current = nb;
         b = nb;

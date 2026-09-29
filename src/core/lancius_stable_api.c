@@ -21,8 +21,10 @@ static lancius_status map_internal_error(lancius_error err) {
         case LANCIUS_ERROR_NULL_PTR:         return LANCIUS_ERR_NULL_PTR;
         case LANCIUS_ERROR_SHAPE_MISMATCH:   return LANCIUS_ERR_SHAPE_MISMATCH;
         case LANCIUS_ERROR_UNSUPPORTED_OP:   return LANCIUS_ERR_UNSUPPORTED_OP;
-        case LANCIUS_ERROR_UNSUPPORTED_DTYPE:return LANCIUS_ERR_UNSUPPORTED_OP;
-        case LANCIUS_ERROR_INVALID_DTYPE:    return LANCIUS_ERR_UNSUPPORTED_OP;
+        /* v12R1 fix: dtype failures were collapsed into UNSUPPORTED_OP,
+         * making misconfigured quantizers indistinguishable from bad graphs. */
+        case LANCIUS_ERROR_UNSUPPORTED_DTYPE:return LANCIUS_ERR_UNSUPPORTED_DTYPE;
+        case LANCIUS_ERROR_INVALID_DTYPE:    return LANCIUS_ERR_UNSUPPORTED_DTYPE;
         case LANCIUS_ERROR_INVALID_MODEL:    return LANCIUS_ERR_IO;
         case LANCIUS_ERROR_VERSION_MISMATCH: return LANCIUS_ERR_IO;
         case LANCIUS_ERROR_IO:               return LANCIUS_ERR_IO;
@@ -69,6 +71,7 @@ LANCIUS_EXPORT const char* lancius_get_error_string(lancius_status err) {
         case LANCIUS_ERR_OVERFLOW: return "Overflow/Limit";
         case LANCIUS_ERR_NUMERICAL: return "Numerical Error";
         case LANCIUS_ERR_INVALID_HANDLE: return "Invalid Handle/Lifetime";
+        case LANCIUS_ERR_UNSUPPORTED_DTYPE: return "Unsupported/Invalid Dtype";
         default: return "Unknown Error";
     }
 }
@@ -86,6 +89,7 @@ typedef struct {
 } lancius_graph_internal;
 
 LANCIUS_EXPORT lancius_context lancius_create_context(void) {
+    set_error(LANCIUS_OK);
     lancius_context_internal* ctx = (lancius_context_internal*)malloc(sizeof(lancius_context_internal));
     if (!ctx) { set_error(LANCIUS_ERR_OOM); return NULL; }
     ctx->arena = lancius_arena_create(64 * 1024 * 1024); // 64MB default scratch
@@ -95,6 +99,7 @@ LANCIUS_EXPORT lancius_context lancius_create_context(void) {
 }
 
 LANCIUS_EXPORT void lancius_destroy_context(lancius_context ctx) {
+    set_error(LANCIUS_OK);
     if (!ctx) return;
     lancius_context_internal* internal = (lancius_context_internal*)ctx;
     if (internal->arena) lancius_arena_destroy(internal->arena);
@@ -102,6 +107,7 @@ LANCIUS_EXPORT void lancius_destroy_context(lancius_context ctx) {
 }
 
 LANCIUS_EXPORT lancius_graph_handle lancius_graph_create_stable(lancius_context ctx) {
+    set_error(LANCIUS_OK);
     if (!ctx) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
 
     lancius_graph_internal* wrapper = (lancius_graph_internal*)malloc(sizeof(lancius_graph_internal));
@@ -121,6 +127,7 @@ LANCIUS_EXPORT lancius_graph_handle lancius_graph_create_stable(lancius_context 
 }
 
 LANCIUS_EXPORT void lancius_graph_destroy_stable(lancius_graph_handle g) {
+    set_error(LANCIUS_OK);
     if (!g) return;
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     if (wrapper->sched) lancius_schedule_destroy(wrapper->sched);
@@ -130,6 +137,7 @@ LANCIUS_EXPORT void lancius_graph_destroy_stable(lancius_graph_handle g) {
 }
 
 LANCIUS_EXPORT lancius_tensor_handle lancius_add_input(lancius_graph_handle g, size_t rows, size_t cols) {
+    set_error(LANCIUS_OK);
     if (!g) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     /* v12R1-205: prevent abort() via stable API on oversized tensors */
@@ -146,6 +154,7 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_input(lancius_graph_handle g, s
 }
 
 LANCIUS_EXPORT lancius_tensor_handle lancius_add_matmul(lancius_graph_handle g, lancius_tensor_handle a, lancius_tensor_handle b) {
+    set_error(LANCIUS_OK);
     if (!g || !a || !b) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     lancius_node* n = lancius_matmul(wrapper->g, (lancius_node*)a, (lancius_node*)b);
@@ -155,6 +164,7 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_matmul(lancius_graph_handle g, 
 }
 
 LANCIUS_EXPORT lancius_tensor_handle lancius_add_relu(lancius_graph_handle g, lancius_tensor_handle a) {
+    set_error(LANCIUS_OK);
     if (!g || !a) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     lancius_node* n = lancius_relu(wrapper->g, (lancius_node*)a);
@@ -164,6 +174,7 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_relu(lancius_graph_handle g, la
 }
 
 LANCIUS_EXPORT lancius_status lancius_bind_data(lancius_tensor_handle t, double* data_ptr) {
+    set_error(LANCIUS_OK);
     if (!t || !data_ptr) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
     lancius_node* n = (lancius_node*)t;
     /* A2: external data binding is explicitly non-owned */
@@ -173,10 +184,11 @@ LANCIUS_EXPORT lancius_status lancius_bind_data(lancius_tensor_handle t, double*
 }
 
 LANCIUS_EXPORT lancius_status lancius_compile_and_run(lancius_graph_handle g) {
+    set_error(LANCIUS_OK);
     if (!g) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
 
-    if (wrapper->sched) lancius_schedule_destroy(wrapper->sched);
+    if (wrapper->sched) { lancius_schedule_destroy(wrapper->sched); wrapper->sched = NULL; }
 
     lancius_clear_error();
     wrapper->sched = lancius_ir_schedule(wrapper->g);
@@ -205,6 +217,7 @@ LANCIUS_EXPORT lancius_status lancius_compile_and_run(lancius_graph_handle g) {
 }
 
 LANCIUS_EXPORT lancius_status lancius_read_output(lancius_tensor_handle t, double* out_buffer, size_t buffer_size) {
+    set_error(LANCIUS_OK);
     if (!t || !out_buffer) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
     lancius_node* n = (lancius_node*)t;
     if (n->dtype != LANCIUS_DTYPE_FP64) { set_error(LANCIUS_ERR_UNSUPPORTED_OP); return LANCIUS_ERR_UNSUPPORTED_OP; }
@@ -231,6 +244,7 @@ LANCIUS_EXPORT lancius_status lancius_read_output(lancius_tensor_handle t, doubl
 
 /* v11A3 stable API expansion: model I/O */
 LANCIUS_EXPORT lancius_graph_handle lancius_graph_load_stable(lancius_context ctx, const char* path) {
+    set_error(LANCIUS_OK);
     if (!ctx || !path) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
     lancius_graph* g = lancius_graph_load(path);
     if (!g) { sync_internal_error(); if (g_last_error == LANCIUS_OK) set_error(LANCIUS_ERR_IO); return NULL; }
@@ -245,6 +259,7 @@ LANCIUS_EXPORT lancius_graph_handle lancius_graph_load_stable(lancius_context ct
 }
 
 LANCIUS_EXPORT lancius_status lancius_graph_save_stable(lancius_graph_handle g, const char* path) {
+    set_error(LANCIUS_OK);
     if (!g || !path) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     /* v11S H1 fix: propagate save failure to FFI consumers */
@@ -258,6 +273,7 @@ LANCIUS_EXPORT lancius_status lancius_graph_save_stable(lancius_graph_handle g, 
 
 /* v11A3 stable API expansion: tensor introspection */
 LANCIUS_EXPORT size_t lancius_tensor_element_count(lancius_tensor_handle t) {
+    set_error(LANCIUS_OK);
     if (!t) { set_error(LANCIUS_ERR_NULL_PTR); return 0; }
     lancius_node* n = (lancius_node*)t;
     size_t elems = 0;
@@ -268,6 +284,7 @@ LANCIUS_EXPORT size_t lancius_tensor_element_count(lancius_tensor_handle t) {
 
 /* A3: dtype query */
 LANCIUS_EXPORT int lancius_tensor_get_dtype(lancius_tensor_handle t) {
+    set_error(LANCIUS_OK);
     if (!t) {
         set_error(LANCIUS_ERR_NULL_PTR);
         return -1;
