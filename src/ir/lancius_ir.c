@@ -91,7 +91,7 @@ lancius_graph* lancius_graph_create(void) {
 
 
 lancius_node* lancius_attention(lancius_graph* g, const lancius_node* q, const lancius_node* k, const lancius_node* v) {
-    if (!q || !k || !v) return NULL;
+    if (!q || !k || !v) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (q->ndim != 3 || k->ndim != 3 || v->ndim != 3) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     if (q->shape[1] == 0 || q->shape[2] == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
@@ -104,7 +104,7 @@ lancius_node* lancius_attention(lancius_graph* g, const lancius_node* q, const l
     return n;
 }
 lancius_node* lancius_layernorm(lancius_graph* g, const lancius_node* in, const lancius_node* gamma, const lancius_node* beta) {
-    if (!in || !gamma || !beta) return NULL;
+    if (!in || !gamma || !beta) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (in->ndim == 0 || in->ndim > 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     if (lancius_validate_shape(in->shape, in->ndim) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
@@ -119,7 +119,7 @@ lancius_node* lancius_layernorm(lancius_graph* g, const lancius_node* in, const 
     return n;
 }
 lancius_node* lancius_gelu(lancius_graph* g, const lancius_node* in) {
-    if (!in) return NULL;
+    if (!in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (lancius_validate_shape(in->shape, in->ndim) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_GELU, in->ndim, 1);
@@ -129,7 +129,7 @@ lancius_node* lancius_gelu(lancius_graph* g, const lancius_node* in) {
 
 
 lancius_node* lancius_broadcast_4d(lancius_graph* g, const lancius_node* a, size_t n, size_t c, size_t h, size_t w) {
-    if (!a) return NULL;
+    if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     size_t out[4] = {n, c, h, w};
     if (lancius_validate_shape(out, 4) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
@@ -195,15 +195,23 @@ static lancius_node* alloc_node(lancius_graph* g, lancius_opcode op, uint8_t ndi
     if (!g || !g->arena) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (ndim == 0 || ndim > 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     if (g->next_id == UINT32_MAX) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
+
+    const lancius_node** inputs = NULL;
+    if (in_count > 0) {
+        inputs = (const lancius_node**)lancius_arena_alloc(
+            g->arena,
+            sizeof(lancius_node*) * in_count,
+            8
+        );
+        if (!inputs) { lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
+    }
+
     lancius_node* n = (lancius_node*)lancius_arena_alloc(g->arena, sizeof(lancius_node), 8);
-    if (!n) { lancius_set_error(LANCIUS_ERROR_OOM); /* A4 alloc_node OOM */ return NULL; }
+    if (!n) { lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
 
     memset(n, 0, sizeof(lancius_node));
     n->id = g->next_id++;
 
-    /* A1: attach separated runtime state.
-     * Despot truth: ensure_capacity can OOM; a node with NULL rt violates
-     * the tracked-node invariant (was returned anyway). */
     lancius_ensure_runtime_capacity(g, n->id);
     if (!g->rt_states || n->id >= g->rt_cap) { lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
     if (g->rt_states && n->id < g->rt_cap) {
@@ -213,9 +221,11 @@ static lancius_node* alloc_node(lancius_graph* g, lancius_opcode op, uint8_t ndi
         n->rt->buffer_f32 = NULL;
         n->rt->dtype = LANCIUS_DTYPE_FP64;
         n->rt->scale = 1.0;
+        n->rt->scale_per_channel = NULL;
+        n->rt->scale_channels = 0;
         n->rt->owner = LANCIUS_MEMORY_EXTERNAL;
-        n->rt->buffer_owner = LANCIUS_MEMORY_EXTERNAL; /* A2 */
-        n->rt->int8_owner = LANCIUS_MEMORY_EXTERNAL;   /* A2 */
+        n->rt->buffer_owner = LANCIUS_MEMORY_EXTERNAL;
+        n->rt->int8_owner = LANCIUS_MEMORY_EXTERNAL;
         n->rt->f32_owner = LANCIUS_MEMORY_EXTERNAL;
         n->rt->offset = 0;
         n->rt->flags = 0;
@@ -224,19 +234,11 @@ static lancius_node* alloc_node(lancius_graph* g, lancius_opcode op, uint8_t ndi
     n->op = op;
     n->ndim = ndim;
     n->input_count = in_count;
-
-    if (in_count > 0) {
-        n->inputs = (const lancius_node**)lancius_arena_alloc(
-            g->arena,
-            sizeof(lancius_node*) * in_count,
-            8
-        );
-        if (!n->inputs) { lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
-    }
+    n->inputs = inputs;
 
     size_t before = g->node_count;
     track(g, n);
-    if (g->node_count == before) return NULL; /* track OOM */
+    if (g->node_count == before) { lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
     return n;
 }
 
@@ -288,7 +290,7 @@ static uint8_t broadcast_out_ndim(const lancius_node* a, const lancius_node* b) 
     return (a->ndim > b->ndim) ? a->ndim : b->ndim;
 }
 lancius_node* lancius_add(lancius_graph* g, const lancius_node* a, const lancius_node* b) {
-        if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] ADD NULL input"); lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (!a || !b) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     // V10S FIX: Allow broadcast
 
     /* Despot truth: broadcast incompatibility sets sticky error, never silent NULL. */
@@ -298,7 +300,7 @@ lancius_node* lancius_add(lancius_graph* g, const lancius_node* a, const lancius
     if (n) { broadcast_out_shape(a, b, n->shape); n->inputs[0] = a; n->inputs[1] = b; } return n;
 }
 lancius_node* lancius_sub(lancius_graph* g, const lancius_node* a, const lancius_node* b) {
-        if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] SUB NULL input"); lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (!a || !b) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     // V10S FIX: Allow broadcast
 
     if (lancius_validate_binary_broadcast(a, b) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
@@ -307,7 +309,7 @@ lancius_node* lancius_sub(lancius_graph* g, const lancius_node* a, const lancius
     if (n) { broadcast_out_shape(a, b, n->shape); n->inputs[0] = a; n->inputs[1] = b; } return n;
 }
 lancius_node* lancius_mul(lancius_graph* g, const lancius_node* a, const lancius_node* b) {
-        if (!a || !b) { fprintf(stderr, "[LANCIUS IR FATAL] MUL NULL input"); lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (!a || !b) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     // V10S FIX: Allow broadcast
 
     if (lancius_validate_binary_broadcast(a, b) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
@@ -317,11 +319,8 @@ lancius_node* lancius_mul(lancius_graph* g, const lancius_node* a, const lancius
 }
 lancius_node* lancius_matmul(lancius_graph* g, const lancius_node* a, const lancius_node* b) {
     if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
-    if (!a || !b || a->ndim < 2 || b->ndim < 2) {
-        fprintf(stderr, "[LANCIUS IR FATAL] MATMUL ndim < 2: a=%u b=%u", a?a->ndim:0, b?b->ndim:0);
-        lancius_set_error(LANCIUS_ERROR_INVALID_RANK);
-        return NULL;
-    }
+    if (!a || !b) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (a->ndim < 2 || b->ndim < 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     /* Despot truth: executor is 2D-only (scheduler reads shape[0..1]); an N-D
      * matmul node would silently drop batch dims at execution. Fail loud. */
     if (a->ndim != 2 || b->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
@@ -332,31 +331,29 @@ lancius_node* lancius_matmul(lancius_graph* g, const lancius_node* a, const lanc
     size_t b_rows = b->shape[b->ndim - 2];
     size_t b_cols = b->shape[b->ndim - 1];
 
-    if (a_cols != b_rows) {
-        fprintf(stderr, "[LANCIUS IR FATAL] MATMUL mismatch: a=[%zux%zu] b=[%zux%zu]", a_rows, a_cols, b_rows, b_cols);
-        return NULL;
-    }
+    if (a_cols != b_rows) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_MATMUL, 2, 2);
     if (n) { n->shape[0] = a_rows; n->shape[1] = b_cols; n->inputs[0] = a; n->inputs[1] = b; }
     return n;
 }
 lancius_node* lancius_relu(lancius_graph* g, const lancius_node* a) {
-    if (!a) return NULL;
+    if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_RELU, a->ndim, 1);
     if (n) { memcpy(n->shape, a->shape, sizeof(size_t)*a->ndim); n->inputs[0] = a; } return n;
 }
 lancius_node* lancius_softmax(lancius_graph* g, const lancius_node* a) {
-    if (!a || a->ndim != 2) return NULL;
+    if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (a->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_SOFTMAX, 2, 1);
     if (n) { memcpy(n->shape, a->shape, sizeof(size_t)*2); n->inputs[0] = a; } return n;
 }
 lancius_node* lancius_sum(lancius_graph* g, const lancius_node* a) {
-    if (!a) return NULL;
+    if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_SUM, 2, 1);
     if (n) { n->shape[0] = 1; n->shape[1] = 1; n->inputs[0] = a; } return n;
 }
 lancius_node* lancius_broadcast(lancius_graph* g, const lancius_node* a, size_t r, size_t c) {
-    if (!a) return NULL;
+    if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     size_t out[2] = {r, c};
     if (lancius_validate_shape(out, 2) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
@@ -372,29 +369,30 @@ lancius_node* lancius_broadcast(lancius_graph* g, const lancius_node* a, size_t 
     if (n) { n->shape[0] = r; n->shape[1] = c; n->inputs[0] = a; } return n;
 }
 lancius_node* lancius_transpose(lancius_graph* g, const lancius_node* a) {
-    if (!a || a->ndim != 2) return NULL;
+    if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (a->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_TRANSPOSE, 2, 1);
     if (n) { n->shape[0] = a->shape[1]; n->shape[1] = a->shape[0]; n->inputs[0] = a; } return n;
 }
 lancius_node* lancius_relu_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* fwd_a) {
-    if (!grad || !fwd_a) return NULL;
+    if (!grad || !fwd_a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_RELU_BWD, grad->ndim, 2);
     if (n) { memcpy(n->shape, grad->shape, sizeof(size_t)*grad->ndim); n->inputs[0] = grad; n->inputs[1] = fwd_a; } return n;
 }
 lancius_node* lancius_softmax_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* fwd_y) {
-    if (!grad || !fwd_y) return NULL;
+    if (!grad || !fwd_y) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_SOFTMAX_BWD, grad->ndim, 2);
     if (n) { memcpy(n->shape, grad->shape, sizeof(size_t)*grad->ndim); n->inputs[0] = grad; n->inputs[1] = fwd_y; } return n;
 }
 /* v12R2 generic trainable primitives. Same-shape activation; MSE reduces to
  * scalar with exact-shape pred/target. Framework only: no truth semantics. */
 lancius_node* lancius_tanh(lancius_graph* g, const lancius_node* a) {
-    if (!a) return NULL;
+    if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_TANH, a->ndim, 1);
     if (n) { memcpy(n->shape, a->shape, sizeof(size_t)*a->ndim); n->inputs[0] = a; } return n;
 }
 lancius_node* lancius_tanh_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* fwd_y) {
-    if (!grad || !fwd_y) return NULL;
+    if (!grad || !fwd_y) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (grad->ndim != fwd_y->ndim) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     for (uint8_t i = 0; i < grad->ndim; i++)
         if (grad->shape[i] != fwd_y->shape[i]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
@@ -402,7 +400,7 @@ lancius_node* lancius_tanh_bwd(lancius_graph* g, const lancius_node* grad, const
     if (n) { memcpy(n->shape, grad->shape, sizeof(size_t)*grad->ndim); n->inputs[0] = grad; n->inputs[1] = fwd_y; } return n;
 }
 lancius_node* lancius_mse(lancius_graph* g, const lancius_node* pred, const lancius_node* target) {
-    if (!pred || !target) return NULL;
+    if (!pred || !target) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (pred->ndim != target->ndim) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     for (uint8_t i = 0; i < pred->ndim; i++)
         if (pred->shape[i] != target->shape[i]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
@@ -410,7 +408,7 @@ lancius_node* lancius_mse(lancius_graph* g, const lancius_node* pred, const lanc
     if (n) { n->shape[0] = 1; n->shape[1] = 1; n->inputs[0] = pred; n->inputs[1] = target; } return n;
 }
 lancius_node* lancius_mse_bwd(lancius_graph* g, const lancius_node* pred, const lancius_node* target, const lancius_node* grad) {
-    if (!pred || !target || !grad) return NULL;
+    if (!pred || !target || !grad) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (pred->ndim != target->ndim) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     for (uint8_t i = 0; i < pred->ndim; i++)
         if (pred->shape[i] != target->shape[i]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
@@ -420,24 +418,27 @@ lancius_node* lancius_mse_bwd(lancius_graph* g, const lancius_node* pred, const 
     if (n) { memcpy(n->shape, pred->shape, sizeof(size_t)*pred->ndim); n->inputs[0] = pred; n->inputs[1] = target; n->inputs[2] = grad; } return n;
 }
 lancius_node* lancius_sum_axis0(lancius_graph* g, const lancius_node* a) {
-    if (!a || a->ndim != 2) return NULL;
+    if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (a->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_SUM_AXIS0, 2, 1);
     if (n) { n->shape[0] = 1; n->shape[1] = a->shape[1]; n->inputs[0] = a; } return n;
 }
 lancius_node* lancius_sum_axis1(lancius_graph* g, const lancius_node* a) {
-    if (!a || a->ndim != 2) return NULL;
+    if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (a->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_SUM_AXIS1, 2, 1);
     if (n) { n->shape[0] = a->shape[0]; n->shape[1] = 1; n->inputs[0] = a; } return n;
 }
 
 lancius_node* lancius_conv2d(lancius_graph* g, const lancius_node* in, const lancius_node* w, uint32_t stride, uint32_t pad) {
-    if (!in || !w || in->ndim != 4 || w->ndim != 4) { fprintf(stderr, "[LANCIUS IR FATAL] CONV2D ndim mismatch\n"); return NULL; }
+    if (!in || !w) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (in->ndim != 4 || w->ndim != 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     size_t N = in->shape[0], C_in = in->shape[1], H_in = in->shape[2], W_in = in->shape[3];
     size_t C_out = w->shape[0], K_h = w->shape[2], K_w = w->shape[3];
-    if (C_in != w->shape[1]) { fprintf(stderr, "[LANCIUS IR FATAL] CONV2D channels mismatch: in=%zu w=%zu\n", C_in, w->shape[1]); return NULL; }
+    if (C_in != w->shape[1]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     if (lancius_validate_conv2d(H_in, W_in, K_h, K_w, stride, pad) != LANCIUS_ERROR_OK) {
-        fprintf(stderr, "[IR FATAL] Conv2D spatial dimensions underflow.\n");
+        lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE);
         return NULL;
     }
     size_t H_out = (H_in + 2*pad - K_h) / stride + 1;
@@ -452,13 +453,14 @@ lancius_node* lancius_conv2d(lancius_graph* g, const lancius_node* in, const lan
 }
 
 lancius_node* lancius_maxpool2d(lancius_graph* g, const lancius_node* in, uint32_t kernel, uint32_t stride) {
-    if (!in || in->ndim != 4) return NULL;
+    if (!in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (in->ndim != 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     size_t N = in->shape[0], C = in->shape[1], H_in = in->shape[2], W_in = in->shape[3];
     if (H_in < kernel || W_in < kernel) {
-        fprintf(stderr, "[IR FATAL] MaxPool2D spatial dimensions underflow.\n");
+        lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE);
         return NULL;
     }
-    if (stride == 0 || kernel == 0) return NULL;
+    if (stride == 0 || kernel == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
     size_t H_out = (H_in - kernel) / stride + 1;
     size_t W_out = (W_in - kernel) / stride + 1;
     lancius_node* n = alloc_node(g, LANCIUS_OP_MAXPOOL2D, 4, 1);
@@ -471,7 +473,8 @@ lancius_node* lancius_maxpool2d(lancius_graph* g, const lancius_node* in, uint32
 }
 
 lancius_node* lancius_flatten(lancius_graph* g, const lancius_node* in) {
-    if (!in || in->ndim != 4) return NULL;
+    if (!in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (in->ndim != 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     size_t N = in->shape[0];
     size_t flat_dims[3] = {in->shape[1], in->shape[2], in->shape[3]};
     size_t flat = 0;
@@ -483,7 +486,7 @@ lancius_node* lancius_flatten(lancius_graph* g, const lancius_node* in) {
 
 
 lancius_node* lancius_reshape(lancius_graph* g, const lancius_node* in, uint8_t ndim, size_t s0, size_t s1, size_t s2, size_t s3) {
-    if (!in) return NULL;
+    if (!in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     size_t resh_out_shape[4] = {s0, s1, s2, s3};
     size_t resh_in_elems = 0;
     if (!lancius_node_elements_checked(in, &resh_in_elems)) return NULL;
@@ -516,7 +519,8 @@ lancius_node* lancius_conv2d_bwd_w(lancius_graph* g, const lancius_node* grad, c
 
 
 lancius_node* lancius_permute(lancius_graph* g, const lancius_node* in, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3) {
-    if (!in || in->ndim != 4) return NULL;
+    if (!in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (in->ndim != 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     uint32_t perm_axes[4] = {a0, a1, a2, a3}; /* v12R1-202 */
     if (lancius_validate_permutation(perm_axes, 4) != LANCIUS_ERROR_OK) return NULL;
     lancius_node* n = alloc_node(g, LANCIUS_OP_PERMUTE, 4, 1);
@@ -529,7 +533,8 @@ lancius_node* lancius_permute(lancius_graph* g, const lancius_node* in, uint32_t
     return n;
 }
 lancius_node* lancius_matmul_batched(lancius_graph* g, const lancius_node* a, const lancius_node* b) {
-    if (!a || !b || a->ndim != 3 || b->ndim != 3) return NULL;
+    if (!a || !b) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (a->ndim != 3 || b->ndim != 3) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     if (a->shape[0] != b->shape[0] || a->shape[2] != b->shape[1]) return NULL;
     lancius_node* n = alloc_node(g, LANCIUS_OP_MATMUL_BATCHED, 3, 2);
     if (n) {
@@ -540,21 +545,22 @@ lancius_node* lancius_matmul_batched(lancius_graph* g, const lancius_node* a, co
 }
 
 lancius_node* lancius_cross_entropy(lancius_graph* g, const lancius_node* logits, const lancius_node* targets) {
-    if (!logits || !targets || logits->ndim != 2 || targets->ndim != 2) return NULL;
+    if (!logits || !targets) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (logits->ndim != 2 || targets->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     if (logits->shape[0] != targets->shape[0] || logits->shape[1] != targets->shape[1]) return NULL;
     lancius_node* n = alloc_node(g, LANCIUS_OP_CROSS_ENTROPY, 2, 2);
     if (n) { n->shape[0] = 1; n->shape[1] = 1; n->inputs[0] = logits; n->inputs[1] = targets; }
     return n;
 }
 lancius_node* lancius_cross_entropy_bwd(lancius_graph* g, const lancius_node* logits, const lancius_node* targets, const lancius_node* grad_out) {
-    if (!logits || !targets || !grad_out) return NULL;
+    if (!logits || !targets || !grad_out) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_CROSS_ENTROPY_BWD, logits->ndim, 3);
     if (n) { memcpy(n->shape, logits->shape, sizeof(size_t)*logits->ndim); n->inputs[0] = logits; n->inputs[1] = targets; n->inputs[2] = grad_out; }
     return n;
 }
 
 lancius_node* lancius_conv2d_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* fwd_in, const lancius_node* fwd_w, uint32_t stride, uint32_t pad) {
-    if (!grad || !fwd_in || !fwd_w) return NULL;
+    if (!grad || !fwd_in || !fwd_w) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_CONV2D_BWD, 4, 3);
     if (n) {
         memcpy(n->shape, fwd_in->shape, sizeof(size_t)*4);
@@ -563,7 +569,7 @@ lancius_node* lancius_conv2d_bwd(lancius_graph* g, const lancius_node* grad, con
     } return n;
 }
 lancius_node* lancius_maxpool2d_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* fwd_in, uint32_t kernel, uint32_t stride) {
-    if (!grad || !fwd_in) return NULL;
+    if (!grad || !fwd_in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_MAXPOOL2D_BWD, 4, 2);
     if (n) {
         memcpy(n->shape, fwd_in->shape, sizeof(size_t)*4);
@@ -573,7 +579,7 @@ lancius_node* lancius_maxpool2d_bwd(lancius_graph* g, const lancius_node* grad, 
 }
 
 lancius_node* lancius_rmsnorm(lancius_graph* g, const lancius_node* in, const lancius_node* gamma) {
-    if (!in || !gamma) return NULL;
+    if (!in || !gamma) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (lancius_validate_shape(in->shape, in->ndim) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
     size_t total = 0;
@@ -590,7 +596,7 @@ lancius_node* lancius_rmsnorm(lancius_graph* g, const lancius_node* in, const la
 }
 
 lancius_node* lancius_swiglu(lancius_graph* g, const lancius_node* gate, const lancius_node* up) {
-    if (!gate || !up) return NULL;
+    if (!gate || !up) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (gate->ndim != up->ndim) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     for (uint8_t i = 0; i < gate->ndim; i++) {
@@ -606,7 +612,7 @@ lancius_node* lancius_swiglu(lancius_graph* g, const lancius_node* gate, const l
 }
 
 lancius_node* lancius_gqa(lancius_graph* g, const lancius_node* q, const lancius_node* k, const lancius_node* v, uint32_t n_heads_q, uint32_t n_heads_kv) {
-    if (!q || !k || !v) return NULL;
+    if (!q || !k || !v) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (lancius_validate_gqa(n_heads_q, n_heads_kv) != LANCIUS_ERROR_OK) return NULL;
     lancius_node* n = alloc_node(g, LANCIUS_OP_GQA, q->ndim, 3);
     if (n) {
@@ -619,7 +625,7 @@ lancius_node* lancius_gqa(lancius_graph* g, const lancius_node* q, const lancius
 }
 
 lancius_node* lancius_rope(lancius_graph* g, const lancius_node* qk, size_t seq_len, size_t n_heads, size_t head_dim) {
-    if (!g || !qk) return NULL;
+    if (!g || !qk) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (seq_len == 0 || n_heads == 0 || head_dim == 0 || (head_dim % 2) != 0) {
         lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE);
         return NULL;
@@ -718,9 +724,8 @@ void lancius_node_set_owner(lancius_node* n, lancius_memory_owner owner) {
 
     n->rt->owner = owner;
     n->rt->buffer_owner = owner;
-    /* Despot truth: FP32 buffers track f32_owner (was left stale, leaking
-     * arena/pool f32 or misreading ownership on release). */
     if (n->dtype == LANCIUS_DTYPE_FP32) n->rt->f32_owner = owner;
+    if (n->dtype == LANCIUS_DTYPE_INT8) n->rt->int8_owner = owner;
 }
 
 lancius_memory_owner lancius_node_get_owner(const lancius_node* n) {
@@ -845,6 +850,13 @@ void lancius_node_release_owned(lancius_node* n) {
             n->runtime_data_f32 = NULL;
             n->rt->buffer_f32 = NULL;
             n->rt->f32_owner = LANCIUS_MEMORY_EXTERNAL;
+        }
+
+        /* v12R1: per-channel quantization scales are a plain heap allocation. */
+        if (n->rt->scale_per_channel) {
+            free(n->rt->scale_per_channel);
+            n->rt->scale_per_channel = NULL;
+            n->rt->scale_channels = 0;
         }
 
         if (

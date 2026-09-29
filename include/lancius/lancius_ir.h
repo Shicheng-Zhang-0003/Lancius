@@ -223,6 +223,10 @@ lancius_graph* lancius_graph_load(const char* path);
 
 void lancius_optimize_fusion(lancius_graph* g);
 void lancius_quantize_graph(lancius_graph* g);
+/* v12R1: per-channel (per-output-channel) INT8 quantization for 4D weights */
+void lancius_quantize_graph_per_channel(lancius_graph* g);
+/* v12R1: dequantize INT8 tensors back to FP64 (per-tensor or per-channel) */
+void lancius_dequantize_graph(lancius_graph* g);
 
 
 lancius_node* lancius_attention(lancius_graph* g, const lancius_node* q, const lancius_node* k, const lancius_node* v);

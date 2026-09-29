@@ -29,12 +29,12 @@ lancius_program* lancius_compile_graph(lancius_graph* g) {
     // v10S GUARD: Bytecode VM only supports 2D tensors
     for (uint32_t i = 0; i < g->node_count; i++) {
         if (!g->nodes[i] || g->nodes[i]->id >= g->next_id) {
-            fprintf(stderr, "[BYTECODE FATAL] corrupt node table.\n");
+            lancius_set_error(LANCIUS_ERROR_INTERNAL);
             free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog->is_const); free(prog->const_val); free(prog);
             return NULL;
         }
         if (g->nodes[i]->ndim > 2) {
-            fprintf(stderr, "[BYTECODE FATAL] ndim > 2 not supported in v10S VM.\n");
+            lancius_set_error(LANCIUS_ERROR_INVALID_RANK);
             free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog->is_const); free(prog->const_val); free(prog);
             return NULL;
         }
@@ -80,8 +80,7 @@ lancius_program* lancius_compile_graph(lancius_graph* g) {
             prog->code[pc++] = LANCIUS_BC_SUM; prog->code[pc++] = out_r;
             prog->code[pc++] = reg_map[n->inputs[0]->id];
         } else {
-            /* Anything beyond 2D MLP must fail loudly, never miscompile. */
-            fprintf(stderr, "[BYTECODE FATAL] op %d not supported in v10S VM (node %u).\n", n->op, n->id);
+            lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
             free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog->is_const); free(prog->const_val); free(prog);
             return NULL;
         }
@@ -176,6 +175,7 @@ int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lanc
         } else if (op == LANCIUS_BC_BROADCAST) {
             size_t cols = prog->cols[r_out]; size_t rows = prog->rows[r_out];
             size_t in_rows = prog->rows[r_a]; size_t in_cols = prog->cols[r_a];
+            if (in_rows && in_cols > SIZE_MAX / in_rows) return -1;
             size_t in_elems = in_rows * in_cols;
             if (in_elems == 1) {
                 double val = a[0];
@@ -200,12 +200,14 @@ int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lanc
                 for(size_t c=0; c<C; c++) o[r*C+c] /= sum;
             }
         } else if (op == LANCIUS_BC_SUM) {
+            if (prog->rows[r_a] && prog->cols[r_a] > SIZE_MAX / prog->rows[r_a]) return -1;
             size_t elems = prog->rows[r_a] * prog->cols[r_a];
             double sum = 0.0; for(size_t k=0; k<elems; k++) sum += a[k];
             o[0] = sum;
         }
     }
 
+    if (prog->rows[prog->out_reg] && prog->cols[prog->out_reg] > SIZE_MAX / prog->rows[prog->out_reg]) return -1;
     size_t out_elements = prog->rows[prog->out_reg] * prog->cols[prog->out_reg];
     if (!regs[prog->out_reg]) return -1;
     memcpy(out, regs[prog->out_reg], out_elements * sizeof(double));

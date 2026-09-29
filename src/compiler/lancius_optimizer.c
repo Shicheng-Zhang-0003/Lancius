@@ -1,7 +1,7 @@
 #include "lancius/lancius_ir.h"
-#include <stdio.h>
+#include "lancius/lancius_error.h"
 
-static int count_consumers(lancius_graph* g, lancius_node* target) {
+static int count_consumers(lancius_graph* g, const lancius_node* target) {
     int count = 0;
     uint32_t i, j;
     if (!g || !g->nodes || !target) return 0;
@@ -22,7 +22,14 @@ void lancius_optimize_fusion(lancius_graph* g) {
         lancius_node* n = g->nodes[i];
         if (!n) continue;
         if (n->op == LANCIUS_OP_RELU && n->input_count > 0 && n->inputs && n->inputs[0] && n->inputs[0]->op == LANCIUS_OP_CONV2D) {
-            lancius_node* conv = (lancius_node*)n->inputs[0];
+            /* v12R1 fix: n->inputs is const-qualified — do not cast away const.
+             * Fusion mutates the conv node, so resolve the non-const handle
+             * through the graph's node array. */
+            lancius_node* conv = NULL;
+            for (uint32_t k = 0; k < g->node_count; k++) {
+                if (g->nodes[k] == n->inputs[0]) { conv = g->nodes[k]; break; }
+            }
+            if (!conv) continue;
             /* Despot truth: stolen inputs array must hold 2 entries (was: OOB
              * read when conv had <2 inputs). */
             if (!conv->inputs || conv->input_count != 2 || !conv->inputs[0] || !conv->inputs[1]) continue;
@@ -45,5 +52,6 @@ void lancius_optimize_fusion(lancius_graph* g) {
             }
         }
     }
-    printf("[V10S OPTIMIZER] Fused %d Conv2D+ReLU patterns. Arena memory saved.\n", fused_count);
+    /* v12R1 fix: report through the error channel, not stdout. */
+    lancius_set_error(LANCIUS_ERROR_OK);
 }
