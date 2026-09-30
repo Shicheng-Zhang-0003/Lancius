@@ -321,8 +321,6 @@ int main() {
     printf("  FINAL TEST ACCURACY: %.2f%% (%d / %d)\n", 100.0 * correct / te_n, correct, te_n);
     printf("================================================================\n");
     /* Despot truth: trainers must earn exit 0. Chance is 10%%. */
-    /* (Also: prog/g_inf were destroyed above AND here — double-free. The
-     * second destroy is gone; this path only frees out_batch.) */
     if (correct * 10 <= te_n) {
         fprintf(stderr, "[TRAIN] FATAL: accuracy %.2f%% <= chance; refusing green exit.\n",
             100.0 * correct / te_n);

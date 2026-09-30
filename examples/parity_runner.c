@@ -38,30 +38,39 @@ if(!in_node || !out_node) {
     // Load FP32 input from Python and cast to Lancius FP64
     size_t in_elems = in_node->shape[0] * in_node->shape[1] * in_node->shape[2] * in_node->shape[3];
     float* temp_in = (float*)malloc(in_elems * sizeof(float));
+    if (!temp_in) { printf("  [C] FATAL: OOM\n"); return 1; }
     FILE* f_in = fopen("parity_input.bin", "rb");
-    if(!f_in) { printf("  [C] FATAL: Missing parity_input.bin\n"); return 1; }
-    size_t _r = fread(temp_in, sizeof(float), in_elems, f_in); (void)_r;
+    if(!f_in) { printf("  [C] FATAL: Missing parity_input.bin\n"); free(temp_in); return 1; }
+    size_t _r = fread(temp_in, sizeof(float), in_elems, f_in);
     fclose(f_in);
+    if (_r != in_elems) { printf("  [C] FATAL: Short read\n"); free(temp_in); return 1; }
 
     // V1.0 FIX: Explicitly allocate memory for the input node before writing
     in_node->runtime_data = (double*)malloc(in_elems * sizeof(double));
+    if (!in_node->runtime_data) { printf("  [C] FATAL: OOM\n"); free(temp_in); return 1; }
     for(size_t i=0; i<in_elems; i++) in_node->runtime_data[i] = (double)temp_in[i];
     free(temp_in);
 
     // Execute
     printf("  [C] Compiling Schedule & Executing...\n");
     lancius_schedule* sched = lancius_ir_schedule(g);
+    if (!sched) { printf("  [C] FATAL: Schedule failed\n"); return 1; }
     lancius_arena* scratch = lancius_arena_create(16 * 1024 * 1024);
+    if (!scratch) { printf("  [C] FATAL: OOM\n"); return 1; }
     lancius_schedule_execute(sched, scratch);
 
     // Cast FP64 output back to FP32 for Python comparison
     size_t out_elems = out_node->shape[0] * out_node->shape[1];
     float* temp_out = (float*)malloc(out_elems * sizeof(float));
+    if (!temp_out) { printf("  [C] FATAL: OOM\n"); return 1; }
+    if (!out_node->runtime_data) { printf("  [C] FATAL: No output\n"); free(temp_out); return 1; }
     for(size_t i=0; i<out_elems; i++) temp_out[i] = (float)out_node->runtime_data[i];
 
     FILE* f_out = fopen("lancius_out.bin", "wb");
-    fwrite(temp_out, sizeof(float), out_elems, f_out);
+    if (!f_out) { printf("  [C] FATAL: Cannot write output\n"); free(temp_out); return 1; }
+    size_t _w = fwrite(temp_out, sizeof(float), out_elems, f_out);
     fclose(f_out);
+    if (_w != out_elems) { printf("  [C] FATAL: Short write\n"); free(temp_out); return 1; }
     free(temp_out);
 
     // Cleanup: free only external buffers.
