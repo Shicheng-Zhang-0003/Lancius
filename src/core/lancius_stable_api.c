@@ -1,7 +1,6 @@
 #include "lancius/lancius_stable_api.h"
 #include "lancius/lancius_checked.h"
 #include "lancius/lancius_ir.h" /* for LANCIUS_MAX_TENSOR_ELEMS */
-#include "lancius/lancius_ir.h"
 #include "lancius/lancius_scheduler.h"
 #include "lancius/lancius_arena.h"
 #include <stdlib.h>
