@@ -54,17 +54,19 @@ This matrix describes operator support in the current v11A1 tree.
 | SwiGLU | yes | no | yes | experimental |
 | GQA | yes | no | yes | experimental |
 
-## Unsupported in v11A1
+## Deferred in v11A1
 
-These ops must fail loudly at runtime:
+These ops were not yet available in v11A1 and fail loudly at runtime:
 
 | Op | Status |
 |---|---|
-| Permute | implemented (v11A1 Task 5) |
-| MatMulBatched | implemented (v11A1 Task 5) |
 | Embedding | unsupported (reserved) |
 | KVCacheRead | unsupported (added in v11A2) |
 | KVCacheWrite | unsupported (added in v11A2) |
+
+Note: Permute and MatMulBatched were implemented in v11A1 Task 5 (see
+Core Ops table above). They are listed here only to clarify that their
+backward passes were not yet supported in v11A1.
 
 ## Transformer honesty (Task 10)
 

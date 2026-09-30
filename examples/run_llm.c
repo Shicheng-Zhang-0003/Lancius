@@ -6,7 +6,7 @@
 
 int main() {
     printf("================================================================\n");
-    printf("  Lancius v9A: TRANSFORMER KERNEL DEMO (Experimental)             \n");
+    printf("  Lancius v12R1: TRANSFORMER KERNEL DEMO (Experimental)            \n");
     printf("================================================================\n\n");
 
     lancius_graph* g = lancius_graph_create();
@@ -68,16 +68,16 @@ for(size_t i=0; i<qkv_sz; i++) {
 
     printf("[1/2] Compiling Transformer Schedule...\n");
     lancius_schedule* sched = lancius_ir_schedule(g);
-    if (!sched) { fprintf(stderr, "FATAL: schedule failed\n"); lancius_graph_destroy(g); return 1; }
+    if (!sched) { fprintf(stderr, "FATAL: schedule failed\n"); free(Q_in->runtime_data); free(K_in->runtime_data); free(V_in->runtime_data); free(gamma->runtime_data); free(beta->runtime_data); lancius_graph_destroy(g); return 1; }
     size_t peak_mem = lancius_schedule_peak_memory(sched);
-    printf("  🧠 Liveness Analyzer: Peak Memory = %zu bytes\n", peak_mem);
+    printf("  Liveness Analyzer: Peak Memory = %zu bytes\n", peak_mem);
 
     /* Despot truth: peak*2+1MB wrapped size_t; NULL scratch executed. */
     size_t arena_need = 0;
-    if (peak_mem > (SIZE_MAX - 1024*1024) / 2) { fprintf(stderr, "FATAL: arena size overflow\n"); lancius_schedule_destroy(sched); lancius_graph_destroy(g); return 1; }
+    if (peak_mem > (SIZE_MAX - 1024*1024) / 2) { fprintf(stderr, "FATAL: arena size overflow\n"); lancius_schedule_destroy(sched); free(Q_in->runtime_data); free(K_in->runtime_data); free(V_in->runtime_data); free(gamma->runtime_data); free(beta->runtime_data); lancius_graph_destroy(g); return 1; }
     arena_need = peak_mem * 2 + 1024*1024;
     lancius_arena* scratch = lancius_arena_create(arena_need ? arena_need : 1);
-    if (!scratch) { fprintf(stderr, "FATAL: OOM scratch arena\n"); lancius_schedule_destroy(sched); lancius_graph_destroy(g); return 1; }
+    if (!scratch) { fprintf(stderr, "FATAL: OOM scratch arena\n"); lancius_schedule_destroy(sched); free(Q_in->runtime_data); free(K_in->runtime_data); free(V_in->runtime_data); free(gamma->runtime_data); free(beta->runtime_data); lancius_graph_destroy(g); return 1; }
 
     printf("[2/2] Executing Transformer Block...\n");
     lancius_schedule_execute(sched, scratch);
@@ -88,6 +88,8 @@ for(size_t i=0; i<qkv_sz; i++) {
         if (!gelu->runtime_data || !lancius_node_elements_checked(gelu, &ge) || ge < 8) {
             fprintf(stderr, "FATAL: gelu output missing/short\n");
             lancius_schedule_destroy(sched); lancius_graph_destroy(g); lancius_arena_destroy(scratch);
+            free(Q_in->runtime_data); free(K_in->runtime_data); free(V_in->runtime_data);
+            free(gamma->runtime_data); free(beta->runtime_data);
             return 1;
         }
     }
@@ -111,7 +113,7 @@ for(size_t i=0; i<qkv_sz; i++) {
     free(gamma_data); free(beta_data);
 
     printf("\n================================================================\n");
-    printf("  LANCIUS v11A1 TRANSFORMER KERNEL DEMO EXECUTED.\n");
+    printf("  LANCIUS v12R1 TRANSFORMER KERNEL DEMO EXECUTED.\n");
     printf("================================================================\n");
     return 0;
 }
