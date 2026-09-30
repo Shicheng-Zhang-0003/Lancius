@@ -40,7 +40,7 @@ def main():
     # V10S FIX: Always regenerate to prevent stale artifact divergence
     if os.path.exists("pytorch_lenet.lancius"):
         os.remove("pytorch_lenet.lancius")
-    subprocess.run(["python3", "onnx_to_lancius.py"], check=True)
+    subprocess.run(["python3", "onnx_to_lancius.py"], check=True, timeout=60)
 
     # 4. Compile and run C Parity Runner
     print("[4/5] Compiling and running Lancius C Engine...")
@@ -49,15 +49,19 @@ def main():
         "-I./include", "-o", "parity_runner",
         "examples/parity_runner.c", "liblancius.a", "-lm", "-lpthread"
     ]
-    result = subprocess.run(compile_cmd, capture_output=True, text=True)
+    result = subprocess.run(compile_cmd, capture_output=True, text=True, timeout=60)
     if result.returncode != 0:
         print(f"❌ FATAL: Compilation failed:\n{result.stderr}")
         sys.exit(1)
-    subprocess.run(["./parity_runner"], check=True)
+    subprocess.run(["./parity_runner"], check=True, timeout=60)
 
     # 5. Differential Comparison
     print("[5/5] Performing Differential Math Comparison...")
-    lancius_out = np.fromfile("lancius_out.bin", dtype=np.float32).reshape(baseline.shape)
+    lancius_raw = np.fromfile("lancius_out.bin", dtype=np.float32)
+    if lancius_raw.size != baseline.size:
+        print(f"❌ FATAL: Output size mismatch: Lancius {lancius_raw.size} vs ONNX {baseline.size}")
+        sys.exit(1)
+    lancius_out = lancius_raw.reshape(baseline.shape)
 
     max_diff = np.max(np.abs(baseline - lancius_out))
     mean_diff = np.mean(np.abs(baseline - lancius_out))

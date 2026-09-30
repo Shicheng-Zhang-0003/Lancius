@@ -13,26 +13,25 @@ def main():
     print("================================================================")
 
     if not os.path.exists("trained_lenet.onnx"):
-        subprocess.run(["python3", "train_1_epoch.py"], check=True)
+        subprocess.run(["python3", "train_1_epoch.py"], check=True, timeout=600)
 
     print("\n[1/4] Preparing 100 CIFAR-10 Test Images...")
     transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
     testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False)
     images, labels = next(iter(testloader))
-    images.numpy().astype(np.float32).tofile("test_batch.bin")
+    images_np = images.cpu().numpy().astype(np.float32)
+    images_np.tofile("test_batch.bin")
 
     print("[2/4] Running ONNX Runtime Baseline...")
     sess = ort.InferenceSession("trained_lenet.onnx")
-    onnx_out = sess.run(None, {'input': images.numpy().astype(np.float32)})[0]
+    onnx_out = sess.run(None, {'input': images_np})[0]
     onnx_preds = np.argmax(onnx_out, axis=1).astype(np.int32)
 
     print("[3/4] Converting to Lancius Binary...")
     if os.path.exists("trained_lenet.lancius"): os.remove("trained_lenet.lancius")
 
-    # v11A1 Task 13a: do not self-modify onnx_to_lancius.py
-
-    subprocess.run(["python3", "onnx_to_lancius.py", "trained_lenet.onnx", "trained_lenet.lancius"], check=True)
+    subprocess.run(["python3", "onnx_to_lancius.py", "trained_lenet.onnx", "trained_lenet.lancius"], check=True, timeout=60)
 
     print("[4/4] Compiling and running Lancius C Engine on 100 images...")
     compile_cmd = [
@@ -40,13 +39,16 @@ def main():
         "-I./include", "-o", "run_trained_batch",
         "examples/run_trained_batch.c", "liblancius.a", "-lm", "-lpthread"
     ]
-    result = subprocess.run(compile_cmd, capture_output=True, text=True)
+    result = subprocess.run(compile_cmd, capture_output=True, text=True, timeout=60)
     if result.returncode != 0:
         print(f"FATAL: Compilation failed:\n{result.stderr}")
         sys.exit(1)
-    subprocess.run(["./run_trained_batch"], check=True)
+    subprocess.run(["./run_trained_batch"], check=True, timeout=60)
 
     lancius_preds = np.fromfile("lancius_preds.bin", dtype=np.int32)
+    if lancius_preds.size != onnx_preds.size:
+        print(f"FATAL: Prediction count mismatch: Lancius {lancius_preds.size} vs ONNX {onnx_preds.size}")
+        sys.exit(1)
 
     print("\n" + "="*60)
     matches = np.sum(onnx_preds == lancius_preds)
