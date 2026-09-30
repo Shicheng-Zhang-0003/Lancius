@@ -1323,8 +1323,6 @@ static int cmd_convert(int argc, char **argv) {
 
 static int cmd_export(int argc, char **argv) {
     int i;
-    char cmd[2048];
-    size_t off;
     if (argc < 1 || is_help_arg(argv[0])) {
         print_export_help();
         return argc < 1 ? 2 : 0;
@@ -1363,8 +1361,6 @@ static int cmd_export(int argc, char **argv) {
             xa[ac++] = argv[i];
         }
         xa[ac] = NULL;
-        (void)cmd;
-        (void)off;
         return run_argv(xa[0], xa);
     }
 }
