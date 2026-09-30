@@ -143,9 +143,9 @@ anything larger stays Python-orchestrated).
 
 ## v12R1 bug-fix campaign (applied before R2 work)
 
-A comprehensive bug-fix campaign closed **26 defects** across the codebase
-before R2 development began. All fixes are validated by `make check`,
-`check-sanitizers`, and the despot truth probes.
+A comprehensive bug-fix campaign closed **38 defects** across the codebase
+before R2 development began (26 in V4 + 12 in V5). All fixes are validated
+by `make check`, `check-sanitizers`, and the despot truth probes.
 
 ### Autodiff & gradients
 - **BROADCAST backward** fixed — gradient now correctly reduces over broadcast dimensions

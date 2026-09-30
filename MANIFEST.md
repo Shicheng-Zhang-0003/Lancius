@@ -1,6 +1,6 @@
 # Lancius Compatibility Manifest
 
-## v12R1 Milestone (development, 2026-09-21) + despot truth V2/V3 (2026-09-28) + hardening batch V4 (2026-09-28)
+## v12R1 Milestone (development, 2026-09-21) + despot truth V2/V3 (2026-09-28) + hardening batch V4 (2026-09-28) + hardening batch V5 (2026-09-30)
 
 v12R1 is the first development milestone of the v12 cycle, not a stable
 release. Public github tag: `V1.2RC1`. It inherits the v11S contract below, with the following additions:

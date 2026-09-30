@@ -147,4 +147,30 @@ Behavioral deltas vs §1–§9:
   dependency fixed. `train_cifar10` now links `-lpthread`. Dependency
   tracking improved. `.gitignore` updated with missing entries.
   `lancius.pc.in` version fixed.
+
+## 11. Hardening batch V5 (2026-09-30) — threadpool, IR honesty, example hardening
+
+Comprehensive bug-fix campaign: 12 defects fixed across threadpool, IR,
+compiler, runtime, examples, and Python tooling. All re-proven by
+`make check`, `check-sanitizers`, and despot truth probes.
+
+Behavioral deltas vs §1–§10:
+
+- **Threadpool:** Queue growth use-before-initialization fixed (was reading
+  from uninitialized `nq` buffer during realloc; now reads from `pool->queue`).
+- **Security:** Command injection in `distill_prm800k` fixed (replaced
+  `system()` with `mkdir()`).
+- **IR:** Silent NULL returns fixed — `lancius_matmul_batched`,
+  `lancius_cross_entropy`, `lancius_reshape`, `lancius_flatten`,
+  `lancius_gqa`, `lancius_permute` now set error codes on validation failure.
+- **Optimizer:** Error clearing on success fixed (no longer masks prior errors).
+- **Quantizer:** Zero-scale check added in `lancius_dequantize_graph`.
+- **Scheduler:** Cross-entropy consistency fixed (forward and backward use
+  same R/C source).
+- **Memory planner:** Free block splitting maintains 32-byte alignment.
+- **Stable API:** Duplicate `#include` removed.
+- **Serialization/Vision:** `fprintf`/`printf` removed from library code.
+- **Examples:** `parity_runner` and `run_trained_batch` hardened.
+- **Python:** `onnx_to_lancius.py` shape filtering fixed.
+- **Autodiff:** NOP comment clarified.
 - **Code quality:** Magic numbers replaced with named constants throughout.
