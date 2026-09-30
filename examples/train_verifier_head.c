@@ -78,7 +78,7 @@ int main(void) {
 
     lancius_arena* scratch = lancius_arena_create(16 * 1024 * 1024);
     if (!scratch) { fprintf(stderr, "FATAL: OOM scratch arena\n"); return 1; }
-    double loss0 = -1.0, loss1 = -1.0, min0 = -1.0, min1 = -1.0;
+    double loss0 = -1.0, loss1 = -1.0, max_err0 = -1.0, max_err1 = -1.0;
 
     for (int it = 0; it < ITERS; it++) {
         /* ---- Forward: score every step in the batch ---- */
@@ -94,7 +94,7 @@ int main(void) {
         lancius_schedule* fs = NULL;
         double batch_loss = 0.0;
         double scores[BATCH];
-        double min_err;
+        double max_err;
         int weak;
         lancius_graph* g2 = NULL;
         lancius_schedule* fs2 = NULL;
@@ -121,15 +121,15 @@ int main(void) {
         /* Weakest-link error: squared residual of the WORST step (was: best,
          * min over residuals, while the comment claimed worst). The credit
          * mechanism optimizes THIS quantity, so the gate asserts on it. */
-        min_err = -1.0;
+        max_err = -1.0;
         for (int b = 0; b < BATCH; b++) {
             double e = (scores[b] - T[b]) * (scores[b] - T[b]);
-            if (min_err < 0.0 || e > min_err) min_err = e;
+            if (max_err < 0.0 || e > max_err) max_err = e;
         }
         if (it == 0) loss0 = batch_loss;
         if (it == ITERS - 1) loss1 = batch_loss;
-        if (it == 0) min0 = min_err;
-        if (it == ITERS - 1) min1 = min_err;
+        if (it == 0) max_err0 = max_err;
+        if (it == ITERS - 1) max_err1 = max_err;
 
         /* Scores must never leave the fluid scale. */
         for (int b = 0; b < BATCH; b++) {
@@ -214,8 +214,8 @@ int main(void) {
     }
 
     printf("  batch-mean loss: %.6f -> %.6f over %d iters (weakest-link SGD)\n", loss0, loss1, ITERS);
-    printf("  weakest-step err: %.6f -> %.6f\n", min0, min1);
-    int ok = (min1 < min0) && (min1 < 0.05) && (loss1 < loss0);
+    printf("  weakest-step err: %.6f -> %.6f\n", max_err0, max_err1);
+    int ok = (max_err1 < max_err0) && (max_err1 < 0.05) && (loss1 < loss0);
 
     /* ---- Finite-difference spot check on W2 (proves TANH/MSE VJPs) ---- */
     {

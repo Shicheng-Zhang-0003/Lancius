@@ -37,10 +37,10 @@ void kernel_matmul(double* out, const double* a, const double* b, size_t M, size
 void kernel_conv2d_fwd(double* out, const double* in, const double* w,
                        size_t N, size_t C_in, size_t H_in, size_t W_in,
                        size_t C_out, size_t K_h, size_t K_w, size_t stride, size_t pad) {
-    if (!out || !in || !w) return;
-    if (stride == 0 || K_h == 0 || K_w == 0) return;
-    if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) return;
-    if (H_in + 2*pad < K_h || W_in + 2*pad < K_w) return;
+    if (!out || !in || !w) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (stride == 0 || K_h == 0 || K_w == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (H_in + 2*pad < K_h || W_in + 2*pad < K_w) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
     size_t H_out = (H_in + 2*pad - K_h)/stride + 1;
     size_t W_out = (W_in + 2*pad - K_w)/stride + 1;
     if (N && C_out && H_out && W_out) {
@@ -88,10 +88,10 @@ void kernel_conv2d_bwd_in(double* out, const double* grad, const double* w,
                           size_t N, size_t C_in, size_t H_in, size_t W_in,
                           size_t C_out, size_t H_out, size_t W_out,
                           size_t K_h, size_t K_w, size_t stride, size_t pad) {
-    if (!out || !grad || !w) return;
+    if (!out || !grad || !w) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
     /* Despot truth: same stride/kernel/pad guards as fwd (was missing). */
-    if (stride == 0 || K_h == 0 || K_w == 0) return;
-    if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) return;
+    if (stride == 0 || K_h == 0 || K_w == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     if (N && C_in && H_in && W_in) {
         if (N > SIZE_MAX / C_in) return;
         if (N * C_in > SIZE_MAX / H_in) return;
@@ -141,8 +141,8 @@ void kernel_conv2d_bwd_w(double* out, const double* grad, const double* in,
                          size_t N, size_t C_in, size_t H_in, size_t W_in,
                          size_t C_out, size_t H_out, size_t W_out,
                          size_t K_h, size_t K_w, size_t stride, size_t pad) {
-    if (!out || !grad || !in) return;
-    if (C_out == 0 || C_in == 0 || K_h == 0 || K_w == 0) return;
+    if (!out || !grad || !in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (C_out == 0 || C_in == 0 || K_h == 0 || K_w == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
     if (C_out > SIZE_MAX / C_in) return;
     if (C_out * C_in > SIZE_MAX / K_h) return;
     if (C_out * C_in * K_h > SIZE_MAX / K_w) return;
@@ -194,10 +194,10 @@ void kernel_conv2d_bwd_w(double* out, const double* grad, const double* in,
 void kernel_conv2d_relu_fwd(double* out, const double* in, const double* w,
                             size_t N, size_t C_in, size_t H_in, size_t W_in,
                             size_t C_out, size_t K_h, size_t K_w, size_t stride, size_t pad) {
-    if (!out || !in || !w) return;
-    if (stride == 0 || K_h == 0 || K_w == 0) return;
-    if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) return;
-    if (H_in + 2*pad < K_h || W_in + 2*pad < K_w) return;
+    if (!out || !in || !w) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (stride == 0 || K_h == 0 || K_w == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (H_in + 2*pad < K_h || W_in + 2*pad < K_w) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
     size_t H_out = (H_in + 2*pad - K_h)/stride + 1;
     size_t W_out = (W_in + 2*pad - K_w)/stride + 1;
     if (N && C_out && H_out && W_out) {
@@ -241,10 +241,10 @@ void kernel_conv2d_relu_fwd(double* out, const double* in, const double* w,
 void kernel_conv2d_int8_fwd(double* out, const int8_t* in, const int8_t* w, double scale_in, double scale_w,
                             size_t N, size_t C_in, size_t H_in, size_t W_in,
                             size_t C_out, size_t K_h, size_t K_w, size_t stride, size_t pad) {
-    if (!out || !in || !w) return;
-    if (stride == 0 || K_h == 0 || K_w == 0) return;
-    if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) return;
-    if (H_in + 2*pad < K_h || W_in + 2*pad < K_w) return;
+    if (!out || !in || !w) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (stride == 0 || K_h == 0 || K_w == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (H_in + 2*pad < K_h || W_in + 2*pad < K_w) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
     size_t H_out = (H_in + 2*pad - K_h)/stride + 1;
     size_t W_out = (W_in + 2*pad - K_w)/stride + 1;
     if (N && C_out && H_out && W_out) {
@@ -290,8 +290,8 @@ void kernel_conv2d_int8_fwd(double* out, const int8_t* in, const int8_t* w, doub
 
 void kernel_layernorm(double* out, const double* in, const double* gamma, const double* beta,
                       size_t num_instances, size_t hidden_size, double eps) {
-    if (!out || !in || !gamma || !beta) return;
-    if (num_instances == 0 || hidden_size == 0) return;
+    if (!out || !in || !gamma || !beta) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (num_instances == 0 || hidden_size == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
     #pragma omp parallel for schedule(static)
     for(size_t b=0; b<num_instances; b++) {
         const double* x = in + b * hidden_size;
@@ -324,7 +324,7 @@ void kernel_layernorm(double* out, const double* in, const double* gamma, const 
  * is ~2e-3. Clamps at +-10 are exact limits (tanh saturates), NaN passes
  * through. If erf-exact is needed, it must be a separate kernel. */
 void kernel_gelu(double* out, const double* in, size_t elements) {
-    if (!out || !in) return;
+    if (!out || !in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
     const double sqrt_2_over_pi = 0.7978845608028654;
     #pragma omp parallel for simd schedule(static)
     for(size_t i=0; i<elements; i++) {
@@ -342,13 +342,13 @@ void kernel_gelu(double* out, const double* in, size_t elements) {
 
 void kernel_rope(double* q, double* k, size_t batch_size, size_t seq_len, size_t n_heads, size_t head_dim, int pos_offset) {
     // Rotary Position Embedding (RoPE)
-    if (!q || !k) return;
-    if (batch_size == 0 || seq_len == 0 || n_heads == 0 || head_dim == 0) return;
-    if (head_dim % 2 != 0) return; /* odd head_dim must be rejected by caller; refuse silent partial rotation */
+    if (!q || !k) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (batch_size == 0 || seq_len == 0 || n_heads == 0 || head_dim == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    if (head_dim % 2 != 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; } /* odd head_dim must be rejected by caller; refuse silent partial rotation */
     /* Despot truth: s(size_t)+pos_offset(int) must not narrow/wrap through int. */
-    if (pos_offset < 0) return;
-    if (seq_len > (size_t)INT32_MAX) return;
-    if ((uint64_t)seq_len + (uint64_t)pos_offset > (uint64_t)INT32_MAX) return;
+    if (pos_offset < 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    if (seq_len > (size_t)INT32_MAX) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if ((uint64_t)seq_len + (uint64_t)pos_offset > (uint64_t)INT32_MAX) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     for(size_t b=0; b<batch_size; b++) {
         for(size_t s=0; s<seq_len; s++) {
             int pos = (int)s + pos_offset;
@@ -380,8 +380,8 @@ void kernel_rope(double* q, double* k, size_t batch_size, size_t seq_len, size_t
 void kernel_attention(double* out, const double* q, const double* k, const double* v, size_t seq_len, size_t n_heads, size_t head_dim) {
     // V10S STABLE: FLASH ATTENTION (Online Softmax / SRAM Tiling)
     // Eliminates the O(N^2) attention matrix allocation. Memory bound strictly to O(head_dim) per thread.
-    if (!out || !q || !k || !v) return;
-    if (seq_len == 0 || n_heads == 0 || head_dim == 0) return;
+    if (!out || !q || !k || !v) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (seq_len == 0 || n_heads == 0 || head_dim == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
     #pragma omp parallel
     {
         double* o_i = (double*)calloc(head_dim, sizeof(double));
@@ -523,8 +523,8 @@ void kernel_attention_kv_cache(double* out, const double* q, const double* k_cac
 }
 
 void kernel_rmsnorm(double* out, const double* in, const double* gamma, size_t num_instances, size_t hidden_size, double eps) {
-    if (!out || !in || !gamma) return;
-    if (num_instances == 0 || hidden_size == 0) return;
+    if (!out || !in || !gamma) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (num_instances == 0 || hidden_size == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
     #pragma omp parallel for schedule(static)
     for (size_t i = 0; i < num_instances; i++) {
         double sq_sum = 0.0;
@@ -548,7 +548,7 @@ void kernel_rmsnorm(double* out, const double* in, const double* gamma, size_t n
 }
 
 void kernel_swiglu(double* out, const double* gate, const double* up, size_t elements) {
-    if (!out || !gate || !up) return;
+    if (!out || !gate || !up) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
     #pragma omp parallel for simd schedule(static)
     for (size_t i = 0; i < elements; i++) {
         double g = gate[i];
@@ -568,9 +568,9 @@ void kernel_swiglu(double* out, const double* gate, const double* up, size_t ele
 }
 
 void kernel_gqa(double* out, const double* q, const double* k, const double* v, size_t seq_len, size_t n_heads_q, size_t n_heads_kv, size_t head_dim) {
-    if (!out || !q || !k || !v) return;
-    if (seq_len == 0 || n_heads_q == 0 || n_heads_kv == 0 || head_dim == 0) return;
-    if (n_heads_q % n_heads_kv != 0) return;
+    if (!out || !q || !k || !v) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (seq_len == 0 || n_heads_q == 0 || n_heads_kv == 0 || head_dim == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    if (n_heads_q % n_heads_kv != 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
     size_t hidden_size_q = n_heads_q * head_dim;
     size_t hidden_size_kv = n_heads_kv * head_dim;
     size_t group_size = n_heads_q / n_heads_kv;
@@ -635,12 +635,12 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
  *   - accumulation is FP64 for numerical stability
  */
 void kernel_matmul_f32(float* out, const float* a, const float* b, size_t M, size_t K, size_t N) {
-    if (!out || !a || !b) return;
-    if (M == 0 || K == 0 || N == 0) return;
-    if (M > SIZE_MAX / N) return;
-    if (M > SIZE_MAX / K) return;
-    if (K > SIZE_MAX / N) return;
-    if (M * N > SIZE_MAX / sizeof(float)) return;
+    if (!out || !a || !b) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (M == 0 || K == 0 || N == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    if (M > SIZE_MAX / N) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (M > SIZE_MAX / K) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (K > SIZE_MAX / N) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (M * N > SIZE_MAX / sizeof(float)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     memset(out, 0, M * N * sizeof(float));
 #pragma omp parallel for collapse(2) schedule(static)
     for (size_t r = 0; r < M; r++) {
