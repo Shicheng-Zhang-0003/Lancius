@@ -42,6 +42,19 @@ This is a development milestone, not a stable release. `v11S` remains the stable
   scheduler, autodiff, persistence, interop, trainers, and operator;
   sanitizers clean, PyTorch parity exact
 
+### Hardening Batch V5 (2026-09-30)
+
+- Threadpool queue growth use-before-initialization fixed
+- Command injection in `distill_prm800k` fixed (`system()` → `mkdir()`)
+- IR silent NULL returns fixed (6 locations now set error codes)
+- Optimizer no longer clears errors on success
+- Quantizer zero-scale check added
+- Scheduler cross-entropy consistency fixed
+- Memory planner 32-byte alignment on free-block split
+- Serializer/Vision `fprintf`/`printf` removed (library is silent)
+- Examples hardened (`parity_runner`, `run_trained_batch`)
+- Python `onnx_to_lancius.py` shape filtering fixed
+
 ### Ordinary-User Operator
 
 - `./lancius demo` proves an install in one command; `./lancius tui`
