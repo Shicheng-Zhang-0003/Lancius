@@ -71,15 +71,26 @@ CLEANUP_TARGETS = [
 ]
 
 
+MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB cap per file
+
+
 def _fetch(url, dest, optional=False):
-    """Download url -> dest. Returns True on success."""
+    """Download url -> dest with size cap. Returns True on success."""
     if os.path.exists(dest) and os.path.getsize(dest) > 0:
         print(f"  SKIP (exists): {dest}")
         return True
     print(f"  Fetching {url} ...")
     try:
         with urllib.request.urlopen(url, timeout=60) as response, open(dest, 'wb') as out:
-            out.write(response.read())
+            total = 0
+            while True:
+                chunk = response.read(65536)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_DOWNLOAD_BYTES:
+                    raise IOError(f"Download exceeds {MAX_DOWNLOAD_BYTES} byte cap")
+                out.write(chunk)
         print(f"  Saved: {dest} ({os.path.getsize(dest)} bytes)")
         return True
     except urllib.error.HTTPError as e:
