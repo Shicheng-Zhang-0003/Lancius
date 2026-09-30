@@ -66,7 +66,7 @@ loops, ONNX converter, quantizer) may change in v12R2 without notice.
 
 # Lancius v11S Compatibility Manifest (stable, retained)
 
-Version: v11S\
+Version: v11S
 Release Line: 1.1 Stable
 
 ## Purpose
