@@ -18,7 +18,9 @@ sanitizer and fuzz validation, and full regression defense.
 Its themes are **hardening** (loader integrity, execution contracts, stability
 guards) and **mathematical correctness**: a hostile,
 formula-by-formula audit of every numeric path, with each confirmed defect
-fixed and re-proven by independent execution.
+fixed and re-proven by independent execution. Hardening batches V4 and V5
+extended this to threadpool, IR, examples, and Python tooling (38 defects
+total).
 <!-- /SECTION:HEADER -->
 
 <!-- SECTION:RELEASE_IDENTITY -->
