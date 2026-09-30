@@ -8,10 +8,11 @@
 int test_malicious_serialization() {
     printf("[TORTURE] Testing Malicious Serialization (Huge Node Count)...\n");
     FILE* f = fopen("malicious.lancius", "wb");
+    if (!f) { printf("  ❌ FAIL: fopen failed.\n"); return 0; }
     uint32_t magic = 0x21434E41; // "LANC!"
     uint32_t huge_nodes = 0xFFFFFFFF; // Attempt to trigger calloc overflow
-    fwrite(&magic, 4, 1, f);
-    fwrite(&huge_nodes, 4, 1, f);
+    if (fwrite(&magic, 4, 1, f) != 1) { fclose(f); return 0; }
+    if (fwrite(&huge_nodes, 4, 1, f) != 1) { fclose(f); return 0; }
     fclose(f);
 
     lancius_graph* g = lancius_graph_load("malicious.lancius");
@@ -30,6 +31,7 @@ int test_malicious_serialization() {
 int test_arena_invariants() {
     printf("[TORTURE] Testing Arena Invariants (0-byte and SIZE_MAX)...\n");
     lancius_arena* arena = lancius_arena_create(1024);
+    if (!arena) { printf("  ❌ FAIL: arena create OOM.\n"); return 0; }
     int pass = 1;
 
     // Test 0-byte alloc
