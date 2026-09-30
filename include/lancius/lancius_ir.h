@@ -81,24 +81,17 @@ typedef struct lancius_graph {
 #endif
 
 /*
- * v11S FATAL INVARIANT (not user-reachable via stable API):
- * lancius_node_elements() calls abort() if ndim > 4 or element count
- * overflows LANCIUS_MAX_TENSOR_ELEMS. These conditions indicate memory
- * corruption or a violated internal invariant. Continuing execution
- * would be unsafe. The stable FFI API validates all inputs before
- * calling this function, so FFI consumers will never trigger these.
- *
- * For checked (non-aborting) element counting, use:
- *   lancius_node_elements_checked(n, &out)
+ * Despot truth: abort() in a library is wrong (CONTRIBUTING.md: "no abort/exit
+ * in library"). This function now returns 0 and sets LANCIUS_ERROR_INTERNAL
+ * on invalid rank or overflow. Callers that need to distinguish error from
+ * a valid 0-element tensor should use lancius_node_elements_checked().
  */
 static inline size_t lancius_node_elements(const lancius_node* n) {
     if (!n) return 0;
 
     if (n->ndim > 4) {
-        fprintf(stderr,
-            "[LANCIUS SAFETY FATAL] tensor ndim %u exceeds max rank 4\n",
-            (unsigned)n->ndim);
-        abort();
+        lancius_set_error(LANCIUS_ERROR_INTERNAL);
+        return 0;
     }
 
     size_t e = 1;
@@ -112,9 +105,8 @@ static inline size_t lancius_node_elements(const lancius_node* n) {
         }
 
         if (dim > LANCIUS_MAX_TENSOR_ELEMS || e > LANCIUS_MAX_TENSOR_ELEMS / dim) {
-            fprintf(stderr,
-                "[LANCIUS SAFETY FATAL] tensor element count overflow or exceeds sanity limit\n");
-            abort();
+            lancius_set_error(LANCIUS_ERROR_INTERNAL);
+            return 0;
         }
 
         e *= dim;
