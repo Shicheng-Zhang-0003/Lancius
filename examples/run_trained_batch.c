@@ -15,18 +15,22 @@ int main() {
     }
     if(!in_node || !out_node) { printf("FATAL: Could not find I/O nodes\n"); return 1; }
 
-    size_t in_elems = 1 * 3 * 32 * 32;
+    size_t in_elems = in_node->shape[0] * in_node->shape[1] * in_node->shape[2] * in_node->shape[3];
     float* temp_in = (float*)malloc(in_elems * sizeof(float));
+    if (!temp_in) { printf("FATAL: OOM\n"); return 1; }
     FILE* f_in = fopen("test_batch.bin", "rb");
-    if (!f_in) { printf("FATAL: missing test_batch.bin\n"); return 1; }
+    if (!f_in) { printf("FATAL: missing test_batch.bin\n"); free(temp_in); return 1; }
 
     lancius_schedule* sched = lancius_ir_schedule(g);
+    if (!sched) { printf("FATAL: schedule failed\n"); free(temp_in); return 1; }
     lancius_arena* scratch = lancius_arena_create(16 * 1024 * 1024);
-
+    if (!scratch) { printf("FATAL: OOM\n"); free(temp_in); return 1; }
     FILE* f_out = fopen("lancius_preds.bin", "wb");
+    if (!f_out) { printf("FATAL: cannot write output\n"); free(temp_in); return 1; }
     int32_t pred;
 
     in_node->runtime_data = (double*)malloc(in_elems * sizeof(double));
+    if (!in_node->runtime_data) { printf("FATAL: OOM\n"); free(temp_in); return 1; }
 
     for(int img=0; img<100; img++) {
         size_t rd = fread(temp_in, sizeof(float), in_elems, f_in);
@@ -42,6 +46,7 @@ int main() {
 
         lancius_schedule_execute(sched, scratch);
 
+        if (!out_node->runtime_data) { printf("FATAL: no output\n"); break; }
         double max_logit = -1e9;
         pred = 0;
         for(int c=0; c<10; c++) {

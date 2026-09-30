@@ -173,7 +173,7 @@ def convert(onnx_path, lancius_path):
                     in_id = name_to_id[node.input[0]]
                     for n in nodes:
                         if n['id'] == in_id:
-                            in_shape = [s for s in n['shape'] if s > 0]
+                            in_shape = [s for s in n['shape'] if s != 0]
                             total_in = 1
                             for s in in_shape: total_in *= s
                             if total_known > 0 and total_in % total_known == 0:

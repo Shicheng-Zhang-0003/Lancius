@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <ctype.h>
 #include <math.h>
+#include <errno.h>
+#include <sys/stat.h>
 
 /*
  * LANCIUS distill_prm800k (C): PRM800k step rows -> fixed numeric vectors.
@@ -757,9 +759,21 @@ static int distill_split(const char* split, const char* out_dir) {
     snprintf(tp, sizeof(tp), "%s/%s.T.bin", out_dir, split);
     snprintf(mp, sizeof(mp), "%s/%s.meta.json", out_dir, split);
     {
-        char cmd[1152];
-        snprintf(cmd, sizeof(cmd), "mkdir -p %s", out_dir);
-        if (system(cmd) != 0) { printf("  ❌ cannot create %s\n", out_dir); return 1; }
+        char mkdir_path[1024];
+        snprintf(mkdir_path, sizeof(mkdir_path), "%s", out_dir);
+        size_t mlen = strlen(mkdir_path);
+        for (size_t mi = 0; mi < mlen; mi++) {
+            if (mkdir_path[mi] == '/' && mi > 0) {
+                char save = mkdir_path[mi];
+                mkdir_path[mi] = '\0';
+                mkdir(mkdir_path, 0755);
+                mkdir_path[mi] = save;
+            }
+        }
+        if (mkdir(mkdir_path, 0755) != 0 && errno != EEXIST) {
+            printf("  ❌ cannot create %s\n", out_dir);
+            return 1;
+        }
     }
     fo = fopen(xp, "wb");
     if (!fo) { printf("  ❌ cannot write %s\n", xp); return 1; }
