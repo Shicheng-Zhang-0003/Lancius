@@ -294,6 +294,7 @@ int main() {
     if (!prog) { fprintf(stderr, "FATAL: bytecode compile failed\n"); return 1; }
 
     int correct = 0;
+    int evaluated = 0;
     double* out_batch = (double*)malloc(BATCH_SIZE * 10 * sizeof(double));
     MNIST_NEED(out_batch, "out_batch");
     double* vm_inputs[5] = {x_batch, w1, b1_d, w2, b2_d};
@@ -310,6 +311,7 @@ int main() {
                 if(out_batch[b*10 + c] > max_logit) { max_logit = out_batch[b*10 + c]; pred = c; }
             }
             if(pred == te_Y[i+b]) correct++;
+            evaluated++;
         }
         lancius_arena_reset(scratch);
     }
@@ -318,12 +320,12 @@ int main() {
     lancius_graph_destroy(g_inf);
 
     printf("\n================================================================\n");
-    printf("  FINAL TEST ACCURACY: %.2f%% (%d / %d)\n", 100.0 * correct / te_n, correct, te_n);
+    printf("  FINAL TEST ACCURACY: %.2f%% (%d / %d)\n", 100.0 * correct / evaluated, correct, evaluated);
     printf("================================================================\n");
     /* Despot truth: trainers must earn exit 0. Chance is 10%%. */
-    if (correct * 10 <= te_n) {
+    if (evaluated <= 0 || correct * 10 <= evaluated) {
         fprintf(stderr, "[TRAIN] FATAL: accuracy %.2f%% <= chance; refusing green exit.\n",
-            100.0 * correct / te_n);
+            100.0 * correct / evaluated);
         free(out_batch);
         return 1;
     }
