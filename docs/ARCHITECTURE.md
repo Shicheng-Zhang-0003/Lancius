@@ -43,6 +43,8 @@ Lancius v12R1 prioritizes predictable execution over maximum feature
 count. Every hot path returns errors (`OOM/OVERFLOW/NUMERICAL/SHAPE_MISMATCH`)
 instead of aborting or emitting silent values. The despot truth batch V2
 closed the last silent-drop paths (see `docs/DESPOT_TRUTH_V2.md`).
+Hardening batches V4 and V5 extended this to threadpool, IR, examples,
+and Python tooling.
 
 ### Memory Awareness
 
