@@ -36,3 +36,27 @@ The following security-relevant fixes were applied in hardening batch V4
 - **Python tooling**: Security fixes including stale version references removed
   and error handling improved.
 - **Build system**: `-Werror` enforced; version consistency checked.
+
+## Security Improvements (Hardening Batch V5)
+
+The following security-relevant fixes were applied in hardening batch V5
+(2026-09-30):
+
+- **Threadpool queue growth**: Use-before-initialization bug fixed (was
+  reading from uninitialized buffer during realloc).
+- **Command injection in distill_prm800k**: `system()` replaced with `mkdir()`.
+- **IR silent NULL returns**: 6 locations now set error codes on validation
+  failure instead of returning NULL silently.
+- **Optimizer error clearing**: No longer masks prior errors on success.
+- **Quantizer zero-scale check**: Dequantization validates scale > 0.
+- **Scheduler cross-entropy consistency**: Forward and backward use same
+  R/C source.
+- **Memory planner alignment**: Free block splitting maintains 32-byte
+  alignment.
+- **Stable API**: Duplicate `#include` removed.
+- **Serializer/Vision**: `fprintf`/`printf` removed from library code.
+- **Examples**: `parity_runner` and `run_trained_batch` hardened (unchecked
+  allocations, ignored I/O returns, NULL derefs fixed).
+- **Python**: `onnx_to_lancius.py` shape filtering fixed (interior 1s
+  preserved).
+- **Autodiff**: NOP comment clarified (no null pointer dereference).

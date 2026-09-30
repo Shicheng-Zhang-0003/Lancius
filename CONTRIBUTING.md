@@ -40,3 +40,34 @@ Changes should include:
 -   explanation of purpose
 -   tests where applicable
 -   documentation updates
+
+## Validation Requirements
+
+All contributions must pass:
+
+-   `make check` — full test suite (unit tests, audits, known-answer tests)
+-   `make check-sanitizers` — ASan + UBSan clean
+-   `make check-long` — extended tests (soak fuzz, fuzz)
+
+New primitives must carry:
+
+-   known-answer tests (exact expected values)
+-   finite-difference gradient checks (for differentiable ops)
+-   exit nonzero on divergence (no false-green)
+
+## Documentation Requirements
+
+Each document owns one thing (single-owner rule):
+
+-   `README.md` — project overview and build instructions
+-   `STATUS.md` — current milestone status
+-   `KNOWN_LIMITATIONS.md` — explicit boundaries
+-   `CHANGELOG.md` — per-batch fix history
+-   `docs/ARCHITECTURE.md` — subsystem contracts
+-   `docs/DESPOT_TRUTH_V2.md` — mathematical audit
+-   `docs/v12R2_SCOPE.md` — next milestone scope
+-   `SECURITY.md` — security policy and improvements
+-   `CONTRIBUTING.md` — this file
+
+When making changes, update the relevant document(s) to reflect the new
+behavior. Do not create new documentation files unless absolutely necessary.
