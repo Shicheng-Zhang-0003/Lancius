@@ -9,18 +9,24 @@ int main() {
     printf("================================================================\n\n");
 
     lancius_arena* scratch = lancius_arena_create(16 * 1024 * 1024);
+    if (!scratch) { fprintf(stderr, "FATAL: OOM scratch arena\n"); return 1; }
 
     // --- PATH G: Permute Test ---
     printf("[PATH G] Testing N-Dimensional Permute...\n");
     lancius_graph* g_perm = lancius_graph_create();
+    if (!g_perm) { fprintf(stderr, "FATAL: graph create failed\n"); lancius_arena_destroy(scratch); return 1; }
     lancius_node* in4d = lancius_input_4d(g_perm, 2, 3, 4, 5); // N=2, C=3, H=4, W=5
+    if (!in4d) { fprintf(stderr, "FATAL: input_4d failed\n"); lancius_graph_destroy(g_perm); lancius_arena_destroy(scratch); return 1; }
 
     // Permute to N, H, W, C (axes: 0, 2, 3, 1)
     lancius_node* perm = lancius_permute(g_perm, in4d, 0, 2, 3, 1);
+    if (!perm) { fprintf(stderr, "FATAL: permute failed\n"); lancius_graph_destroy(g_perm); lancius_arena_destroy(scratch); return 1; }
 
     lancius_schedule* sched_perm = lancius_ir_schedule(g_perm);
+    if (!sched_perm) { fprintf(stderr, "FATAL: schedule failed\n"); lancius_graph_destroy(g_perm); lancius_arena_destroy(scratch); return 1; }
 
     double* dummy_in = (double*)calloc(2*3*4*5, sizeof(double));
+    if (!dummy_in) { fprintf(stderr, "FATAL: OOM dummy_in\n"); lancius_schedule_destroy(sched_perm); lancius_graph_destroy(g_perm); lancius_arena_destroy(scratch); return 1; }
 
     for (size_t pn = 0; pn < 2; pn++) {
         for (size_t pc = 0; pc < 3; pc++) {
@@ -77,7 +83,6 @@ int main() {
     }
     lancius_schedule_destroy(sched_perm);
     lancius_graph_destroy(g_perm);
-    free(dummy_in);
     lancius_arena_reset(scratch);
 
     // --- PATH B: Serialization Test ---
@@ -91,10 +96,20 @@ int main() {
 
     // Assign dummy weights to W
     W->runtime_data = (double*)calloc(20*5, sizeof(double));
+    if (!W->runtime_data) { fprintf(stderr, "FATAL: OOM W weights\n"); lancius_graph_destroy(g_save); free(dummy_in); lancius_schedule_destroy(sched_perm); lancius_graph_destroy(g_perm); lancius_arena_destroy(scratch); return 1; }
     for(int i=0; i<100; i++) W->runtime_data[i] = 0.42;
 
     printf("  Saving graph to 'test_model.lancius'...\n");
-    lancius_graph_save(g_save, "test_model.lancius");
+    if (lancius_graph_save(g_save, "test_model.lancius") != 0) {
+        fprintf(stderr, "FATAL: graph save failed\n");
+        free(W->runtime_data);
+        lancius_graph_destroy(g_save);
+        free(dummy_in);
+        lancius_schedule_destroy(sched_perm);
+        lancius_graph_destroy(g_perm);
+        lancius_arena_destroy(scratch);
+        return 1;
+    }
 
     printf("  Destroying original graph from RAM...\n");
     free(W->runtime_data); // Free the heap memory before destroying the graph
