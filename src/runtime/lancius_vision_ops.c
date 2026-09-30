@@ -25,11 +25,8 @@ void lancius_execute_vision_op(lancius_node* n) {
             break;
 
         default:
-            fprintf(stderr,
-                "[LANCIUS VISION FATAL] unsupported vision-range op %d\n",
-                (int)n->op);
             lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
-            return; /* v11S: do not abort — return error to caller */
+            return;
     }
 
     // v11A1 Task 9: no hidden execution-time quantization side effects.
@@ -56,7 +53,6 @@ void lancius_execute_vision_op(lancius_node* n) {
         /* Despot truth: zero INT8 scale is numerically degenerate (dequant
          * would collapse to zeros). Report NUMERICAL, not shape mismatch. */
         if (!(scale_in > 0.0) || !(scale_w > 0.0) || scale_in != scale_in || scale_w != scale_w) {
-            fprintf(stderr, "[LANCIUS VISION FATAL] INT8 Conv2D scale is 0/NaN/Inf (misconfigured quantizer)\n");
             lancius_set_error(LANCIUS_ERROR_NUMERICAL);
             return;
         }
@@ -82,9 +78,8 @@ void lancius_execute_vision_op(lancius_node* n) {
         n->inputs && n->input_count >= 2 && n->inputs[1] &&
         n->inputs[1]->dtype == LANCIUS_DTYPE_INT8 &&
         !n->inputs[1]->runtime_data) {
-        fprintf(stderr, "[LANCIUS VISION FATAL] INT8 Conv2D requires explicit INT8 activation buffers\n");
         lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_DTYPE);
-        return; /* v11S: do not abort — return error to caller */
+        return;
     }
 
     // Standard FP64 Routing

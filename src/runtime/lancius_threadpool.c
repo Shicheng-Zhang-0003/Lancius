@@ -107,7 +107,7 @@ void lancius_pool_submit(lancius_pool* pool, lancius_task_fn fn, void* arg) {
             lancius_task *tmp = (lancius_task*)malloc(sizeof(lancius_task) * (size_t)pool->count);
             if (!tmp) { pthread_mutex_unlock(&pool->mutex); return; }
             for (i = 0; i < pool->count; i++)
-                tmp[i] = nq[(pool->head + i) % pool->queue_cap];
+                tmp[i] = pool->queue[(pool->head + i) % pool->queue_cap];
             memcpy(nq, tmp, sizeof(lancius_task) * (size_t)pool->count);
             free(tmp);
         }

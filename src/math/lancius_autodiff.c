@@ -255,7 +255,7 @@ break;
                 break;
             }
             case LANCIUS_OP_ATTENTION: n = lancius_attention(tg->graph, in0, in1, in2); break;
-            case LANCIUS_OP_NOP: n = NULL; break; // V9 Fix: Skip neutralized nodes
+            case LANCIUS_OP_NOP: n = NULL; break; /* NOP: no forward clone, no backward */
             /* Despot truth: _BWD nodes must never appear in the forward graph.
              * Fail loud instead of silently cloning them. */
             case LANCIUS_OP_RELU_BWD:

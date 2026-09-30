@@ -478,7 +478,7 @@ lancius_node* lancius_flatten(lancius_graph* g, const lancius_node* in) {
     size_t N = in->shape[0];
     size_t flat_dims[3] = {in->shape[1], in->shape[2], in->shape[3]};
     size_t flat = 0;
-    if (!lancius_checked_product_shape(flat_dims, 3, &flat)) return NULL;
+    if (!lancius_checked_product_shape(flat_dims, 3, &flat)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_FLATTEN, 2, 1);
     if (n) { n->shape[0] = N; n->shape[1] = flat; n->inputs[0] = in; }
     return n;
@@ -489,8 +489,8 @@ lancius_node* lancius_reshape(lancius_graph* g, const lancius_node* in, uint8_t 
     if (!in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     size_t resh_out_shape[4] = {s0, s1, s2, s3};
     size_t resh_in_elems = 0;
-    if (!lancius_node_elements_checked(in, &resh_in_elems)) return NULL;
-    if (lancius_validate_reshape(resh_in_elems, resh_out_shape, ndim) != LANCIUS_ERROR_OK) return NULL;
+    if (!lancius_node_elements_checked(in, &resh_in_elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
+    if (lancius_validate_reshape(resh_in_elems, resh_out_shape, ndim) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_RESHAPE, ndim, 1);
     if (n) {
         n->shape[0] = s0; if(ndim>1) n->shape[1] = s1; if(ndim>2) n->shape[2] = s2; if(ndim>3) n->shape[3] = s3;
@@ -522,7 +522,7 @@ lancius_node* lancius_permute(lancius_graph* g, const lancius_node* in, uint32_t
     if (!in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (in->ndim != 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     uint32_t perm_axes[4] = {a0, a1, a2, a3}; /* v12R1-202 */
-    if (lancius_validate_permutation(perm_axes, 4) != LANCIUS_ERROR_OK) return NULL;
+    if (lancius_validate_permutation(perm_axes, 4) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_INVALID_PERMUTATION); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_PERMUTE, 4, 1);
     if (n) {
         n->axes[0] = a0; n->axes[1] = a1; n->axes[2] = a2; n->axes[3] = a3;
@@ -535,7 +535,7 @@ lancius_node* lancius_permute(lancius_graph* g, const lancius_node* in, uint32_t
 lancius_node* lancius_matmul_batched(lancius_graph* g, const lancius_node* a, const lancius_node* b) {
     if (!a || !b) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (a->ndim != 3 || b->ndim != 3) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
-    if (a->shape[0] != b->shape[0] || a->shape[2] != b->shape[1]) return NULL;
+    if (a->shape[0] != b->shape[0] || a->shape[2] != b->shape[1]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_MATMUL_BATCHED, 3, 2);
     if (n) {
         n->shape[0] = a->shape[0]; n->shape[1] = a->shape[1]; n->shape[2] = b->shape[2];
@@ -547,7 +547,7 @@ lancius_node* lancius_matmul_batched(lancius_graph* g, const lancius_node* a, co
 lancius_node* lancius_cross_entropy(lancius_graph* g, const lancius_node* logits, const lancius_node* targets) {
     if (!logits || !targets) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (logits->ndim != 2 || targets->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
-    if (logits->shape[0] != targets->shape[0] || logits->shape[1] != targets->shape[1]) return NULL;
+    if (logits->shape[0] != targets->shape[0] || logits->shape[1] != targets->shape[1]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_CROSS_ENTROPY, 2, 2);
     if (n) { n->shape[0] = 1; n->shape[1] = 1; n->inputs[0] = logits; n->inputs[1] = targets; }
     return n;
@@ -613,7 +613,7 @@ lancius_node* lancius_swiglu(lancius_graph* g, const lancius_node* gate, const l
 
 lancius_node* lancius_gqa(lancius_graph* g, const lancius_node* q, const lancius_node* k, const lancius_node* v, uint32_t n_heads_q, uint32_t n_heads_kv) {
     if (!q || !k || !v) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
-    if (lancius_validate_gqa(n_heads_q, n_heads_kv) != LANCIUS_ERROR_OK) return NULL;
+    if (lancius_validate_gqa(n_heads_q, n_heads_kv) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_GQA, q->ndim, 3);
     if (n) {
         memcpy(n->shape, q->shape, sizeof(size_t) * q->ndim);

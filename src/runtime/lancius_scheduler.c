@@ -206,6 +206,9 @@ static void execute_node_math(lancius_node* n) {
         size_t R = n->inputs[0]->shape[0]; size_t C = n->inputs[0]->shape[1];
         /* Despot truth: R==0/C==0 guards (bwd had them, fwd divided by R). */
         if (R == 0 || C == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+        /* Despot truth: forward and backward must use the same R/C source.
+         * Forward uses input shape; backward uses output shape. They must match. */
+        if (n->shape[0] != 1 || n->shape[1] != 1) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
         {
             size_t xe = 0, ye = 0;
             if (!lancius_node_elements_checked(n->inputs[0], &xe) || !lancius_node_elements_checked(n->inputs[1], &ye) || xe != ye || xe != R * C) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }

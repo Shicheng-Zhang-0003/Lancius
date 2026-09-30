@@ -52,6 +52,6 @@ void lancius_optimize_fusion(lancius_graph* g) {
             }
         }
     }
-    /* v12R1 fix: report through the error channel, not stdout. */
-    lancius_set_error(LANCIUS_ERROR_OK);
+    /* Despot truth: do NOT clear errors on success — a prior sticky error
+     * from a failed build must not be masked by a successful optimize pass. */
 }

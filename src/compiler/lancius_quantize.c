@@ -169,6 +169,7 @@ void lancius_dequantize_graph(lancius_graph* g) {
             }
         } else {
             double s = n->scale;
+            if (!(s > 0.0) || !isfinite(s)) { free(deq); continue; }
             for (size_t j = 0; j < elems; j++) {
                 deq[j] = (double)n->runtime_data_int8[j] * s;
             }

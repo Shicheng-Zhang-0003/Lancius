@@ -503,7 +503,7 @@ break;
                 break;
 
             default:
-                fprintf(stderr, "[SERIAL V2 WARN] unsupported op %u during load\n", rn.op);
+                lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
                 n = NULL;
                 break;
         }

@@ -174,8 +174,17 @@ lancius_memory_plan* lancius_build_memory_plan(lancius_schedule* sched, lancius_
                 if (end_addr > peak_memory) peak_memory = end_addr;
 
                 if (curr_fb->size > curr->size_bytes) {
-                    curr_fb->offset += curr->size_bytes;
+                    /* Despot truth: split must maintain 32-byte alignment. */
+                    size_t new_offset = curr_fb->offset + curr->size_bytes;
+                    size_t aligned_offset = (new_offset + 31) & ~(size_t)31;
+                    size_t waste = aligned_offset - new_offset;
                     curr_fb->size -= curr->size_bytes;
+                    if (waste > 0 && curr_fb->size > waste) {
+                        curr_fb->size -= waste;
+                        curr_fb->offset = aligned_offset;
+                    } else {
+                        curr_fb->offset = new_offset;
+                    }
                 } else {
                     if (prev) prev->next = curr_fb->next;
                     else free_list = curr_fb->next;

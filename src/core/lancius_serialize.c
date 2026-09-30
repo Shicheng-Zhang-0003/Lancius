@@ -60,8 +60,6 @@ static double ser_from_le_double(double v) { return ser_to_le_double(v); }
 int lancius_graph_save(lancius_graph* g, const char* path) {
     if (lancius_graph_save_v2(g, path) == 0) return 0;
 
-    fprintf(stderr, "[LANCIUS SERIAL WARN] v2 save failed, falling back to v1\n");
-
     /* Despot truth: NULL graph/path derefed (was unguarded). */
     if (!g || !path || !g->nodes) return -1;
     FILE* f = fopen(path, "wb");
@@ -124,7 +122,7 @@ int lancius_graph_save(lancius_graph* g, const char* path) {
         if (has_weights) {
             /* Despot truth: never abort() from a library save path. */
             if (!lancius_node_elements_checked(n, &elems)) goto wfail;
-                if (elems > 100000000) { fprintf(stderr, "[SERIAL FATAL] Tensor size exceeds sanity limit."); goto wfail; }
+                if (elems > 100000000) goto wfail;
             dtype = n->dtype;
             /* A3: clamp unknown dtypes to FP64 for serialization safety */
             if (!lancius_dtype_is_valid(dtype)) dtype = LANCIUS_DTYPE_FP64;
@@ -149,7 +147,6 @@ int lancius_graph_save(lancius_graph* g, const char* path) {
         }
     }
     if (fflush(f) != 0 || fclose(f) != 0) { unlink(path); return -1; }
-    printf("[LANCIUS SERIAL] Saved %u nodes to %s\n", g->node_count, path);
     return 0;
 wfail:
     fclose(f);
@@ -173,7 +170,7 @@ lancius_graph* lancius_graph_load(const char* path) {
     if (magic != LANCIUS_MAGIC) { lancius_set_error(LANCIUS_ERROR_INVALID_MODEL); /* A4 magic */ fclose(f); return NULL; }
     if (fread(&node_count, sizeof(uint32_t), 1, f) != 1) { fclose(f); return NULL; }
     node_count = ser_from_le32(node_count);
-    if (node_count > 1000000) { lancius_set_error(LANCIUS_ERROR_INVALID_MODEL); /* A4 node_count */ fprintf(stderr, "[SERIAL FATAL] Node count exceeds sanity limit.\n"); fclose(f); return NULL; }
+    if (node_count > 1000000) { lancius_set_error(LANCIUS_ERROR_INVALID_MODEL); fclose(f); return NULL; }
 
     lancius_graph* g = lancius_graph_create();
     if (!g) { fclose(f); return NULL; }
@@ -305,7 +302,7 @@ lancius_graph* lancius_graph_load(const char* path) {
             if (in0 && in1 && in2) n = lancius_attention(g, in0, in1, in2);
         }
         else {
-            fprintf(stderr, "[LANCIUS SERIAL FATAL] Unsupported op %u in v1 model, rejecting\n", op);
+            lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
             free(in_ids);
             goto fail;
         }
@@ -337,12 +334,10 @@ lancius_graph* lancius_graph_load(const char* path) {
                  * buffers are bound OWNED_HEAP, so graph_destroy releases them.
                  * Just destroy (v2 pattern). */
                 if (elems > SIZE_MAX / sizeof(double)) {
-                    fprintf(stderr, "[SERIAL FATAL] Tensor size overflow.\n");
                     free(in_ids); fclose(f); free(id_map);
                     lancius_graph_destroy(g); return NULL;
                 }
                 if (elems > 100000000) {
-                    fprintf(stderr, "[SERIAL FATAL] Tensor size exceeds sanity limit.\n");
                     free(in_ids); fclose(f); free(id_map);
                     lancius_graph_destroy(g); return NULL;
                 }
@@ -350,7 +345,6 @@ lancius_graph* lancius_graph_load(const char* path) {
                 if (fread(&dtype, sizeof(uint8_t), 1, f) != 1) { free(in_ids); goto fail; }
                 /* A3: validate serialized dtype */
                 if (!lancius_dtype_is_valid(dtype)) {
-                    fprintf(stderr, "[SERIAL FATAL] Invalid dtype %u in model file.\n", (unsigned)dtype);
                     free(in_ids);
                     goto fail;
                 }
@@ -385,12 +379,10 @@ lancius_graph* lancius_graph_load(const char* path) {
         lancius_runtime_sync_from_legacy(g->nodes[i]);
     }
 
-    printf("[LANCIUS SERIAL] Loaded %u nodes from %s\n", node_count, path);
     return g;
 
 fail:
     lancius_set_error(LANCIUS_ERROR_INVALID_MODEL); /* A4 fail */
-    fprintf(stderr, "[SERIAL FATAL] Malformed or truncated .lancius file. Aborting load.\n");
     /* Despot truth: buffers are bound OWNED_HEAP; manual free + destroy
      * double-freed every bound node (was: free loops here). */
     if (g) {
