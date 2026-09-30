@@ -105,9 +105,10 @@ uncertainty and the unique fixpoint of negation $\neg v = -v$.
   $-0.5$ probably false · $-1$ false · $\bot$ "that ain't math" (reject
   with cause, never score).
 - Connectives: Gödel $\land = \min$, $\lor = \max$ (idempotent,
-  De Morgan-consistent with $\neg$; Łukasiewicz rejected — $0 \land 0 =
-  -1$ fabricates falsehood from uncertainty). Implication is the Gödel
-  residuum ($v \to w = 1$ if $v \le w$ else $w$).
+  De Morgan-consistent with $\neg$; Łukasiewicz rejected — its
+  $0 \land 0 = 0$ yields the same uncertainty as Gödel, but its
+  non-idempotent $\land$ complicates the weakest-link theorem).
+  Implication is the Gödel residuum ($v \to w = 1$ if $v \le w$ else $w$).
 - Weakest-link theorem: $V(D) = \min_i v_i$ over derivation steps, with
   $\bot$ absorbing. One false step caps the derivation; one $\bot$ step
   voids it. Monotone, idempotent, parameter-free.
@@ -142,7 +143,7 @@ anything larger stays Python-orchestrated).
 
 ## v12R1 bug-fix campaign (applied before R2 work)
 
-A comprehensive bug-fix campaign closed **20 defects** across the codebase
+A comprehensive bug-fix campaign closed **26 defects** across the codebase
 before R2 development began. All fixes are validated by `make check`,
 `check-sanitizers`, and the despot truth probes.
 

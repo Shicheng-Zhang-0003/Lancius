@@ -60,6 +60,13 @@ defect fixed and re-proven by independent execution (see CHANGELOG):
   (uint64_t, byte swapping, CRC32 call_once); threadpool timeout; VM overflow
   checks; per-channel quant + dequant; CLI fork+execvp; Python security fixes;
   build system hardening (-Werror, Threads, version consistency)
+- Hardening batch V5 (2026-09-30): threadpool queue growth use-before-init fixed;
+  command injection in distill_prm800k fixed; IR silent NULL returns fixed (6 locations);
+  optimizer error clearing on success fixed; quantizer zero-scale check added;
+  scheduler cross-entropy consistency fixed; memory planner alignment fixed;
+  stable API duplicate include removed; serializer fprintf/printf removed;
+  vision ops fprintf removed; example files hardened (parity_runner, run_trained_batch);
+  ONNX converter shape filtering fixed; autodiff NOP comment clarified
 
 ## Feature freeze
 

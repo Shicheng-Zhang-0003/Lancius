@@ -1,5 +1,32 @@
 # Lancius Changelog
 
+## hardening batch V5 (2026-09-30) — threadpool, IR honesty, example hardening
+
+Comprehensive bug-fix campaign across threadpool, IR, compiler, runtime,
+examples, and Python tooling. 12 defects fixed and re-proven by
+`make check`, `check-sanitizers`, and despot truth probes.
+
+- Threadpool: queue growth use-before-initialization fixed (was reading from
+  uninitialized `nq` buffer during realloc; now reads from `pool->queue`).
+- Security: command injection in `distill_prm800k` fixed (replaced `system()`
+  with `mkdir()`).
+- IR: silent NULL returns fixed — `lancius_matmul_batched`,
+  `lancius_cross_entropy`, `lancius_reshape`, `lancius_flatten`,
+  `lancius_gqa`, `lancius_permute` now set error codes on validation failure.
+- Optimizer: error clearing on success fixed (no longer masks prior errors).
+- Quantizer: zero-scale check added in `lancius_dequantize_graph` (validates
+  scale > 0 and finite before dequantization).
+- Scheduler: cross-entropy consistency fixed (forward and backward now use
+  the same R/C source; output shape validated).
+- Memory planner: free block splitting now maintains 32-byte alignment.
+- Stable API: duplicate `#include` removed.
+- Serialization: `fprintf`/`printf` removed from library code (v1 and v2).
+- Vision ops: `fprintf` replaced with `lancius_set_error`.
+- Examples: `parity_runner` and `run_trained_batch` hardened (unchecked
+  allocations, ignored I/O returns, NULL derefs fixed).
+- Python: `onnx_to_lancius.py` shape filtering fixed (interior 1s preserved).
+- Autodiff: NOP comment clarified (no null pointer dereference).
+
 ## hardening batch V4 (2026-09-28) — race conditions, memory safety, quantization, portability
 
 Comprehensive bug-fix campaign across autodiff, kernels, serialization, CLI,
