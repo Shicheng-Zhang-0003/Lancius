@@ -39,6 +39,12 @@ void lancius_quantize_graph(lancius_graph* g) {
                 if (v < -128.0) v = -128.0;
                 q[j] = (int8_t)v;
             }
+            /* Despot V6 truth: drop stale per-channel scales (was dangling). */
+            if (n->rt && n->rt->scale_per_channel) {
+                free(n->rt->scale_per_channel);
+                n->rt->scale_per_channel = NULL;
+                n->rt->scale_channels = 0;
+            }
             n->runtime_data_int8 = q;
             n->dtype = LANCIUS_DTYPE_INT8;
             /* A2: quantized INT8 weights are owned heap buffers */
@@ -51,7 +57,7 @@ void lancius_quantize_graph(lancius_graph* g) {
         }
     }
     (void)quantized_count;
-    lancius_set_error(LANCIUS_ERROR_OK);
+    /* Despot V6 truth: do NOT clear sticky error (was masking build errors). */
 }
 
 /*
@@ -132,7 +138,7 @@ void lancius_quantize_graph_per_channel(lancius_graph* g) {
         quantized_count++;
     }
     (void)quantized_count;
-    lancius_set_error(LANCIUS_ERROR_OK);
+    /* Despot V6 truth: do NOT clear sticky error. */
 }
 
 /*
@@ -162,6 +168,8 @@ void lancius_dequantize_graph(lancius_graph* g) {
             size_t per_channel = elems / out_c;
             for (size_t c = 0; c < out_c; c++) {
                 double s = n->rt->scale_per_channel[c];
+                /* Despot V6 truth: per-channel scale checked (was unchecked). */
+                if (!(s > 0.0) || !isfinite(s)) { free(deq); goto deq_next; }
                 for (size_t j = 0; j < per_channel; j++) {
                     deq[c * per_channel + j] =
                         (double)n->runtime_data_int8[c * per_channel + j] * s;
@@ -192,12 +200,19 @@ void lancius_dequantize_graph(lancius_graph* g) {
         }
         n->scale = 1.0;
 
+        /* Despot V6 truth: free stale owned FP64 before overwrite (was leak). */
+        if (n->rt && n->rt->buffer_owner == LANCIUS_MEMORY_OWNED_HEAP && n->runtime_data) {
+            free(n->runtime_data);
+            n->runtime_data = NULL;
+            if (n->rt) n->rt->buffer = NULL;
+        }
         n->runtime_data = deq;
         n->dtype = LANCIUS_DTYPE_FP64;
         lancius_node_bind_owned_heap(n, deq);
         lancius_runtime_sync_from_legacy(n);
         dequantized_count++;
+        deq_next: ;
     }
     (void)dequantized_count;
-    lancius_set_error(LANCIUS_ERROR_OK);
+    /* Despot V6 truth: do NOT clear sticky error. */
 }

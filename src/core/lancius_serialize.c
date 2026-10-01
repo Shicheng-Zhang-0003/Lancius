@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include "lancius/lancius_ir.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,8 +63,13 @@ int lancius_graph_save(lancius_graph* g, const char* path) {
 
     /* Despot truth: NULL graph/path derefed (was unguarded). */
     if (!g || !path || !g->nodes) return -1;
-    FILE* f = fopen(path, "wb");
-    if (!f) return -1;
+    /* Despot V6 truth: tmp+mkstemp+rename (was truncate-in-place). */
+    char v1tmp[4096];
+    if (snprintf(v1tmp, sizeof(v1tmp), "%s.tmp.XXXXXX", path) >= (int)sizeof(v1tmp)) return -1;
+    int v1fd = mkstemp(v1tmp);
+    if (v1fd < 0) return -1;
+    FILE* f = fdopen(v1fd, "wb");
+    if (!f) { close(v1fd); unlink(v1tmp); return -1; }
     uint32_t magic = ser_to_le32(LANCIUS_MAGIC);
     CHECKED_WRITE(&magic, sizeof(uint32_t), 1, f);
     uint32_t node_count_le = ser_to_le32(g->node_count);
@@ -117,7 +123,7 @@ int lancius_graph_save(lancius_graph* g, const char* path) {
             CHECKED_WRITE(&source_id_le, sizeof(uint32_t), 1, f);
         }
 
-        has_weights = (n->op == LANCIUS_OP_INPUT && (n->runtime_data != NULL || n->runtime_data_int8 != NULL)) ? 1 : 0;
+        has_weights = (n->op == LANCIUS_OP_INPUT && (n->runtime_data != NULL || n->runtime_data_int8 != NULL || n->runtime_data_f32 != NULL)) ? 1 : 0;
         CHECKED_WRITE(&has_weights, sizeof(uint8_t), 1, f);
         if (has_weights) {
             /* Despot truth: never abort() from a library save path. */
@@ -132,6 +138,18 @@ int lancius_graph_save(lancius_graph* g, const char* path) {
             if (dtype == LANCIUS_DTYPE_INT8) {
                 if (!n->runtime_data_int8) goto wfail;
                 CHECKED_WRITE(n->runtime_data_int8, sizeof(int8_t), elems, f);
+            } else if (dtype == LANCIUS_DTYPE_FP32) {
+                /* Despot V6 truth: FP32 weights persist (were dropped as no-weights). */
+                if (!n->runtime_data_f32) goto wfail;
+                if (ser_is_little_endian()) {
+                    CHECKED_WRITE(n->runtime_data_f32, sizeof(float), elems, f);
+                } else {
+                    for (size_t j = 0; j < elems; j++) {
+                        uint32_t u; memcpy(&u, &n->runtime_data_f32[j], 4);
+                        u = ser_to_le32(u);
+                        CHECKED_WRITE(&u, 4, 1, f);
+                    }
+                }
             } else {
                 if (!n->runtime_data) goto wfail;
                 if (ser_is_little_endian()) {
@@ -146,38 +164,44 @@ int lancius_graph_save(lancius_graph* g, const char* path) {
             }
         }
     }
-    if (fflush(f) != 0 || fclose(f) != 0) { unlink(path); return -1; }
+    if (fflush(f) != 0) { fclose(f); unlink(v1tmp); return -1; }
+    {
+        int _fd = fileno(f);
+        if (_fd >= 0) fsync(_fd);
+    }
+    if (fclose(f) != 0) { unlink(v1tmp); return -1; }
+    if (rename(v1tmp, path) != 0) { unlink(v1tmp); return -1; }
     return 0;
 wfail:
     fclose(f);
-    unlink(path);
+    unlink(v1tmp);
     return -1;
 }
 
 lancius_graph* lancius_graph_load(const char* path) {
     /* Despot truth: fopen(NULL) is UB (was unguarded). */
-    if (!path) return NULL;
+    if (!path) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     lancius_graph* g_v2 = lancius_graph_load_v2(path);
     if (g_v2) return g_v2;
 
     lancius_clear_error();
 
     FILE* f = fopen(path, "rb");
-    if (!f) return NULL;
+    if (!f) { lancius_set_error(LANCIUS_ERROR_IO); return NULL; }
     uint32_t magic, node_count;
-    if (fread(&magic, sizeof(uint32_t), 1, f) != 1) { fclose(f); return NULL; }
+    if (fread(&magic, sizeof(uint32_t), 1, f) != 1) { lancius_set_error(LANCIUS_ERROR_INVALID_MODEL); fclose(f); return NULL; }
     magic = ser_from_le32(magic);
     if (magic != LANCIUS_MAGIC) { lancius_set_error(LANCIUS_ERROR_INVALID_MODEL); /* A4 magic */ fclose(f); return NULL; }
-    if (fread(&node_count, sizeof(uint32_t), 1, f) != 1) { fclose(f); return NULL; }
+    if (fread(&node_count, sizeof(uint32_t), 1, f) != 1) { lancius_set_error(LANCIUS_ERROR_INVALID_MODEL); fclose(f); return NULL; }
     node_count = ser_from_le32(node_count);
     if (node_count > 1000000) { lancius_set_error(LANCIUS_ERROR_INVALID_MODEL); fclose(f); return NULL; }
 
     lancius_graph* g = lancius_graph_create();
-    if (!g) { fclose(f); return NULL; }
+    if (!g) { lancius_set_error(LANCIUS_ERROR_OOM); fclose(f); return NULL; }
 
     uint32_t map_size = node_count + 1000;
     lancius_node** id_map = (lancius_node**)calloc(map_size, sizeof(lancius_node*));
-    if (!id_map) { lancius_graph_destroy(g); fclose(f); return NULL; }
+    if (!id_map) { lancius_set_error(LANCIUS_ERROR_OOM); lancius_graph_destroy(g); fclose(f); return NULL; }
 
     for (uint32_t i = 0; i < node_count; i++) {
         uint32_t id, op, input_count;
@@ -351,11 +375,28 @@ lancius_graph* lancius_graph_load(const char* path) {
                 n->dtype = (lancius_dtype)dtype;
                 if (fread(&n->scale, sizeof(double), 1, f) != 1) { free(in_ids); goto fail; }
                 n->scale = ser_from_le_double(n->scale);
+                /* Despot V6 truth: INT8 scale validated (was unchecked). */
+                if (n->dtype == LANCIUS_DTYPE_INT8) {
+                    if (!(n->scale > 0.0)) { free(in_ids); goto fail; }
+                }
                 if (n->dtype == LANCIUS_DTYPE_INT8) {
                     n->runtime_data_int8 = (int8_t*)malloc(elems);
                     if (!n->runtime_data_int8) { free(in_ids); goto fail; }
                     if (fread(n->runtime_data_int8, sizeof(int8_t), elems, f) != elems) { free(in_ids); goto fail; }
                     lancius_node_bind_owned_heap_int8(n, n->runtime_data_int8); /* A2 */
+                } else if (n->dtype == LANCIUS_DTYPE_FP32) {
+                    /* Despot V6 truth: FP32 payload loads (was coerced to FP64). */
+                    n->runtime_data_f32 = (float*)malloc(elems * sizeof(float));
+                    if (!n->runtime_data_f32) { free(in_ids); goto fail; }
+                    if (fread(n->runtime_data_f32, sizeof(float), elems, f) != elems) { free(in_ids); goto fail; }
+                    if (!ser_is_little_endian()) {
+                        for (size_t j = 0; j < elems; j++) {
+                            uint32_t u; memcpy(&u, &n->runtime_data_f32[j], 4);
+                            u = ser_from_le32(u);
+                            memcpy(&n->runtime_data_f32[j], &u, 4);
+                        }
+                    }
+                    lancius_node_bind_owned_heap_f32(n, n->runtime_data_f32);
                 } else {
                     n->runtime_data = (double*)malloc(elems * sizeof(double));
                     if (!n->runtime_data) { free(in_ids); goto fail; }
