@@ -64,17 +64,25 @@ void* lancius_arena_alloc(lancius_arena* a, size_t size, size_t alignment) {
     if (total_needed > SIZE_MAX - b->used) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }
 
     if (b->used + total_needed > b->size) {
+        /* Despot V6 truth: checked grow + fit re-check (was wrap to 16MB + OOB). */
+        if (size > SIZE_MAX - alignment) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }
         size_t grow = size + alignment;
         size_t new_size = (grow > a->default_block_size) ? grow : a->default_block_size;
         lancius_block* nb = block_create(new_size);
         if (!nb) { lancius_set_error(LANCIUS_ERROR_OOM); return NULL; }
-        b->next = nb;
-        a->current = nb;
-        b = nb;
-        ptr = (uintptr_t)(b->memory + b->used);
-        aligned = ALIGN_UP(ptr, alignment);
-        pad = aligned - ptr;
-        total_needed = pad + size;
+        /* Recompute pad/total for the fresh block; verify it fits. */
+        {
+            uintptr_t nptr = (uintptr_t)(nb->memory);
+            uintptr_t naligned = ALIGN_UP(nptr, alignment);
+            size_t npad = naligned - nptr;
+            if (size > SIZE_MAX - npad) { free(nb->memory); free(nb); lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }
+            size_t ntotal = npad + size;
+            if (ntotal > nb->size) { free(nb->memory); free(nb); lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }
+            nb->used = ntotal;
+            b->next = nb;
+            a->current = nb;
+            return (void*)naligned;
+        }
     }
     b->used += total_needed;
     return (void*)aligned;

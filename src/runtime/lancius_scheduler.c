@@ -183,7 +183,7 @@ static void execute_node_math(lancius_node* n) {
      * FP32 tensors use runtime_data_f32.
      */
     if (n->dtype == LANCIUS_DTYPE_FP32) {
-        if (!n->runtime_data_f32) return;
+        if (!n->runtime_data_f32) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
 
         if (n->op != LANCIUS_OP_MATMUL &&
             n->op != LANCIUS_OP_INPUT &&
@@ -192,6 +192,7 @@ static void execute_node_math(lancius_node* n) {
             return;
         }
     } else if (!n->runtime_data) {
+        lancius_set_error(LANCIUS_ERROR_NULL_PTR);
         return;
     }
 
@@ -240,6 +241,13 @@ static void execute_node_math(lancius_node* n) {
         if (!x || !y || !g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         size_t R = n->shape[0]; size_t C = n->shape[1];
         if (R == 0 || C == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+        /* Despot V6 truth: forward uses input shape R/C; backward output
+         * shape must match inputs elementwise, grad must be scalar. */
+        {
+            size_t xe = 0, ye = 0, ge = 0;
+            if (!lancius_node_elements_checked(n->inputs[0], &xe) || !lancius_node_elements_checked(n->inputs[1], &ye) || xe != ye || xe != R * C) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+            if (!lancius_node_elements_checked(n->inputs[2], &ge) || ge != 1) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        }
         double scale = g[0] / R;
         for(size_t r=0; r<R; r++) {
             double max_val = x[r*C];
@@ -257,10 +265,11 @@ static void execute_node_math(lancius_node* n) {
 
     
     else if (n->op == LANCIUS_OP_LAYERNORM) {
+        if (!n->inputs || n->input_count < 3 || !n->inputs[0] || !n->inputs[1] || !n->inputs[2]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
         double* in = n->inputs[0]->runtime_data;
         double* gamma = n->inputs[1]->runtime_data;
         double* beta = n->inputs[2]->runtime_data;
-        if(!in || !gamma || !beta) return;
+        if(!in || !gamma || !beta) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
 
         size_t hidden = 0;
         if (!lancius_node_elements_checked(n->inputs[1], &hidden) || hidden == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
@@ -268,6 +277,11 @@ static void execute_node_math(lancius_node* n) {
         if (!lancius_node_elements_checked(n->inputs[2], &be) || be != hidden) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
         size_t total = 0;
         if (!lancius_node_elements_checked(n, &total) || total % hidden != 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        /* Despot V6 truth: input elems must equal output elems (was OOB). */
+        {
+            size_t ie = 0;
+            if (!lancius_node_elements_checked(n->inputs[0], &ie) || ie != total) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        }
         size_t num_instances = total / hidden;
 
         kernel_layernorm(n->runtime_data, in, gamma, beta, num_instances, hidden, LANCIUS_NORM_EPS);
@@ -286,12 +300,14 @@ static void execute_node_math(lancius_node* n) {
 
     
     else if (n->op == LANCIUS_OP_ATTENTION) {
+        /* Despot V6 truth: validate inputs before deref (was NULL-deref). */
+        if (!n->inputs || n->input_count < 3 || !n->inputs[0] || !n->inputs[1] || !n->inputs[2]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
         const lancius_node* q_node = n->inputs[0];
         const lancius_node* k_node = n->inputs[1];
         const lancius_node* v_node = n->inputs[2];
 
         double* q = q_node->runtime_data;
-        if (!q) return;
+        if (!q) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
 
         size_t q_seq = q_node->shape[0];
         size_t n_heads = q_node->shape[1];
@@ -341,7 +357,7 @@ static void execute_node_math(lancius_node* n) {
 
         double* k = k_node ? k_node->runtime_data : NULL;
         double* v = v_node ? v_node->runtime_data : NULL;
-        if (!k || !v) return;
+        if (!k || !v) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         // Hostile fix: validate K/V heads/dim match Q before kernel
         if (k_node->shape[1] != n_heads || k_node->shape[2] != head_dim ||
             v_node->shape[1] != n_heads || v_node->shape[2] != head_dim) {
@@ -360,14 +376,20 @@ static void execute_node_math(lancius_node* n) {
     }
 
     else if (n->op == LANCIUS_OP_RMSNORM) {
+        if (!n->inputs || n->input_count < 2 || !n->inputs[0] || !n->inputs[1]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
         double* in = n->inputs[0]->runtime_data;
         double* gamma = n->inputs[1]->runtime_data;
-        if(!in || !gamma) return;
+        if(!in || !gamma) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
 
         size_t hidden = 0;
         if (!lancius_node_elements_checked(n->inputs[1], &hidden) || hidden == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
         size_t total = 0;
         if (!lancius_node_elements_checked(n, &total) || total % hidden != 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        /* Despot V6 truth: input elems must equal output elems (was OOB). */
+        {
+            size_t ie = 0;
+            if (!lancius_node_elements_checked(n->inputs[0], &ie) || ie != total) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        }
         size_t num_instances = total / hidden;
 
         kernel_rmsnorm(n->runtime_data, in, gamma, num_instances, hidden, LANCIUS_NORM_EPS);
@@ -384,10 +406,12 @@ static void execute_node_math(lancius_node* n) {
             kernel_swiglu(n->runtime_data, gate, up, elements);
         }
         else if (n->op == LANCIUS_OP_GQA) {
+            /* Despot V6 truth: validate inputs before deref (was NULL-deref). */
+            if (!n->inputs || n->input_count < 3 || !n->inputs[0] || !n->inputs[1] || !n->inputs[2]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
             double* q = n->inputs[0]->runtime_data;
             double* k = n->inputs[1]->runtime_data;
             double* v = n->inputs[2]->runtime_data;
-            if(!q || !k || !v) return;
+            if(!q || !k || !v) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
             // Hostile fix: validate Q/K/V shapes match declared heads/dim before kernel (prevents OOB)
             {
                 const lancius_node* qn = n->inputs[0];
@@ -504,6 +528,8 @@ static void execute_node_math(lancius_node* n) {
     if (n->op >= LANCIUS_OP_CONV2D) { lancius_execute_vision_op(n); return; }
 
     if (n->op == LANCIUS_OP_ADD) {
+        /* Despot V6 truth: validate inputs before deref (was NULL-deref). */
+        if (!n->inputs || n->input_count < 2 || !n->inputs[0] || !n->inputs[1]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
         double* a = n->inputs[0]->runtime_data; double* b = n->inputs[1]->runtime_data;
         int8_t* b_int8 = n->inputs[1]->runtime_data_int8;
 
@@ -538,7 +564,7 @@ static void execute_node_math(lancius_node* n) {
             /* else: fall through to exact FP64 broadcast; INT8 fast path refused. */
         }
 
-        if (!a || !b) return;
+        if (!a || !b) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         {
             bool same = (n->inputs[0]->ndim == n->inputs[1]->ndim) && (n->inputs[0]->ndim == n->ndim);
             if (same) {
@@ -550,6 +576,8 @@ static void execute_node_math(lancius_node* n) {
         }
     }
     else if (n->op == LANCIUS_OP_MATMUL) {
+        /* Despot V6 truth: validate inputs before deref (was NULL-deref). */
+        if (!n->inputs || n->input_count < 2 || !n->inputs[0] || !n->inputs[1]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
         /*
          * v11A2 Section 11:
          * FP32 matmul execution path.
@@ -648,8 +676,9 @@ static void execute_node_math(lancius_node* n) {
         }
     }
     else if (n->op == LANCIUS_OP_MUL) {
+        if (!n->inputs || n->input_count < 2 || !n->inputs[0] || !n->inputs[1]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
         double* a = n->inputs[0]->runtime_data; double* b = n->inputs[1]->runtime_data;
-        if (!a || !b) return;
+        if (!a || !b) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         {
             bool same = (n->inputs[0]->ndim == n->inputs[1]->ndim) && (n->inputs[0]->ndim == n->ndim);
             if (same) {
@@ -661,8 +690,9 @@ static void execute_node_math(lancius_node* n) {
         }
     }
     else if (n->op == LANCIUS_OP_SUB) {
+        if (!n->inputs || n->input_count < 2 || !n->inputs[0] || !n->inputs[1]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
         double* a = n->inputs[0]->runtime_data; double* b = n->inputs[1]->runtime_data;
-        if (!a || !b) return;
+        if (!a || !b) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         {
             bool same = (n->inputs[0]->ndim == n->inputs[1]->ndim) && (n->inputs[0]->ndim == n->ndim);
             if (same) {
@@ -674,7 +704,8 @@ static void execute_node_math(lancius_node* n) {
         }
     }
     else if (n->op == LANCIUS_OP_TRANSPOSE) {
-        double* a = n->inputs[0]->runtime_data; if (!a) return;
+        if (!n->inputs || n->input_count < 1 || !n->inputs[0]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
+        double* a = n->inputs[0]->runtime_data; if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         if (!n->inputs[0] || n->inputs[0]->ndim != 2 || n->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
         size_t R = n->inputs[0]->shape[0]; size_t C = n->inputs[0]->shape[1];
         if (R == 0 || C == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
@@ -682,7 +713,8 @@ static void execute_node_math(lancius_node* n) {
         for(size_t r=0; r<R; r++) for(size_t c=0; c<C; c++) n->runtime_data[c*R + r] = a[r*C + c];
     }
     else if (n->op == LANCIUS_OP_SUM) {
-        double* a = n->inputs[0]->runtime_data; if (!a) return;
+        if (!n->inputs || n->input_count < 1 || !n->inputs[0]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
+        double* a = n->inputs[0]->runtime_data; if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         /* Despot truth: never abort on corrupt shapes. */
         size_t elems = 0;
         if (!lancius_node_elements_checked(n->inputs[0], &elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
@@ -690,7 +722,8 @@ static void execute_node_math(lancius_node* n) {
         n->runtime_data[0] = sum;
     }
     else if (n->op == LANCIUS_OP_SUM_AXIS0) {
-        double* a = n->inputs[0]->runtime_data; if (!a) return;
+        if (!n->inputs || n->input_count < 1 || !n->inputs[0]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
+        double* a = n->inputs[0]->runtime_data; if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         if (!n->inputs[0] || n->inputs[0]->ndim != 2 || n->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
         size_t R = n->inputs[0]->shape[0]; size_t C = n->inputs[0]->shape[1];
         if (R == 0 || C == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
@@ -700,7 +733,8 @@ static void execute_node_math(lancius_node* n) {
         for(size_t r=0; r<R; r++) for(size_t c=0; c<C; c++) n->runtime_data[c] += a[r*C + c];
     }
     else if (n->op == LANCIUS_OP_SUM_AXIS1) {
-        double* a = n->inputs[0]->runtime_data; if (!a) return;
+        if (!n->inputs || n->input_count < 1 || !n->inputs[0]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
+        double* a = n->inputs[0]->runtime_data; if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         if (!n->inputs[0] || n->inputs[0]->ndim != 2 || n->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
         size_t R = n->inputs[0]->shape[0]; size_t C = n->inputs[0]->shape[1];
         if (R == 0 || C == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
@@ -708,7 +742,8 @@ static void execute_node_math(lancius_node* n) {
         for(size_t r=0; r<R; r++) { double s=0; for(size_t c=0; c<C; c++) s += a[r*C + c]; n->runtime_data[r] = s; }
     }
     else if (n->op == LANCIUS_OP_BROADCAST) {
-        double* a = n->inputs[0]->runtime_data; if (!a) return;
+        if (!n->inputs || n->input_count < 1 || !n->inputs[0]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
+        double* a = n->inputs[0]->runtime_data; if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         size_t in_elems = 0;
         if (!lancius_node_elements_checked(n->inputs[0], &in_elems)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
         if (in_elems == 1) {
@@ -1073,9 +1108,9 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
             lancius_node* n = wave->nodes[i];
             if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST) continue;
             if (n->dtype == LANCIUS_DTYPE_FP32) {
-                if (!n->runtime_data_f32) continue;
+                if (!n->runtime_data_f32) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); continue; }
             } else {
-                if (!n->runtime_data) continue;
+                if (!n->runtime_data) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); continue; }
             }
             task_count++;
         }
@@ -1094,6 +1129,7 @@ void lancius_schedule_execute_parallel(lancius_schedule* schedule, lancius_arena
             } else {
                 if (!n->runtime_data) continue;
             }
+            /* Buffers verified above; missing here means OOM path already set error. */
             tasks[t].node = n;
             tasks[t].error = LANCIUS_ERROR_OK;
             lancius_pool_submit(pool, execute_node_math_trampoline, &tasks[t]);
@@ -1181,9 +1217,14 @@ lancius_liveness_profile lancius_analyze_liveness(lancius_graph* g) {
 // =====================================================================
 void lancius_schedule_execute_static(lancius_schedule* schedule, void* flat_buffer) {
     if (!schedule || !flat_buffer) return;
+    /* Despot V6 truth: 32B AVX2 alignment. Plan path requires aligned base
+     * (offsets are 32-aligned); bump path aligns start internally. */
+    uintptr_t _base = (uintptr_t)flat_buffer;
+    size_t _base_pad = (32u - (_base & 31u)) & 31u;
 
     /* v11A1 Task 8: use attached memory plan when available. */
     if (schedule->plan && schedule->plan->offsets && schedule->plan->is_pooled) {
+        if (_base_pad != 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
         for (uint32_t w = 0; w < schedule->wave_count; w++) {
             lancius_wave* wave = &schedule->waves[w];
 
@@ -1224,7 +1265,8 @@ void lancius_schedule_execute_static(lancius_schedule* schedule, void* flat_buff
 
 
     // Simple bump pointer over the flat buffer
-    size_t offset = 0;
+    // Despot V6: start at aligned delta so (base+offset) stays 32B-aligned.
+    size_t offset = _base_pad;
 
     for (uint32_t w = 0; w < schedule->wave_count; w++) {
         lancius_wave* wave = &schedule->waves[w];

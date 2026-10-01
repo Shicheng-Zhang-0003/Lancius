@@ -66,13 +66,14 @@ lancius_pool* lancius_pool_create(int num_threads) {
     pool->queue_cap = LANCIUS_POOL_QUEUE_INIT_CAP;
     pool->queue = (lancius_task*)malloc(sizeof(lancius_task) * (size_t)pool->queue_cap);
     pool->threads = (pthread_t*)malloc(sizeof(pthread_t) * (size_t)num_threads);
-    if (!pool->queue || !pool->threads) { free(pool->queue); free(pool->threads); free(pool); return NULL; }
-    if (pthread_mutex_init(&pool->mutex, NULL) != 0) { free(pool->queue); free(pool->threads); free(pool); return NULL; }
-    if (pthread_cond_init(&pool->cond_work, NULL) != 0) { pthread_mutex_destroy(&pool->mutex); free(pool->queue); free(pool->threads); free(pool); return NULL; }
-    if (pthread_cond_init(&pool->cond_wait, NULL) != 0) { pthread_cond_destroy(&pool->cond_work); pthread_mutex_destroy(&pool->mutex); free(pool->queue); free(pool->threads); free(pool); return NULL; }
+    if (!pool->queue || !pool->threads) { lancius_set_error(LANCIUS_ERROR_OOM); free(pool->queue); free(pool->threads); free(pool); return NULL; }
+    if (pthread_mutex_init(&pool->mutex, NULL) != 0) { lancius_set_error(LANCIUS_ERROR_INTERNAL); free(pool->queue); free(pool->threads); free(pool); return NULL; }
+    if (pthread_cond_init(&pool->cond_work, NULL) != 0) { lancius_set_error(LANCIUS_ERROR_INTERNAL); pthread_mutex_destroy(&pool->mutex); free(pool->queue); free(pool->threads); free(pool); return NULL; }
+    if (pthread_cond_init(&pool->cond_wait, NULL) != 0) { lancius_set_error(LANCIUS_ERROR_INTERNAL); pthread_cond_destroy(&pool->cond_work); pthread_mutex_destroy(&pool->mutex); free(pool->queue); free(pool->threads); free(pool); return NULL; }
     for (int i = 0; i < num_threads; i++) {
         if (pthread_create(&pool->threads[i], NULL, worker_loop, pool) != 0) {
             /* Tear down already-started threads. */
+            lancius_set_error(LANCIUS_ERROR_INTERNAL);
             pthread_mutex_lock(&pool->mutex);
             pool->shutdown = true;
             pthread_cond_broadcast(&pool->cond_work);
@@ -94,23 +95,22 @@ void lancius_pool_submit(lancius_pool* pool, lancius_task_fn fn, void* arg) {
     /* Despot truth: queue-full inline fallback ran on the submitter thread
      * concurrently with workers (scratch arenas are not thread-safe) and was
      * invisible to pool_wait. Grow the queue instead; reject after shutdown. */
-    if (pool->shutdown) { pthread_mutex_unlock(&pool->mutex); return; }
+    if (pool->shutdown) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); pthread_mutex_unlock(&pool->mutex); return; }
     if (pool->count >= pool->queue_cap) {
         int new_cap = pool->queue_cap * 2;
         lancius_task *nq;
-        if (new_cap <= 0 || new_cap > LANCIUS_POOL_QUEUE_MAX_CAP) { pthread_mutex_unlock(&pool->mutex); return; }
-        nq = (lancius_task*)realloc(pool->queue, sizeof(lancius_task) * (size_t)new_cap);
-        if (!nq) { pthread_mutex_unlock(&pool->mutex); return; }
+        if (new_cap <= 0 || new_cap > LANCIUS_POOL_QUEUE_MAX_CAP) { lancius_set_error(LANCIUS_ERROR_LIMIT); pthread_mutex_unlock(&pool->mutex); return; }
+        /* Despot V6 truth: malloc+linearize+free (was realloc then UAF read
+         * of freed pool->queue, plus leak of nq on tmp-OOM). */
+        nq = (lancius_task*)malloc(sizeof(lancius_task) * (size_t)new_cap);
+        if (!nq) { lancius_set_error(LANCIUS_ERROR_OOM); pthread_mutex_unlock(&pool->mutex); return; }
         /* Re-linearize ring into the grown buffer. */
         {
             int i;
-            lancius_task *tmp = (lancius_task*)malloc(sizeof(lancius_task) * (size_t)pool->count);
-            if (!tmp) { pthread_mutex_unlock(&pool->mutex); return; }
             for (i = 0; i < pool->count; i++)
-                tmp[i] = pool->queue[(pool->head + i) % pool->queue_cap];
-            memcpy(nq, tmp, sizeof(lancius_task) * (size_t)pool->count);
-            free(tmp);
+                nq[i] = pool->queue[(pool->head + i) % pool->queue_cap];
         }
+        free(pool->queue);
         pool->queue = nq;
         pool->head = 0;
         pool->tail = pool->count;
