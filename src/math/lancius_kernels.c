@@ -143,6 +143,10 @@ void kernel_conv2d_bwd_w(double* out, const double* grad, const double* in,
                          size_t K_h, size_t K_w, size_t stride, size_t pad) {
     if (!out || !grad || !in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
     if (C_out == 0 || C_in == 0 || K_h == 0 || K_w == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    /* Despot V6 truth: same stride/pad guards as fwd/bwd_in (was missing). */
+    if (stride == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (H_in + 2*pad < K_h || W_in + 2*pad < K_w) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
     if (C_out > SIZE_MAX / C_in) return;
     if (C_out * C_in > SIZE_MAX / K_h) return;
     if (C_out * C_in * K_h > SIZE_MAX / K_w) return;
