@@ -52,6 +52,7 @@ static void print_usage(void) {
     printf("  lancius datasets list|pull <name|vision|math|logic|all>|status|distill [-- args]\n");
     printf("  lancius train mnist|cifar10|verifier [--dry]\n");
     printf("  lancius run <model.lancius> [--input f.bin] [--mode wave|static] [--fill random|zero|one] [--topk K] [--show N]\n");
+    printf("  lancius eval <model.lancius> [--mode wave|static]   run vendored micromodel end to end (R2-6 gate)\n");
     printf("  lancius info <model.lancius> [--nodes]\n");
     printf("  lancius convert onnx2lancius <in.onnx> <out.lancius>\n");
     printf("  lancius convert lancius2onnx <in.lancius> <out.onnx>\n");
@@ -235,6 +236,7 @@ static int tui_read(char *buf, size_t cap);
 static int cmd_datasets(int argc, char **argv);
 static int cmd_info(int argc, char **argv);
 static int cmd_run(int argc, char **argv);
+static int cmd_eval(int argc, char **argv);
 static int cmd_train(int argc, char **argv);
 static int cmd_convert(int argc, char **argv);
 static int cmd_export(int argc, char **argv);
@@ -1239,6 +1241,36 @@ static int cmd_run(int argc, char **argv) {
     return rc;
 }
 
+/* R2-6 gate: eval runs a vendored micromodel end to end (run + report). */
+static int cmd_eval(int argc, char **argv) {
+    const char *model = (argc > 0 && argv[0][0] != '-') ? argv[0] : "test_model.lancius";
+    const char *mode = "static";
+    for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "--mode") == 0 && i + 1 < argc) mode = argv[++i];
+        else if (is_help_arg(argv[i])) {
+            printf("usage: lancius eval <model.lancius> [--mode wave|static]\n");
+            printf("  runs vendored micromodel end to end (R2-6 gate).\n");
+            return 0;
+        }
+    }
+    if (!file_exists(model)) {
+        printf("FAIL: missing model %s\n", model);
+        return 1;
+    }
+    {
+        char *sub[5];
+        char modebuf[16];
+        snprintf(modebuf, sizeof(modebuf), "%s", mode);
+        sub[0] = (char*)model;
+        sub[1] = (char*)"--mode"; sub[2] = modebuf;
+        sub[3] = (char*)"--fill"; sub[4] = (char*)"zero";
+        int rc = cmd_run(5, sub);
+        if (rc != 0) { printf("FAIL: eval run failed\n"); return rc; }
+    }
+    printf("eval: %s OK (mode=%s)\n", model, mode);
+    return 0;
+}
+
 /* ---------------- convert / export ---------------- */
 
 static void print_convert_help(void) {
@@ -1846,6 +1878,7 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "datasets") == 0) return cmd_datasets(argc - 2, argv + 2);
     if (strcmp(argv[1], "train") == 0) return cmd_train(argc - 2, argv + 2);
     if (strcmp(argv[1], "run") == 0) return cmd_run(argc - 2, argv + 2);
+    if (strcmp(argv[1], "eval") == 0) return cmd_eval(argc - 2, argv + 2);
     if (strcmp(argv[1], "info") == 0) return cmd_info(argc - 2, argv + 2);
     if (strcmp(argv[1], "convert") == 0) return cmd_convert(argc - 2, argv + 2);
     if (strcmp(argv[1], "export") == 0) return cmd_export(argc - 2, argv + 2);

@@ -1,15 +1,16 @@
 # Lancius Current Status
 
-Current internal milestone: **v12R1**
-Previous internal milestone: **v11S**
-Public equivalent: **V1.2RC1**
-Release line: **12 R1 development**
+Current internal milestone: **v12R2**
+Previous internal milestone: **v12R1**
+Public equivalent: **V1.2RC2**
+Release line: **12 R2 development**
 
 ## Phase
 
-v12R1 is the first development milestone of the v12 cycle
-(progression `S → R1 → R2 → R3 → S`; v12R1 is the R1 phase),
-built on the v11S stable baseline.
+v12R2 is the second development milestone of the v12 cycle
+(progression `S → R1 → R2 → R3 → S`; v12R2 is the R2 phase),
+proving Lancius can learn. Previous v12R1/V1.2RC1 (hardening plus
+numerical correctness) is the baseline, all gates green.
 
 Historical baseline (v11A3 gate, complete):
 - `make check` green
