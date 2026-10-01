@@ -1,5 +1,6 @@
 #include "lancius/lancius_autodiff.h"
 #include "lancius/lancius_validate.h"
+#include "lancius/lancius_checked.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
@@ -512,41 +513,182 @@ break;
             size_t out_shape[4] = {1,1,1,1};
             for (uint8_t _i = 0; _i < fwd_n->ndim && _i < 4; _i++) out_shape[_i] = fwd_n->shape[_i];
             /* Reduce over dimensions where input_dim == 1 and output_dim > 1.
-             * Process from last dim to first to maintain axis indices.
-             * Track running shape since each reduction changes ndim. */
+             * Despot V6 truth: 4D partial reduction is exact via
+             * permute+reshape+sum_axis0/1. Math: for y=broadcast(x),
+             * dx[I] = sum_{J: bcast(J)=I} grad_out[J].
+             * d==0: [D0,R]->sum_axis0; d==3: [P,D3]->sum_axis1;
+             * d==1,2: permute axis to front, reduce, permute back.
+             * ndim!=2,4 with needed reduction fails loud (no SUM_AXIS_ND). */
             lancius_node* grad = grad_out;
             size_t cur_shape[4] = {out_shape[0], out_shape[1], out_shape[2], out_shape[3]};
-            uint8_t cur_ndim = fwd_n->ndim;
             for (int d = 3; d >= 0; d--) {
                 if (d < (int)fwd_n->ndim && in_shape[d] == 1 && out_shape[d] > 1) {
-                    if (d == 0) {
-                        grad = lancius_sum_axis0(tg->graph, grad);
-                        cur_shape[0] = 1;
-                        if (cur_ndim == 1) cur_ndim = 2;
-                    } else if (d == 1) {
-                        grad = lancius_sum_axis1(tg->graph, grad);
-                        cur_shape[1] = 1;
+                    if (fwd_n->ndim == 2) {
+                        if (!grad || grad->ndim != 2) {
+                            lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
+                            free(grad_map); free(fwd_to_full);
+                            lancius_graph_destroy(tg->graph); free(tg);
+                            return NULL;
+                        }
+                        if (d == 0) {
+                            grad = lancius_sum_axis0(tg->graph, grad);
+                            cur_shape[0] = 1;
+                        } else {
+                            grad = lancius_sum_axis1(tg->graph, grad);
+                            cur_shape[1] = 1;
+                        }
+                    } else if (fwd_n->ndim == 4) {
+                        if (!grad || grad->ndim != 4) {
+                            lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
+                            free(grad_map); free(fwd_to_full);
+                            lancius_graph_destroy(tg->graph); free(tg);
+                            return NULL;
+                        }
+                        if (grad->shape[0] != cur_shape[0] || grad->shape[1] != cur_shape[1] ||
+                            grad->shape[2] != cur_shape[2] || grad->shape[3] != cur_shape[3]) {
+                            lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                            free(grad_map); free(fwd_to_full);
+                            lancius_graph_destroy(tg->graph); free(tg);
+                            return NULL;
+                        }
+                        if (d == 0) {
+                            size_t rest = 0;
+                            if (!lancius_checked_product_shape(&cur_shape[1], 3, &rest) || rest == 0) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            lancius_node* reshaped = lancius_reshape(tg->graph, grad, 2, cur_shape[0], rest, 1, 1);
+                            if (!reshaped) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            lancius_node* summed = lancius_sum_axis0(tg->graph, reshaped);
+                            if (!summed) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            grad = lancius_reshape(tg->graph, summed, 4, 1, cur_shape[1], cur_shape[2], cur_shape[3]);
+                            cur_shape[0] = 1;
+                        } else if (d == 3) {
+                            size_t pre = 0;
+                            if (!lancius_checked_product_shape(cur_shape, 3, &pre) || pre == 0) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            lancius_node* reshaped = lancius_reshape(tg->graph, grad, 2, pre, cur_shape[3], 1, 1);
+                            if (!reshaped) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            lancius_node* summed = lancius_sum_axis1(tg->graph, reshaped);
+                            if (!summed) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            grad = lancius_reshape(tg->graph, summed, 4, cur_shape[0], cur_shape[1], cur_shape[2], 1);
+                            cur_shape[3] = 1;
+                        } else if (d == 1) {
+                            lancius_node* perm = lancius_permute(tg->graph, grad, 1, 0, 2, 3);
+                            if (!perm) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            size_t rest = cur_shape[0] * cur_shape[2] * cur_shape[3];
+                            if (cur_shape[0] != 0 && cur_shape[2] != 0 && cur_shape[3] != 0) {
+                                if (cur_shape[0] > SIZE_MAX / cur_shape[2] ||
+                                    cur_shape[0] * cur_shape[2] > SIZE_MAX / cur_shape[3]) rest = 0;
+                            }
+                            if (rest == 0) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            lancius_node* reshaped = lancius_reshape(tg->graph, perm, 2, cur_shape[1], rest, 1, 1);
+                            if (!reshaped) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            lancius_node* summed = lancius_sum_axis0(tg->graph, reshaped);
+                            if (!summed) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            lancius_node* tmp = lancius_reshape(tg->graph, summed, 4, 1, cur_shape[0], cur_shape[2], cur_shape[3]);
+                            if (!tmp) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            grad = lancius_permute(tg->graph, tmp, 1, 0, 2, 3);
+                            cur_shape[1] = 1;
+                        } else {
+                            lancius_node* perm = lancius_permute(tg->graph, grad, 2, 0, 1, 3);
+                            if (!perm) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            size_t rest = cur_shape[0] * cur_shape[1] * cur_shape[3];
+                            if (cur_shape[0] != 0 && cur_shape[1] != 0 && cur_shape[3] != 0) {
+                                if (cur_shape[0] > SIZE_MAX / cur_shape[1] ||
+                                    cur_shape[0] * cur_shape[1] > SIZE_MAX / cur_shape[3]) rest = 0;
+                            }
+                            if (rest == 0) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            lancius_node* reshaped = lancius_reshape(tg->graph, perm, 2, cur_shape[2], rest, 1, 1);
+                            if (!reshaped) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            lancius_node* summed = lancius_sum_axis0(tg->graph, reshaped);
+                            if (!summed) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            lancius_node* tmp = lancius_reshape(tg->graph, summed, 4, 1, cur_shape[0], cur_shape[1], cur_shape[3]);
+                            if (!tmp) {
+                                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                free(grad_map); free(fwd_to_full);
+                                lancius_graph_destroy(tg->graph); free(tg);
+                                return NULL;
+                            }
+                            grad = lancius_permute(tg->graph, tmp, 1, 2, 0, 3);
+                            cur_shape[2] = 1;
+                        }
                     } else {
-                        /* For dims 2,3: reshape to 2D, sum, reshape back */
-                        size_t pre = 1, post = 1;
-                        for (uint8_t _i = 0; _i < (uint8_t)d; _i++) pre *= cur_shape[_i];
-                        for (uint8_t _i = (uint8_t)(d+1); _i < 4; _i++) post *= cur_shape[_i];
-                        lancius_node* reshaped = lancius_reshape(tg->graph, grad, 2, pre, cur_shape[d] * post, 1, 1);
-                        if (!reshaped) {
-                            lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                            free(grad_map); free(fwd_to_full);
-                            lancius_graph_destroy(tg->graph); free(tg);
-                            return NULL;
-                        }
-                        lancius_node* summed = lancius_sum_axis1(tg->graph, reshaped);
-                        if (!summed) {
-                            lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                            free(grad_map); free(fwd_to_full);
-                            lancius_graph_destroy(tg->graph); free(tg);
-                            return NULL;
-                        }
-                        grad = lancius_reshape(tg->graph, summed, 4, cur_shape[0], cur_shape[1], cur_shape[2], cur_shape[3]);
-                        cur_shape[d] = 1;
+                        lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
+                        free(grad_map); free(fwd_to_full);
+                        lancius_graph_destroy(tg->graph); free(tg);
+                        return NULL;
                     }
                     if (!grad) {
                         lancius_set_error(LANCIUS_ERROR_INTERNAL);
