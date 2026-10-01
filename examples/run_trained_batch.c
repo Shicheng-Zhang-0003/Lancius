@@ -13,28 +13,31 @@ int main() {
         if (n->op == LANCIUS_OP_INPUT && n->ndim == 4 && n->shape[1] == 3 && n->runtime_data == NULL) in_node = n;
         if (n->ndim == 2 && n->shape[1] == 10 && n->op != LANCIUS_OP_INPUT) out_node = n;
     }
-    if(!in_node || !out_node) { printf("FATAL: Could not find I/O nodes\n"); return 1; }
+    if(!in_node || !out_node) { printf("FATAL: Could not find I/O nodes\n"); lancius_graph_destroy(g); return 1; }
 
-    size_t in_elems = in_node->shape[0] * in_node->shape[1] * in_node->shape[2] * in_node->shape[3];
+    /* Despot V6 truth: checked elems (was raw multiply overflow). */
+    size_t in_elems = 0;
+    if (!lancius_node_elements_checked(in_node, &in_elems) || in_elems == 0 || in_elems > 64*1024*1024) { printf("FATAL: bad input shape\n"); lancius_graph_destroy(g); return 1; }
     float* temp_in = (float*)malloc(in_elems * sizeof(float));
-    if (!temp_in) { printf("FATAL: OOM\n"); return 1; }
+    if (!temp_in) { printf("FATAL: OOM\n"); lancius_graph_destroy(g); return 1; }
     FILE* f_in = fopen("test_batch.bin", "rb");
-    if (!f_in) { printf("FATAL: missing test_batch.bin\n"); free(temp_in); return 1; }
+    if (!f_in) { printf("FATAL: missing test_batch.bin\n"); free(temp_in); lancius_graph_destroy(g); return 1; }
 
     lancius_schedule* sched = lancius_ir_schedule(g);
-    if (!sched) { printf("FATAL: schedule failed\n"); free(temp_in); return 1; }
+    if (!sched) { printf("FATAL: schedule failed\n"); free(temp_in); fclose(f_in); lancius_graph_destroy(g); return 1; }
     lancius_arena* scratch = lancius_arena_create(16 * 1024 * 1024);
-    if (!scratch) { printf("FATAL: OOM\n"); free(temp_in); return 1; }
+    if (!scratch) { printf("FATAL: OOM\n"); free(temp_in); fclose(f_in); lancius_schedule_destroy(sched); lancius_graph_destroy(g); return 1; }
     FILE* f_out = fopen("lancius_preds.bin", "wb");
-    if (!f_out) { printf("FATAL: cannot write output\n"); free(temp_in); return 1; }
+    if (!f_out) { printf("FATAL: cannot write output\n"); free(temp_in); fclose(f_in); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
     int32_t pred;
 
     in_node->runtime_data = (double*)malloc(in_elems * sizeof(double));
-    if (!in_node->runtime_data) { printf("FATAL: OOM\n"); free(temp_in); return 1; }
+    if (!in_node->runtime_data) { printf("FATAL: OOM\n"); free(temp_in); fclose(f_in); fclose(f_out); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
 
+    int nimg = 0;
     for(int img=0; img<100; img++) {
         size_t rd = fread(temp_in, sizeof(float), in_elems, f_in);
-        if (rd != in_elems) break;
+        if (rd != in_elems) { if (img == 0) { printf("FATAL: short read\n"); fclose(f_in); fclose(f_out); free(temp_in); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; } break; }
         for(size_t i=0; i<in_elems; i++) in_node->runtime_data[i] = (double)temp_in[i];
 
         for(uint32_t w=0; w<sched->wave_count; w++) {
@@ -46,7 +49,7 @@ int main() {
 
         lancius_schedule_execute(sched, scratch);
 
-        if (!out_node->runtime_data) { printf("FATAL: no output\n"); break; }
+        if (!out_node->runtime_data) { printf("FATAL: no output\n"); fclose(f_in); fclose(f_out); free(temp_in); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
         double max_logit = -1e9;
         pred = 0;
         for(int c=0; c<10; c++) {
@@ -55,9 +58,11 @@ int main() {
                 pred = c;
             }
         }
-        fwrite(&pred, sizeof(int32_t), 1, f_out);
+        if (fwrite(&pred, sizeof(int32_t), 1, f_out) != 1) { printf("FATAL: short write\n"); fclose(f_in); fclose(f_out); free(temp_in); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
+        nimg++;
         lancius_arena_reset(scratch);
     }
+    if (nimg == 0) { printf("FATAL: no images\n"); fclose(f_in); fclose(f_out); free(temp_in); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
 
     fclose(f_in); fclose(f_out);
     free(temp_in);

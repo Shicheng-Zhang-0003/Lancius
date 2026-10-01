@@ -33,6 +33,7 @@ train_mnist: examples/train_mnist.c liblancius.a
 	$(CC) $(CFLAGS) -c $< -o $@
 clean:
 	rm -f $(OBJS) liblancius.a
+	rm -f $(OBJS:.o=.d) src/*/*.d *.d
 	rm -f src/runtime/lancius_memory_planner.o src/core/lancius_stable_api.o
 	rm -f train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check
 	rm -f run_llm generate_text test_torture stress_test audit_internals
