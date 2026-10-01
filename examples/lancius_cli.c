@@ -14,6 +14,7 @@
  *   validated before work starts, offline use fails with guidance instead of
  *   a traceback, and `demo` proves the install in one command.
  */
+#define _POSIX_C_SOURCE 200112L
 #include <lancius.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1126,7 +1127,10 @@ static int cmd_run(int argc, char **argv) {
     if (strcmp(mode, "static") == 0) {
         size_t need = lancius_schedule_static_memory_required(sched);
         if (need == 0) need = 1024 * 1024;
-        static_buf = malloc(need);
+        /* Despot V6 truth: 32B-aligned pool (was 16B malloc breaking AVX2). */
+        need = (need + 31) & ~(size_t)31;
+        static_buf = NULL;
+        if (posix_memalign(&static_buf, 32, need + 32) != 0) static_buf = NULL;
         if (!static_buf) {
             int j;
             printf("FAIL: OOM static buffer %zu\n", need);

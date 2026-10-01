@@ -34,6 +34,13 @@ def get_shape(tensor_type):
     return shape[:4]
 
 def convert(onnx_path, lancius_path):
+    import os
+    # Despot V6 truth: size cap before load (was unbounded onnx.load).
+    try:
+        if os.path.getsize(onnx_path) > 2 * 1024 * 1024 * 1024:
+            raise ValueError(f"ONNX file exceeds 2GB cap: {onnx_path}")
+    except OSError as e:
+        raise ValueError(f"cannot stat ONNX file: {e}")
     model = onnx.load(onnx_path)
     onnx.checker.check_model(model)
     model = onnx.shape_inference.infer_shapes(model)

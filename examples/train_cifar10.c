@@ -34,6 +34,20 @@ void download_cifar10() {
     if (access("cifar-10-batches-bin/data_batch_1.bin", F_OK) == 0) return;
     printf("[1/5] Downloading CIFAR-10 Binary Dataset...\n");
     if (!cifar_step("curl -s -L https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz -o cifar.tar.gz")) exit(1);
+    /* Despot V6 truth: tar-slip validated (was blind extract of MITM archive). */
+    if (!cifar_step("tar -tzf cifar.tar.gz > /tmp/opencode/tarlist.txt")) exit(1);
+    {
+        FILE* lf = fopen("/tmp/opencode/tarlist.txt", "r");
+        if (!lf) { fprintf(stderr, "FATAL: cannot list archive\n"); exit(1); }
+        char line[1024];
+        while (fgets(line, sizeof(line), lf)) {
+            size_t L = strlen(line);
+            while (L && (line[L-1] == '\n' || line[L-1] == '\r')) line[--L] = '\0';
+            if (L == 0) continue;
+            if (line[0] == '/' || strstr(line, "..") != NULL) { fprintf(stderr, "FATAL: unsafe tar member: %s\n", line); fclose(lf); exit(1); }
+        }
+        fclose(lf);
+    }
     if (!cifar_step("tar -xzf cifar.tar.gz")) exit(1);
     if (!cifar_step("rm cifar.tar.gz")) exit(1);
     if (access("cifar-10-batches-bin/data_batch_1.bin", F_OK) != 0) { fprintf(stderr, "FATAL: CIFAR-10 download incomplete\n"); exit(1); }

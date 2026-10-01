@@ -166,15 +166,22 @@ def download_mnist():
         "t10k-images-idx3-ubyte.gz",
         "t10k-labels-idx1-ubyte.gz"
     ]
-    # Despot truth: bare urlretrieve/gzip with no try (was: traceback on
-    # network failure, partial files left behind).
+    # Despot V6 truth: chunked capped fetch (was unbounded response.read).
     try:
         for f in files:
             out_name = f.replace(".gz", "")
             if not os.path.exists(out_name):
                 print(f"  Fetching {f}...")
                 with urllib.request.urlopen(base_url + f, timeout=60) as response, open(f, 'wb') as out:
-                    out.write(response.read())
+                    total = 0
+                    while True:
+                        chunk = response.read(65536)
+                        if not chunk:
+                            break
+                        total += len(chunk)
+                        if total > MAX_DOWNLOAD_BYTES:
+                            raise IOError(f"Download exceeds {MAX_DOWNLOAD_BYTES} byte cap")
+                        out.write(chunk)
                 with gzip.open(f, 'rb') as f_in:
                     with open(out_name, 'wb') as f_out:
                         shutil.copyfileobj(f_in, f_out)
@@ -200,8 +207,17 @@ def download_cifar10():
     if not os.path.exists("cifar-10-batches-bin/data_batch_1.bin"):
         try:
             print(f"  Fetching {tar_name}...")
+            # Despot V6 truth: chunked capped (was unbounded response.read).
             with urllib.request.urlopen(url, timeout=60) as response, open(tar_name, 'wb') as out:
-                out.write(response.read())
+                total = 0
+                while True:
+                    chunk = response.read(65536)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > MAX_DOWNLOAD_BYTES:
+                        raise IOError(f"Download exceeds {MAX_DOWNLOAD_BYTES} byte cap")
+                    out.write(chunk)
             with tarfile.open(tar_name, "r:gz") as tar:
                 tar.extractall(members=_safe_members_tar(tar))
             os.remove(tar_name)

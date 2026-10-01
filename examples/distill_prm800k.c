@@ -170,9 +170,10 @@ static jval_t* parse_string(parser_t* ps) {
                 nb = utf8_emit(cp, tmp, sizeof(tmp));
                 if (nb == 0) { free(buf); ps->err = 1; return NULL; }
                 while (len + nb + 1 > cap) {
-                    cap *= 2;
-                    buf = (char*)realloc(buf, cap);
-                    if (!buf) { ps->err = 1; return NULL; }
+                    size_t ncap = cap * 2;
+                    char* nbuf = (char*)realloc(buf, ncap);
+                    if (!nbuf) { free(buf); ps->err = 1; return NULL; }
+                    buf = nbuf; cap = ncap;
                 }
                 memcpy(buf + len, tmp, nb);
                 len += nb;
@@ -180,9 +181,10 @@ static jval_t* parse_string(parser_t* ps) {
             } else { free(buf); ps->err = 1; return NULL; }
         }
         if (len + 2 > cap) {
-            cap *= 2;
-            buf = (char*)realloc(buf, cap);
-            if (!buf) { ps->err = 1; return NULL; }
+            size_t ncap = cap * 2;
+            char* nbuf = (char*)realloc(buf, ncap);
+            if (!nbuf) { free(buf); ps->err = 1; return NULL; }
+            buf = nbuf; cap = ncap;
         }
         buf[len++] = c;
     }
@@ -731,13 +733,14 @@ static int distill_split(const char* split, const char* out_dir) {
     snprintf(src, sizeof(src), "%s/prm800k_phase1_%s.jsonl", data_dir(), split);
     fh = fopen(src, "rb");
     if (!fh) { printf("  ❌ cannot open %s\n", src); return 1; }
-    fseek(fh, 0, SEEK_END);
+    if (fseek(fh, 0, SEEK_END) != 0) { fclose(fh); printf("  ❌ seek failed %s\n", src); return 1; }
     fsize = ftell(fh);
-    fseek(fh, 0, SEEK_SET);
+    if (fseek(fh, 0, SEEK_SET) != 0) { fclose(fh); printf("  ❌ seek failed %s\n", src); return 1; }
     if (fsize < 0 || (size_t)fsize > MAX_FILE_BYTES) { fclose(fh); printf("  ❌ bad size %s\n", src); return 1; }
     data = (char*)malloc((size_t)fsize + 1);
     if (!data) { fclose(fh); return 1; }
     len = fread(data, 1, (size_t)fsize, fh);
+    if (len != (size_t)fsize) { fclose(fh); free(data); printf("  ❌ truncated %s\n", src); return 1; }
     fclose(fh);
     memset(&c, 0, sizeof(c));
     line = data;
@@ -777,12 +780,16 @@ static int distill_split(const char* split, const char* out_dir) {
     }
     fo = fopen(xp, "wb");
     if (!fo) { printf("  ❌ cannot write %s\n", xp); return 1; }
-    if (c.nx) fwrite(c.X, sizeof(double), c.nx, fo);
-    fclose(fo);
+    if (c.nx) {
+        if (fwrite(c.X, sizeof(double), c.nx, fo) != c.nx) { fclose(fo); printf("  ❌ short write %s\n", xp); return 1; }
+    }
+    if (fclose(fo) != 0) { printf("  ❌ close failed %s\n", xp); return 1; }
     fo = fopen(tp, "wb");
     if (!fo) { printf("  ❌ cannot write %s\n", tp); return 1; }
-    if (c.nt) fwrite(c.T, sizeof(double), c.nt, fo);
-    fclose(fo);
+    if (c.nt) {
+        if (fwrite(c.T, sizeof(double), c.nt, fo) != c.nt) { fclose(fo); printf("  ❌ short write %s\n", tp); return 1; }
+    }
+    if (fclose(fo) != 0) { printf("  ❌ close failed %s\n", tp); return 1; }
     sha256_init(&sh);
     if (c.nx) sha256_update(&sh, c.X, c.nx * sizeof(double));
     {
@@ -790,10 +797,13 @@ static int distill_split(const char* split, const char* out_dir) {
         char* rawx;
         /* recompute per-file hashes over exact byte streams */
         FILE* fx = fopen(xp, "rb");
-        fseek(fx, 0, SEEK_END);
+        if (!fx) { printf("  ❌ cannot reread %s\n", xp); return 1; }
+        if (fseek(fx, 0, SEEK_END) != 0) { fclose(fx); printf("  ❌ seek failed\n"); return 1; }
         long xs = ftell(fx);
-        fseek(fx, 0, SEEK_SET);
+        if (xs < 0) { fclose(fx); printf("  ❌ bad size\n"); return 1; }
+        if (fseek(fx, 0, SEEK_SET) != 0) { fclose(fx); printf("  ❌ seek failed\n"); return 1; }
         rawx = (char*)malloc(xs > 0 ? (size_t)xs : 1);
+        if (!rawx) { fclose(fx); printf("  ❌ OOM\n"); return 1; }
         if (xs > 0) {
             if (fread(rawx, 1, (size_t)xs, fx) != (size_t)xs) { fclose(fx); free(rawx); printf("  ❌ reread\n"); return 1; }
         }
@@ -806,10 +816,13 @@ static int distill_split(const char* split, const char* out_dir) {
     {
         sha256_t s3;
         FILE* ft = fopen(tp, "rb");
-        fseek(ft, 0, SEEK_END);
+        if (!ft) { printf("  ❌ cannot reread %s\n", tp); return 1; }
+        if (fseek(ft, 0, SEEK_END) != 0) { fclose(ft); printf("  ❌ seek failed\n"); return 1; }
         long ts = ftell(ft);
-        fseek(ft, 0, SEEK_SET);
+        if (ts < 0) { fclose(ft); printf("  ❌ bad size\n"); return 1; }
+        if (fseek(ft, 0, SEEK_SET) != 0) { fclose(ft); printf("  ❌ seek failed\n"); return 1; }
         char* rawt = (char*)malloc(ts > 0 ? (size_t)ts : 1);
+        if (!rawt) { fclose(ft); printf("  ❌ OOM\n"); return 1; }
         if (ts > 0) {
             if (fread(rawt, 1, (size_t)ts, ft) != (size_t)ts) { fclose(ft); free(rawt); printf("  ❌ reread\n"); return 1; }
         }
