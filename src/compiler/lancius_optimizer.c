@@ -1,5 +1,6 @@
 #include "lancius/lancius_ir.h"
 #include "lancius/lancius_error.h"
+#include <string.h>
 
 static int count_consumers(lancius_graph* g, const lancius_node* target) {
     int count = 0;
@@ -34,6 +35,8 @@ void lancius_optimize_fusion(lancius_graph* g) {
              * read when conv had <2 inputs). */
             if (!conv->inputs || conv->input_count != 2 || !conv->inputs[0] || !conv->inputs[1]) continue;
             if (conv->ndim != 4 || n->ndim != 4) continue;
+            /* Despot V6 truth: shapes must match (was silent overwrite). */
+            if (memcmp(conv->shape, n->shape, 4 * sizeof(size_t)) != 0) continue;
             if (count_consumers(g, conv) == 1) {
                 n->op = LANCIUS_OP_CONV2D_RELU_FUSED;
                 // V10S FIX: Steal the Conv2D's inputs array directly to avoid arena OOB write!

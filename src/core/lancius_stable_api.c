@@ -199,9 +199,11 @@ LANCIUS_EXPORT lancius_status lancius_compile_and_run(lancius_graph_handle g) {
         if (peak > SIZE_MAX - (1024 * 1024)) { set_error(LANCIUS_ERR_OOM); return LANCIUS_ERR_OOM; }
         size_t needed = peak + (1024 * 1024); /* 1MB headroom */
         if (needed > 16 * 1024 * 1024) {
+            /* Despot V6 truth: allocate first, destroy only on success (was leak+NULL). */
+            lancius_arena* na = lancius_arena_create(needed);
+            if (!na) { set_error(LANCIUS_ERR_OOM); return LANCIUS_ERR_OOM; }
             lancius_arena_destroy(wrapper->scratch);
-            wrapper->scratch = lancius_arena_create(needed);
-            if (!wrapper->scratch) { set_error(LANCIUS_ERR_OOM); return LANCIUS_ERR_OOM; }
+            wrapper->scratch = na;
         }
     }
     lancius_arena_reset(wrapper->scratch);

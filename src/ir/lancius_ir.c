@@ -554,6 +554,10 @@ lancius_node* lancius_cross_entropy(lancius_graph* g, const lancius_node* logits
 }
 lancius_node* lancius_cross_entropy_bwd(lancius_graph* g, const lancius_node* logits, const lancius_node* targets, const lancius_node* grad_out) {
     if (!logits || !targets || !grad_out) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (logits->ndim != 2 || targets->ndim != 2) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
+    if (logits->shape[0] != targets->shape[0] || logits->shape[1] != targets->shape[1]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    size_t ge = 0;
+    if (!lancius_node_elements_checked(grad_out, &ge) || ge != 1) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_CROSS_ENTROPY_BWD, logits->ndim, 3);
     if (n) { memcpy(n->shape, logits->shape, sizeof(size_t)*logits->ndim); n->inputs[0] = logits; n->inputs[1] = targets; n->inputs[2] = grad_out; }
     return n;
@@ -561,6 +565,12 @@ lancius_node* lancius_cross_entropy_bwd(lancius_graph* g, const lancius_node* lo
 
 lancius_node* lancius_conv2d_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* fwd_in, const lancius_node* fwd_w, uint32_t stride, uint32_t pad) {
     if (!grad || !fwd_in || !fwd_w) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    /* Despot V6 truth: mirror fwd rank/stride/pad checks (was unchecked). */
+    if (grad->ndim != 4 || fwd_in->ndim != 4 || fwd_w->ndim != 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
+    if (stride == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
+    if (fwd_in->shape[1] != fwd_w->shape[1]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    if (lancius_validate_conv2d(fwd_in->shape[2], fwd_in->shape[3], fwd_w->shape[2], fwd_w->shape[3], stride, pad) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_CONV2D_BWD, 4, 3);
     if (n) {
         memcpy(n->shape, fwd_in->shape, sizeof(size_t)*4);
@@ -570,6 +580,11 @@ lancius_node* lancius_conv2d_bwd(lancius_graph* g, const lancius_node* grad, con
 }
 lancius_node* lancius_maxpool2d_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* fwd_in, uint32_t kernel, uint32_t stride) {
     if (!grad || !fwd_in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    /* Despot V6 truth: mirror fwd rank/stride checks (was unchecked). */
+    if (grad->ndim != 4 || fwd_in->ndim != 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
+    if (kernel == 0 || stride == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
+    if (fwd_in->shape[2] < kernel || fwd_in->shape[3] < kernel) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_MAXPOOL2D_BWD, 4, 2);
     if (n) {
         memcpy(n->shape, fwd_in->shape, sizeof(size_t)*4);
@@ -613,7 +628,13 @@ lancius_node* lancius_swiglu(lancius_graph* g, const lancius_node* gate, const l
 
 lancius_node* lancius_gqa(lancius_graph* g, const lancius_node* q, const lancius_node* k, const lancius_node* v, uint32_t n_heads_q, uint32_t n_heads_kv) {
     if (!q || !k || !v) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     if (lancius_validate_gqa(n_heads_q, n_heads_kv) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
+    /* Despot V6 truth: Q/K/V must be 3D with matching seq/dim (was unchecked). */
+    if (q->ndim != 3 || k->ndim != 3 || v->ndim != 3) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
+    if (q->shape[0] != k->shape[0] || q->shape[0] != v->shape[0]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    if (q->shape[1] != n_heads_q || k->shape[1] != n_heads_kv || v->shape[1] != n_heads_kv) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    if (q->shape[2] != k->shape[2] || q->shape[2] != v->shape[2]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     lancius_node* n = alloc_node(g, LANCIUS_OP_GQA, q->ndim, 3);
     if (n) {
         memcpy(n->shape, q->shape, sizeof(size_t) * q->ndim);
@@ -681,12 +702,13 @@ int lancius_node_attach_runtime(lancius_graph* g, lancius_node* n) {
 }
 
 lancius_runtime_state* lancius_graph_runtime(lancius_graph* g, uint32_t node_id) {
-    if (!g || !g->rt_states || node_id >= g->rt_cap) return NULL;
+    if (!g || !g->rt_states || node_id >= g->rt_cap) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
     return &g->rt_states[node_id];
 }
 
 lancius_runtime_state* lancius_node_rt(const lancius_node* n) {
-    return n ? n->rt : NULL;
+    if (!n || !n->rt) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    return n->rt;
 }
 
 void lancius_runtime_sync_from_legacy(lancius_node* n) {

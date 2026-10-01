@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include "lancius/lancius_ir.h"
 #include "lancius/lancius_validate.h"
 #include <stdio.h>
@@ -6,6 +7,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <limits.h>
+#include <math.h>
 #include <unistd.h>
 #include <threads.h>
 
@@ -123,11 +125,14 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
     if (!g || !path) return -1;
     if (!is_little_endian()) return -1;
 
-    /* Despot truth: write to tmp + rename (was: truncate-in-place, mid-save
-     * failure left a partial file at the real path). */
-    if (snprintf(tmp, sizeof(tmp), "%s.tmp", path) >= (int)sizeof(tmp)) return -1;
-    f = fopen(tmp, "w+b");
-    if (!f) return -1;
+    /* Despot V6 truth: mkstemp+fsync+rename (was predictable .tmp race). */
+    {
+        if (snprintf(tmp, sizeof(tmp), "%s.tmp.XXXXXX", path) >= (int)sizeof(tmp)) return -1;
+        int fd = mkstemp(tmp);
+        if (fd < 0) return -1;
+        f = fdopen(fd, "w+b");
+        if (!f) { close(fd); unlink(tmp); return -1; }
+    }
 
     v2_header h;
     memset(&h, 0, sizeof(h));
@@ -172,6 +177,8 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
         rn.dtype = (uint8_t)n->dtype;
         /* Despot truth: invalid dtype was silently coerced to FP64. Fail loud. */
         if (!lancius_dtype_is_valid(rn.dtype)) { fclose(f); unlink(tmp); return -1; }
+        /* Despot V6 truth: per-channel scales not in format; refuse silent drop. */
+        if (n->rt && n->rt->scale_per_channel) { fclose(f); unlink(tmp); return -1; }
 
         rn.has_weights = 0;
         rn.scale = n->scale;
@@ -233,31 +240,36 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
     }
 
     /* v11A3 format freeze: stream CRC32 over the model body (no 800MB malloc,
-     * checked seeks, offsetof not magic 40). */
+     * checked seeks, offsetof not magic 40). Despot V6: ftello/off_t (was
+     * long truncation); empty graph (body 0) is savable. */
     {
-        long body_start = (long)sizeof(v2_header);
-        long body_end, body_size, left;
+        off_t body_start = (off_t)sizeof(v2_header);
+        off_t body_end, body_size, left;
         uint32_t crc = 0;
         uint8_t chunk[65536];
         if (fflush(f) != 0) { fclose(f); unlink(tmp); return -1; }
-        if (fseek(f, 0, SEEK_END) != 0) { fclose(f); unlink(tmp); return -1; }
-        body_end = ftell(f);
+        if (fseeko(f, 0, SEEK_END) != 0) { fclose(f); unlink(tmp); return -1; }
+        body_end = ftello(f);
         if (body_end < 0 || body_end < body_start) { fclose(f); unlink(tmp); return -1; }
         body_size = body_end - body_start;
-        if (body_size <= 0) { fclose(f); unlink(tmp); return -1; }
-        if (fseek(f, body_start, SEEK_SET) != 0) { fclose(f); unlink(tmp); return -1; }
+        if (fseeko(f, body_start, SEEK_SET) != 0) { fclose(f); unlink(tmp); return -1; }
         left = body_size;
         while (left > 0) {
-            size_t want = (left < (long)sizeof(chunk)) ? (size_t)left : sizeof(chunk);
+            size_t want = (left < (off_t)sizeof(chunk)) ? (size_t)left : sizeof(chunk);
             size_t got = fread(chunk, 1, want, f);
             if (got != want) { fclose(f); unlink(tmp); return -1; }
             crc = lancius_crc32(crc, chunk, got);
-            left -= (long)got;
+            left -= (off_t)got;
         }
         if (crc == 0) crc = 1; /* 0 means legacy/unverified; never emit it */
-        if (fseek(f, (long)offsetof(v2_header, checksum_crc32), SEEK_SET) != 0) { fclose(f); unlink(tmp); return -1; }
+        if (fseeko(f, (off_t)offsetof(v2_header, checksum_crc32), SEEK_SET) != 0) { fclose(f); unlink(tmp); return -1; }
         if (fwrite(&crc, sizeof(uint32_t), 1, f) != 1) { fclose(f); unlink(tmp); return -1; }
-        if (fflush(f) != 0 || fclose(f) != 0) { unlink(tmp); return -1; }
+        if (fflush(f) != 0) { fclose(f); unlink(tmp); return -1; }
+        {
+            int fd2 = fileno(f);
+            if (fd2 >= 0) fsync(fd2);
+        }
+        if (fclose(f) != 0) { unlink(tmp); return -1; }
     }
 
     if (rename(tmp, path) != 0) { unlink(tmp); return -1; }
@@ -265,19 +277,21 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
 }
 
 lancius_graph* lancius_graph_load_v2(const char* path) {
-    if (!path) return NULL;
-    if (!is_little_endian()) return NULL;
+    if (!path) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (!is_little_endian()) { lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP); return NULL; }
 
     FILE* f = fopen(path, "rb");
-    if (!f) return NULL;
+    if (!f) { lancius_set_error(LANCIUS_ERROR_IO); return NULL; }
 
     v2_header h;
     if (fread(&h, 1, sizeof(h), f) != sizeof(h)) {
+        lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
         fclose(f);
         return NULL;
     }
 
     if (h.magic != LANCIUS_MODEL_MAGIC_V2) {
+        lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
         fclose(f);
         return NULL;
     }
@@ -293,12 +307,14 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
         h.weight_block_offset != 0 ||
         h.attribute_count != 0
     ) {
+        lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
         fclose(f);
         return NULL;
     }
 
     lancius_graph* g = lancius_graph_create();
     if (!g) {
+        lancius_set_error(LANCIUS_ERROR_OOM);
         fclose(f);
         return NULL;
     }
@@ -317,7 +333,8 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
 
         if (crc_fread(&rn, 1, sizeof(rn), f, &computed_crc) != sizeof(rn)) goto fail;
 
-        if (rn.ndim > 4) goto fail;
+        /* Despot V6 truth: ndim==0 rejected (was coerced to 2D). */
+        if (rn.ndim == 0 || rn.ndim > 4) goto fail;
         if (rn.input_count > 16u) goto fail;
         if (rn.weight_elems > 100000000ull) goto fail;
         if (!lancius_dtype_is_valid(rn.dtype)) goto fail;
@@ -366,22 +383,34 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
                 break;
 
             case LANCIUS_MODEL_OP_INPUT:
-/* v12R1-201: validate shape; reject oversized / zero-dim / bad-rank */
+ /* v12R1-201: validate shape; reject oversized / zero-dim / bad-rank.
+  * Despot V6: 0/1-D rejected (was coerced to 2D). Only 2/3/4-D persistable. */
 if (rn.ndim == 4) {
     if (lancius_validate_shape(sh, 4) != LANCIUS_ERROR_OK) goto fail;
     n = lancius_input_4d(g, sh[0], sh[1], sh[2], sh[3]);
 } else if (rn.ndim == 3) {
     if (lancius_validate_shape(sh, 3) != LANCIUS_ERROR_OK) goto fail;
     n = lancius_input_3d(g, sh[0], sh[1], sh[2]);
-} else {
+} else if (rn.ndim == 2) {
     if (lancius_validate_shape(sh, 2) != LANCIUS_ERROR_OK) goto fail;
     n = lancius_input(g, sh[0], sh[1]);
+} else {
+    goto fail;
 }
 break;
 
             case LANCIUS_MODEL_OP_CONST:
-                if (rn.ndim != 2) goto fail;
-                n = lancius_const(g, rn.attr, sh[0], sh[1]);
+                /* Despot V6 truth: 1..4-D CONST round-trips (was 2D-only). */
+                if (rn.ndim < 1 || rn.ndim > 4) goto fail;
+                if (rn.ndim == 2) n = lancius_const(g, rn.attr, sh[0], sh[1]);
+                else {
+                    size_t cshape[4] = {sh[0], sh[1], sh[2], sh[3]};
+                    if (lancius_validate_shape(cshape, rn.ndim) != LANCIUS_ERROR_OK) goto fail;
+                    n = lancius_const_scalar(g, rn.attr, rn.ndim);
+                    if (n) {
+                        for (int _s = 0; _s < rn.ndim; _s++) n->shape[_s] = sh[_s];
+                    }
+                }
                 break;
 
             case LANCIUS_MODEL_OP_ADD:
@@ -502,6 +531,16 @@ break;
                 n = lancius_mse(g, in0, in1);
                 break;
 
+            case LANCIUS_MODEL_OP_ROPE:
+                /* Despot V6 truth: ROPE persistable (was save-ok/load-fail). */
+                if (rn.ndim != 3) goto fail;
+                {
+                    size_t _hd2 = sh[2];
+                    if (_hd2 % 2 != 0) goto fail;
+                    n = lancius_rope(g, in0, sh[0], sh[1], _hd2 / 2);
+                }
+                break;
+
             default:
                 lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
                 n = NULL;
@@ -519,6 +558,10 @@ break;
             memcpy(n->axes, rn.axes, sizeof(rn.axes));
 
             n->dtype = (lancius_dtype)rn.dtype;
+            /* Despot V6 truth: INT8 scale must be >0 finite (was unchecked). */
+            if (rn.dtype == LANCIUS_DTYPE_INT8) {
+                if (!(rn.scale > 0.0) || !isfinite(rn.scale)) goto fail;
+            }
             n->scale = rn.scale;
         }
 
@@ -626,6 +669,7 @@ break;
     return g;
 
 fail:
+    lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
     free(in_ids);
     free(map.v);
     if (g) lancius_graph_destroy(g);
