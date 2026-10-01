@@ -46,7 +46,7 @@ void lancius_execute_vision_op(lancius_node* n) {
         const int8_t* in = in_node->runtime_data_int8;
         const int8_t* w = w_node->runtime_data_int8;
 
-        if (!in || !w) return;
+        if (!in || !w) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
 
         double scale_in = in_node->scale;
         double scale_w = w_node->scale;
@@ -207,6 +207,19 @@ void lancius_execute_vision_op(lancius_node* n) {
         const lancius_node* in_node = n->inputs[1];
         const lancius_node* grad_node = n->inputs[0];
         const lancius_node* w_node = n->inputs[2];
+        /* Despot V6 truth: mirror FWD rank/stride/H_out checks (was unchecked). */
+        if (in_node->ndim != 4 || grad_node->ndim != 4 || w_node->ndim != 4 || n->ndim != 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
+        if (n->stride == 0 || w_node->shape[2] == 0 || w_node->shape[3] == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_STRIDE); return; }
+        {
+            size_t H_in = in_node->shape[2], W_in = in_node->shape[3];
+            size_t K_h = w_node->shape[2], K_w = w_node->shape[3];
+            if (n->pad > (SIZE_MAX - H_in) / 2 || n->pad > (SIZE_MAX - W_in) / 2) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+            if (H_in + 2 * (size_t)n->pad < K_h || W_in + 2 * (size_t)n->pad < K_w) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+            size_t eH = (H_in + 2 * (size_t)n->pad - K_h) / n->stride + 1;
+            size_t eW = (W_in + 2 * (size_t)n->pad - K_w) / n->stride + 1;
+            if (eH != grad_node->shape[2] || eW != grad_node->shape[3]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+            if (in_node->shape[0] != grad_node->shape[0] || in_node->shape[0] != n->shape[0]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        }
         kernel_conv2d_bwd_in(n->runtime_data, grad, w,
             in_node->shape[0], in_node->shape[1], in_node->shape[2], in_node->shape[3],
             w_node->shape[0], grad_node->shape[2], grad_node->shape[3],
@@ -219,6 +232,9 @@ void lancius_execute_vision_op(lancius_node* n) {
         if (!grad || !in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         const lancius_node* in_node = n->inputs[1];
         const lancius_node* grad_node = n->inputs[0];
+        /* Despot V6 truth: rank/stride guards (was unchecked). */
+        if (in_node->ndim != 4 || grad_node->ndim != 4 || n->ndim != 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
+        if (n->stride == 0 || n->shape[2] == 0 || n->shape[3] == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_STRIDE); return; }
         kernel_conv2d_bwd_w(n->runtime_data, grad, in,
             in_node->shape[0], in_node->shape[1], in_node->shape[2], in_node->shape[3],
             n->shape[0], grad_node->shape[2], grad_node->shape[3],

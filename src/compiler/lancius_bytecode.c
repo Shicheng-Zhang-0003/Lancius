@@ -27,13 +27,14 @@ lancius_program* lancius_compile_graph(lancius_graph* g) {
     prog->input_count = 0;
 
     // v10S GUARD: Bytecode VM only supports 2D tensors
+    // Despot V6 truth: ndim!=2 rejected (was >2, so 0D/1D compiled to Rx0).
     for (uint32_t i = 0; i < g->node_count; i++) {
         if (!g->nodes[i] || g->nodes[i]->id >= g->next_id) {
             lancius_set_error(LANCIUS_ERROR_INTERNAL);
             free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog->is_const); free(prog->const_val); free(prog);
             return NULL;
         }
-        if (g->nodes[i]->ndim > 2) {
+        if (g->nodes[i]->ndim != 2) {
             lancius_set_error(LANCIUS_ERROR_INVALID_RANK);
             free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog->is_const); free(prog->const_val); free(prog);
             return NULL;
@@ -54,6 +55,25 @@ lancius_program* lancius_compile_graph(lancius_graph* g) {
         lancius_node* n = g->nodes[i];
         if (n->op == LANCIUS_OP_INPUT || n->op == LANCIUS_OP_CONST) continue;
 
+        /* Despot V6 truth: validate inputs before reg_map deref (was NULL+OOB). */
+        uint32_t need = 0;
+        if (n->op == LANCIUS_OP_MATMUL || n->op == LANCIUS_OP_ADD || n->op == LANCIUS_OP_SUB || n->op == LANCIUS_OP_MUL) need = 2;
+        else if (n->op == LANCIUS_OP_RELU || n->op == LANCIUS_OP_BROADCAST || n->op == LANCIUS_OP_SOFTMAX || n->op == LANCIUS_OP_SUM) need = 1;
+        else need = 0;
+        if (need > 0) {
+            if (!n->inputs || n->input_count < need) {
+                lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID);
+                free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog->is_const); free(prog->const_val); free(prog);
+                return NULL;
+            }
+            for (uint32_t k = 0; k < need; k++) {
+                if (!n->inputs[k] || n->inputs[k]->id >= g->next_id) {
+                    lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID);
+                    free(reg_map); free(prog->code); free(prog->rows); free(prog->cols); free(prog->input_regs); free(prog->is_const); free(prog->const_val); free(prog);
+                    return NULL;
+                }
+            }
+        }
         uint32_t out_r = reg_map[n->id];
         if (n->op == LANCIUS_OP_MATMUL) {
             prog->code[pc++] = LANCIUS_BC_MATMUL; prog->code[pc++] = out_r;
@@ -95,8 +115,13 @@ lancius_program* lancius_compile_graph(lancius_graph* g) {
 
 int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lancius_arena* scratch) {
     if (!prog || !scratch || !out) return -1;
+    /* Despot V6 truth: program invariants validated (was OOB out_reg). */
+    if (!prog->code || !prog->rows || !prog->cols) return -1;
+    if (prog->num_regs == 0 || prog->code_len == 0) return -1;
+    if (prog->out_reg >= prog->num_regs) return -1;
     /* Despot truth: inputs deref was unchecked (NULL + OOB reg). */
     if (prog->input_count > 0 && !inputs) return -1;
+    if (prog->input_count > prog->num_regs) return -1;
 
     double** regs = (double**)lancius_arena_alloc(scratch, prog->num_regs * sizeof(double*), 8);
     if (!regs) return -1;
@@ -122,9 +147,15 @@ int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lanc
 
     size_t pc = 0;
     while (pc < prog->code_len) {
+        /* Despot V6 truth: tape OOB read guarded (was 3-word overread). */
+        if (pc + 3 > prog->code_len) return -1;
         uint32_t op = prog->code[pc++];
         if (op == LANCIUS_BC_HALT) break;
 
+        bool is_unary_peek = (op == LANCIUS_BC_RELU || op == LANCIUS_BC_BROADCAST || op == LANCIUS_BC_SOFTMAX || op == LANCIUS_BC_SUM);
+        size_t need = is_unary_peek ? 3u : 4u;
+        /* op already consumed; need (need-1) more words */
+        if (pc + (need - 1) > prog->code_len) return -1;
         uint32_t r_out = prog->code[pc++];
         uint32_t r_a = prog->code[pc++];
         uint32_t r_b = 0;
@@ -171,6 +202,8 @@ int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lanc
                 else o[oi] = a[ai] * b[bi];
             }
         } else if (op == LANCIUS_BC_RELU) {
+            /* Despot V6 truth: input/output shapes must match (was OOB). */
+            if (prog->rows[r_a] != prog->rows[r_out] || prog->cols[r_a] != prog->cols[r_out]) return -1;
             for(size_t k=0; k<elements; k++) o[k] = a[k] > 0.0 ? a[k] : 0.0;
         } else if (op == LANCIUS_BC_BROADCAST) {
             size_t cols = prog->cols[r_out]; size_t rows = prog->rows[r_out];
@@ -190,6 +223,8 @@ int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lanc
                 return -1;
             }
         } else if (op == LANCIUS_BC_SOFTMAX) {
+            /* Despot V6 truth: input dims must equal output dims (was OOB). */
+            if (prog->rows[r_a] != prog->rows[r_out] || prog->cols[r_a] != prog->cols[r_out]) return -1;
             size_t R = prog->rows[r_out]; size_t C = prog->cols[r_out];
             for(size_t r=0; r<R; r++) {
                 double max_val = a[r*C];
@@ -200,6 +235,8 @@ int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lanc
                 for(size_t c=0; c<C; c++) o[r*C+c] /= sum;
             }
         } else if (op == LANCIUS_BC_SUM) {
+            /* Despot V6 truth: SUM out must be 1x1 (was uninit leak). */
+            if (prog->rows[r_out] != 1 || prog->cols[r_out] != 1) return -1;
             if (prog->rows[r_a] && prog->cols[r_a] > SIZE_MAX / prog->rows[r_a]) return -1;
             size_t elems = prog->rows[r_a] * prog->cols[r_a];
             double sum = 0.0; for(size_t k=0; k<elems; k++) sum += a[k];
