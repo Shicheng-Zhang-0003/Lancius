@@ -1,6 +1,6 @@
 # Lancius v12R1 — Development Milestone
 
-**Tag:** `v12R1`
+**Tag:** `V1.2RC1`
 **Public version:** V1.2RC1
 **License:** GPL-3.0-or-later
 
@@ -124,14 +124,15 @@ cmake -B build && cmake --build build
 
 ## Bug-Fix Campaign (pre-R2)
 
-A comprehensive bug-fix campaign closed **20 defect classes** across the
-codebase before R2 development began:
+A comprehensive bug-fix campaign closed **38 defects (26 in V4 + 12 in V5)** across the
+codebase before R2 development began, plus **45 defects in despot audit V6 (2026-10-01)**.
+Full enumeration lives in `CHANGELOG.md`; essence only here:
 
-- **Autodiff**: BROADCAST backward, race conditions in conv2d_bwd_in/maxpool2d_bwd, NULL checks, OOB reads on shape/axes, off-by-one in node capacity, dangling pointer in stable API
-- **Safety**: command injection in CLI, `abort()` removed from library code, memory leaks in IR, overflow checks in bytecode VM
-- **Correctness**: `fprintf`/`printf` → `lancius_set_error`, serialization portability, CRC32 race condition, NOP handling in serializer, threadpool timeout
+- **Autodiff**: BROADCAST backward, race conditions in conv2d_bwd_in/maxpool2d_bwd, NULL checks, OOB reads on shape/axes, off-by-one in node capacity, dangling pointer in stable API; V6 exact 4D permute+reshape reduction, CE_BWD guards
+- **Safety**: command injection in CLI, `abort()` removed from library code, memory leaks in IR, overflow checks in bytecode VM; V6 VM tape/out_reg, scheduler NULL-deref, pool UAF, arena wrap, 32B align
+- **Correctness**: `fprintf`/`printf` → `lancius_set_error`, serialization portability, CRC32 race condition, NOP handling in serializer, threadpool timeout; V6 mkstemp/fsync, per-channel refuse, ndim==0/CONST/ROPE/scale, quantizer/optimizer/vision checks
 - **Quantization**: per-channel quantization, dequantization
-- **Build**: Python scripts, build system, Makefile
+- **Build**: Python scripts, build system, Makefile; V6 capped fetches, distill checks, tar-slip, `.d` purge
 
 All fixes validated by `make check`, `check-sanitizers`, and despot truth probes.
 
