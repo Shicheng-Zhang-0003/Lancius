@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 project(Lancius VERSION 1.2.0 LANGUAGES C)
 
-set(LANCIUS_MILESTONE "v12R1")
+set(LANCIUS_MILESTONE "v12R2")
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -44,7 +44,7 @@ set_target_properties(lancius_shared PROPERTIES OUTPUT_NAME lancius)
 set_target_properties(lancius_shared PROPERTIES C_VISIBILITY_PRESET hidden)
 target_compile_options(lancius_shared PRIVATE -fvisibility=hidden)
 
-message(STATUS "Lancius v12R1 build configured.")
+message(STATUS "Lancius v12R2 build configured.")
 
 # --- v11S: Install rules ---
 include(GNUInstallDirs)

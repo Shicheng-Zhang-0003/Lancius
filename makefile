@@ -18,11 +18,13 @@ SRCS = src/core/lancius_arena.c \
        src/compiler/lancius_optimizer.c \
        src/core/lancius_checked.c \
 src/core/lancius_validate.c \
-src/compiler/lancius_quantize.c
+src/compiler/lancius_quantize.c \
+src/train/lancius_train.c \
+src/runtime/lancius_sandbox.c
 
 OBJS = $(SRCS:.c=.o)
 -include $(OBJS:.o=.d)
-all: liblancius.a lancius audit_internals stress_test test_torture generate_text run_llm train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_despot_probe train_verifier_head distill_prm800k
+all: liblancius.a lancius audit_internals stress_test test_torture generate_text run_llm train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_despot_probe train_verifier_head distill_prm800k audit_train_lib audit_sandbox train_micromodel eval_verifier
 lancius: examples/lancius_cli.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 liblancius.a: $(OBJS)
@@ -43,6 +45,7 @@ clean:
 	rm -f audit_regression_13c regression_roundtrip.lancius regression_bad_*.lancius regression_trunc_*.lancius regression_huge_*.lancius
 	rm -f audit_known_answer audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_flash_attention
 	rm -f audit_despot_probe train_verifier_head distill_prm800k lancius
+	rm -f audit_train_lib audit_sandbox train_micromodel eval_verifier
 .PHONY: all clean check check-long check-sanitizers
 train_cifar10: examples/train_cifar10.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
@@ -158,14 +161,22 @@ check: all
 	./audit_despot_probe
 	./train_verifier_head
 	./distill_prm800k --selftest
+	./audit_train_lib
+	./audit_sandbox
+	./train_micromodel
+	./eval_verifier
+	python3 audit_text_pipeline.py
+	python3 audit_abi.py
+	python3 audit_binding_smoke.py
 	./lancius info test_model.lancius
 	./lancius run test_model.lancius --mode static --fill zero
-	@echo "v12R1 check complete."
+	./lancius eval test_model.lancius --mode static
+	@echo "v12R2 check complete."
 
 check-long: check
 	./soak_fuzz
 	./fuzz_lancius 12345
-	@echo "v12R1 long check complete."
+	@echo "v12R2 long check complete."
 
 # --- v11A1 Task 13b: known-answer audit ---
 audit_known_answer: examples/audit_known_answer.c liblancius.a
@@ -185,7 +196,7 @@ check-sanitizers:
 	./stress_test
 	./test_torture
 	./fuzz_lancius 12345
-	@echo "v12R1 sanitizer gate complete."
+	@echo "v12R2 sanitizer gate complete."
 	@echo "Restoring normal build (removing sanitizer instrumentation)..."
 	$(MAKE) -B all
 	@echo "Normal build restored. Safe to run 'make check' now."
@@ -207,6 +218,19 @@ train_verifier_head: examples/train_verifier_head.c liblancius.a
 # --- v12R2: PRM800k step distiller in C (retires distill_prm800k.py) ---
 distill_prm800k: examples/distill_prm800k.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+# --- v12R2 training + sandbox + micromodel gates ---
+audit_train_lib: examples/audit_train_lib.c liblancius.a
+	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
+
+audit_sandbox: examples/audit_sandbox.c liblancius.a
+	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
+
+train_micromodel: examples/train_micromodel.c liblancius.a
+	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
+
+eval_verifier: examples/eval_verifier.c liblancius.a
+	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 
 audit_fault_injection: examples/audit_fault_injection.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread

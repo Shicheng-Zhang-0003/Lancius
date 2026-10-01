@@ -1,5 +1,15 @@
 # Lancius Changelog
 
+## v12R2 (in progress) — learn to train micromodels (R2-1..R2-6)
+
+- R2-1: `src/train/lancius_train.c` + `lancius_train.h` (SGD/SGDM/AdamW-decoupled/clip/cosine/warmup-cosine), proven by `audit_train_lib` (SGD/SGDM/AdamW exact, clip scale, schedules, NULL-safety, loss monotonicity).
+- R2-2: `text_tokenizer.py` char-byte fallback `char-v1` (BPE recommended, decision recorded) + versioned sidecar + SHA256 manifests, proven by `audit_text_pipeline.py` (ASCII/astral roundtrip, sidecar, manifest + tamper-fail).
+- R2-3: `train_micromodel` bridge (vendored `.X.bin/.T.bin` or deterministic synthetic, 8->16->1 tanh/MSE, SGD 200 iters, loss `0.291094->0.000010`); `vectors_to_lancius.py` validates rows (no fake graph).
+- R2-4: `eval_verifier` harness (tanh/MSE anchors, residual `v(r)=(d-r)/(d+r)` at `0,d/3,d,3d,inf`, weakest-link min, ⊥=-2 absorbing, Gödel idempotent, thresholds); models-side only, no IR opcodes.
+- R2-5: `lancius_sandbox.h/.c` (graph caps via liveness peak + node/step bounds + attr finite; weights NaN/Inf abstain; replay bit-identical), proven by `audit_sandbox`.
+- R2-6: CLI `eval` verb (vendored e2e), `audit_abi.py` (version + headers/sources), `audit_binding_smoke.py` (headers-only), FP32 parity via existing `audit_fp32_path` 19/19; umbrella headers export train+sandbox; CMake milestone `v12R2`.
+- Gates: `make check` extended (train-lib, sandbox, micromodel, eval_verifier, text/abi/binding, `lancius eval`); `check-long` + `check-sanitizers` green.
+
 ## despot audit V6 (2026-10-01) — math, runtime, persistence, ops
 
 Hostile formula-by-formula, line-by-line audit of the entire system.
