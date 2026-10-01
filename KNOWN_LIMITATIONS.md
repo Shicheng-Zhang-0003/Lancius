@@ -1,6 +1,6 @@
-# Lancius v12R1 Known Limitations
+# Lancius v12R2 Known Limitations
 
-This document defines the explicit boundaries of the v12R1
+This document defines the explicit boundaries of the v12R2
 development milestone.
 
 A development milestone is not defined by having every feature. It is defined
@@ -27,7 +27,7 @@ The following areas are intentionally not considered stable:
 
 ## Training Status
 
-Lancius v12R1 is inference-first.
+Lancius v12R2 is inference-first, mute-mathematician-first (<100M, scores never speaks).
 
 Training-related components may exist in the codebase but should be
 considered experimental development preview, not production-grade.

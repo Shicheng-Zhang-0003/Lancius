@@ -12,10 +12,17 @@ v12R1 proved Lancius computes honestly. v12R2 proves Lancius can **learn**:
 every role below must stand up as an independent subsystem with its own
 gate. R3 freezes and hardens; v12S (public `V1.2`) ships.
 
-Target class: micromodels below 500M parameters that determine and process
-mathematical and/or scientific input with precision rivaling 400B-class
-models — by exact computation, checkable reasoning steps, and
-deterministic execution, not by fluency.
+Target class: mute-mathematician micromodels below 100M parameters that
+decide mathematical input with precision rivaling 400B-class models — by
+exact computation, checkable reasoning steps, and deterministic execution,
+not by fluency. No language generation: the model never speaks, it scores.
+A mute mathematician that solves olympiad/millennium problems outranks a
+fluent speaker that cannot solve.
+
+Language generation is scrapped in v12R2: `generate_text`/`run_llm`
+deleted, CLI `generate` fails loud pointing to `eval`, no streaming
+generation, no prefill/generation demos. Transformer kernels stay as exact
+math primitives with known-answer audits; generation flows do not.
 
 ## Architectural constraint (binding)
 
@@ -45,21 +52,22 @@ tests that exit nonzero on divergence.
 Gate: MNIST/CIFAR parity vs PyTorch reference within tolerance; loss
 monotonicity tests; zero new warnings under `-Werror`.
 
-### R2-2 · Text pipeline (tokenizer decision + batching + manifests)
+### R2-2 · Problem encoder (reading, not speaking + batching + manifests)
 
-Tokenizer choice is OPEN (BPE with versioned sidecar table recommended;
-char-level fallback documented). Dataset manifests with SHA256 and
-reproducible splits for every set `manage_datasets.py` pulls.
-Gate: byte-reproducible datasets from manifest alone; tokenizer roundtrip
+Mute mathematician reads but never speaks. Byte-level problem encoder
+`char-v1` is the decision (BPE rejected for v12R2: speaking needs BPE,
+scoring does not). Dataset manifests with SHA256 and reproducible splits
+for every set `manage_datasets.py` pulls.
+Gate: byte-reproducible datasets from manifest alone; encoder roundtrip
 tests.
 
 ### R2-3 · Step-distillation bridge (the missing link)
 
 `manage_datasets.py` already pulls GSM8K/MATH/MiniF2F/PRM800k/SVAMP/
-ProofWriter/RuleTaker, and its docstring already names the gap: text sets
-must become fixed-size numeric vectors loadable as `.lancius` training
-data. v12R2 builds that bridge (placeholder byte-level featurization
-first, explicitly marked; tokenizer-driven encoding when R2-2 lands).
+ProofWriter/RuleTaker, and its docstring already names the gap: problem
+sets must become fixed-size numeric vectors for the mute scorer.
+v12R2 builds that bridge (byte-level problem encoding, explicitly marked;
+no language-model encoding).
 Gate: vendored PRM800k rows → vectors → C training loop end to end,
 deterministic.
 
@@ -88,9 +96,10 @@ resources; replay test bit-identical.
 
 ### R2-6 · Runtime growth + kernel packaging
 
-FP32 transformer path (today FP64-only LLM), streaming generation,
-`lancius` CLI (run/train/eval verbs); versioned ABI with break-test,
-Python binding smoke test, clean-container install verification.
+FP32 matmul parity (today FP64-first math, FP32 matmul only), no streaming
+generation (scrapped), `lancius` CLI (run/train/eval verbs, no generate);
+versioned ABI with break-test, Python binding smoke test, clean-container
+install verification.
 Gate: FP32-vs-FP64 parity audit; CLI runs a vendored micromodel end to
 end; downstream binding builds against installed headers only.
 
@@ -137,9 +146,10 @@ uncertainty and the unique fixpoint of negation $\neg v = -v$.
 ## Explicitly out of R2
 
 GPU backend, dynamic-shape generality, serving infrastructure, v2 format
-breaks (BPE sidecar decision must land before the R3 freeze), full
-transformer pre-training in C (verifier-staged scope is the commitment;
-anything larger stays Python-orchestrated).
+breaks, language generation of any kind (scrapped: no generate/prefill
+demos, no streaming, no BPE speaking-side), full transformer pre-training
+in C (verifier-staged scope is the commitment; anything larger stays
+Python-orchestrated). Target stays below 100M: anything larger is out.
 
 ## v12R1 bug-fix campaign (applied before R2 work)
 
