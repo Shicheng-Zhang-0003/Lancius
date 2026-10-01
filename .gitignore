@@ -12,8 +12,6 @@ fuzz_lancius
 test_path_bg
 run_edge
 test_grad_check
-run_llm
-generate_text
 test_torture
 stress_test
 audit_internals

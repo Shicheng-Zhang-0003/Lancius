@@ -2,7 +2,7 @@
  *
  * Verbs:
  *   help | doctor | status | models | demo | datasets | train | run | info |
- *   convert | export | generate | tui
+ *   convert | export | eval | tui
  *
  * Design notes (binding):
  * - Generic framework operations only. No truth-algebra opcodes, no verifier
@@ -57,7 +57,6 @@ static void print_usage(void) {
     printf("  lancius convert onnx2lancius <in.onnx> <out.lancius>\n");
     printf("  lancius convert lancius2onnx <in.lancius> <out.onnx>\n");
     printf("  lancius export pytorch <in.lancius> <out.py> [--onnx out.onnx]\n");
-    printf("  lancius generate            transformer prefill/generation demo\n");
     printf("  lancius tui                 guided menus for everything above\n");
     printf("\n");
     printf("examples:\n");
@@ -324,7 +323,7 @@ static int cmd_doctor(void) {
     printf("-- binaries (run `make` if MISSING) --\n");
     {
         const char *bins[] = {"./train_mnist", "./train_cifar10", "./train_verifier_head",
-            "./run_edge", "./generate_text", "./distill_prm800k", NULL};
+            "./run_edge", "./distill_prm800k", NULL};
         int i;
         for (i = 0; bins[i]; i++) {
             int ok = file_exists(bins[i]);
@@ -399,7 +398,7 @@ static int cmd_status(void) {
     if (getcwd(cwd, sizeof(cwd)) != NULL) printf("cwd: %s\n", cwd);
     {
         const char *bins[] = {"./train_mnist", "./train_cifar10", "./train_verifier_head",
-            "./run_edge", "./generate_text", "./distill_prm800k", NULL};
+            "./run_edge", "./distill_prm800k", NULL};
         int i, okc = 0, tot = 0;
         for (i = 0; bins[i]; i++) { tot++; if (file_exists(bins[i])) okc++; }
         printf("binaries: %d/%d present%s\n", okc, tot, okc == tot ? "" : " (run `make`)");
@@ -1454,10 +1453,6 @@ static void print_verb_help(const char *verb) {
         print_export_help();
         return;
     }
-    if (strcmp(verb, "generate") == 0) {
-        printf("usage: lancius generate\n  transformer prefill/generation demo (needs ./generate_text).\n");
-        return;
-    }
     if (strcmp(verb, "tui") == 0) {
         printf("usage: lancius tui\n  guided menus; type a number, 'help', or '0' to quit.\n");
         return;
@@ -1554,7 +1549,7 @@ static void tui_menu(void) {
     printf(" 7 run             run a model (outputs + top classes)\n");
     printf(" 8 info            inspect a model file\n");
     printf(" 9 convert/export  onnx <-> lancius, lancius -> pytorch\n");
-    printf("10 generate        transformer demo text\n");
+    printf("10 eval              vendored micromodel end-to-end\n");
     printf(" 0 quit\n");
     tui_line();
 }
@@ -1815,12 +1810,7 @@ static int cmd_tui(void) {
             last = tui_do_convert();
             tui_pause();
         } else if (strcmp(buf, "10") == 0) {
-            if (!file_exists("./generate_text")) {
-                printf("FAIL: ./generate_text missing — run `make`.\n");
-                last = 1;
-            } else {
-                last = run_shell("./generate_text");
-            }
+            last = run_shell("./train_micromodel");
             tui_pause();
         } else {
             printf("unknown selection '%s' (try help)\n", buf);
@@ -1883,15 +1873,8 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "convert") == 0) return cmd_convert(argc - 2, argv + 2);
     if (strcmp(argv[1], "export") == 0) return cmd_export(argc - 2, argv + 2);
     if (strcmp(argv[1], "generate") == 0) {
-        if (argc >= 3 && is_help_arg(argv[2])) {
-            printf("usage: lancius generate\n");
-            return 0;
-        }
-        if (!file_exists("./generate_text")) {
-            printf("FAIL: ./generate_text missing — run `make`.\n");
-            return 1;
-        }
-        return run_shell("./generate_text");
+        printf("FAIL: language generation scrapped in v12R2 (mute mathematician). Use `lancius eval`.\n");
+        return 2;
     }
     if (strcmp(argv[1], "tui") == 0) {
         if (argc >= 3 && is_help_arg(argv[2])) {
