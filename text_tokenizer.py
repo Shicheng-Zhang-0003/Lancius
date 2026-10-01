@@ -1,11 +1,10 @@
-"""Char byte-level text tokenizer + manifest helpers (stdlib only).
+"""Char byte-level problem encoder + manifest helpers (stdlib only).
 
-R2-2 decision recorded:
-  BPE (e.g. tiktoken/sentencepiece-style merge table) is RECOMMENDED for
-  production LLM work (shorter sequences, better generalization).
-  As an explicit R2 fallback, this module implements a deterministic
-  char/byte fallback: UTF-8 bytes 0..255 plus 4 special tokens. It always
-  roundtrips ASCII + arbitrary UTF-8 (including astral plane, e.g. U+1F600).
+R2-2 decision recorded (mute mathematician, v12R2):
+  BPE REJECTED for v12R2 — speaking needs BPE, scoring does not.
+  This module implements the deterministic problem encoder: UTF-8 bytes
+  0..255 plus 4 special tokens. It always roundtrips ASCII + arbitrary
+  UTF-8 (including astral plane, e.g. U+1F600). Reads problems, never speaks.
 
 Vocab:
   0..255   : raw UTF-8 byte value

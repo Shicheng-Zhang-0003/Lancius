@@ -1,5 +1,5 @@
 <!-- SECTION:HEADER -->
-# Lancius v12R1
+# Lancius v12R2
 
 > **Internal milestone:** `v12R1`
 > **Public release:** `V1.2RC1`
@@ -101,13 +101,14 @@ Widened FFI error codes (`GRAPH_CYCLE`/`OVERFLOW`/`NUMERICAL`/
 
 ### Inherited Baseline (v11S)
 
-- Dedicated **KV-cache runtime object** with explicit **prefill** and
-  **generation** flows, `lancius_input_3d()`, and a 265-check transformer
-  known-answer audit (LayerNorm, RMSNorm, GELU, SwiGLU, RoPE, full causal
-  attention, KV-cache step parity, prefill+generation parity, GQA).
+- Dedicated **KV-cache runtime object** with `lancius_input_3d()`, and a
+  265-check transformer known-answer audit (LayerNorm, RMSNorm, GELU, SwiGLU,
+  RoPE, full causal attention, KV-cache step parity, GQA). Generation demos
+  scrapped in v12R2 (mute mathematician does not speak); kernels stay as
+  exact math primitives.
 - FP32 foundation: FP32 buffers, FP64-accumulation matmul kernel, scheduler
   dispatch, serialization roundtrip, and path audit. FP32 remains
-  matmul-scoped; there is no FP32 LLM path yet.
+  matmul-scoped.
 - v2 model format with CRC32 body integrity, reserved-flag rejection, and
   fail-closed malformed-model handling.
 
@@ -148,12 +149,12 @@ refuse, quantizer/optimizer/vision checks, capped fetches, tar-slip).
 The following remain intentionally deferred:
 
 - per-axis N-dim broadcast grad reduction (`SUM_AXIS_ND`; currently fails loud)
-- full FP32 operator coverage (LLM ops are FP64-only)
+- full FP32 operator coverage (transformer math ops are FP64-only; no generation path by design)
 - FP32 KV-cache storage
 - general ONNX converter usability beyond LeNet-class graphs
 - dynamic shape execution
 - GPU acceleration
-- production LLM serving
+- language generation / production serving (scrapped in v12R2: mute mathematician scores, never speaks)
 - final binary compatibility guarantees
 
 ### New in Hardening Batches V4/V5 + Despot V6
@@ -247,7 +248,7 @@ python3 -m pip install onnx onnxruntime numpy
 <!-- SECTION:VALIDATION -->
 ## Validation
 
-Lancius `v12R1` uses a layered validation suite.
+Lancius `v12R2` uses a layered validation suite.
 
 The minimum development gate is:
 
@@ -338,10 +339,11 @@ FP32 validation:
 
 ### Example Runtime Demos
 
-Transformer prefill/generation demo:
+Mute-mathematician micromodel demo (<100M, scores, never speaks):
 
 ```bash
-./generate_text
+./train_micromodel
+./eval_verifier
 ```
 
 Adversarial soak demo:
@@ -373,7 +375,7 @@ python3 audit_pytorch_parity.py
 <!-- SECTION:FEATURE_STATUS -->
 ## Feature Status
 
-Lancius `v12R1` is a development milestone.
+Lancius `v12R2` is a development milestone.
 
 The following table describes the current status of major subsystems.
 
@@ -382,10 +384,10 @@ The following table describes the current status of major subsystems.
 | Core tensor ops | Development | Add/Sub/Mul (N-dim broadcast-correct), MatMul, ReLU, Softmax (zero-sum guarded), Sum, Broadcast, Transpose |
 | Vision ops | Development | Conv2D, MaxPool2D, Flatten, fused Conv2D+ReLU; `FLATTEN`/`RESHAPE` verify element equality |
 | Training ops | Experimental | CrossEntropy backward, Conv backward, MaxPool backward; He init, `[-1,1]` CIFAR norm |
-| Transformer kernels | Experimental | LayerNorm, RMSNorm, GELU, RoPE, Attention, KV-cache attention, SwiGLU, GQA (validated shapes) |
-| KV-cache runtime | Experimental | Stateful cache object, FP64-only for now |
-| Prefill / generation flow | Experimental | Explicit prefill; single-token decode requires a bound cache |
-| FP32 execution | Experimental | FP32 matmul kernel (FP64 accumulation), scheduler dispatch, serialization; no FP32 LLM path |
+| Transformer kernels | Experimental | LayerNorm, RMSNorm, GELU, RoPE, Attention, KV-cache attention, SwiGLU, GQA (validated shapes; math primitives only, no generation flows) |
+| KV-cache runtime | Experimental | Stateful cache object, FP64-only for now; step parity audited, generation demos scrapped |
+| Language generation | Scrapped | No prefill/generation demos, no streaming generation, no `generate` verb (`lancius generate` fails loud → use `lancius eval`) |
+| FP32 execution | Experimental | FP32 matmul kernel (FP64 accumulation), scheduler dispatch, serialization; matmul-scoped |
 | Stable C API | Partial | Opaque handles, widened error codes (`GRAPH_CYCLE`/`OVERFLOW`/`NUMERICAL`/`INVALID_HANDLE`); builders still cover core inference only; `read_output` FP64-only |
 | Model format v2 | Development | CRC required by default (`LANCIUS_ALLOW_LEGACY_UNVERIFIED=1` opts into legacy); sparse-ID bounds |
 | ONNX conversion | Experimental | Strict LeNet-class path: correct Reshape/Gemm semantics, symmetric Conv/Pool only, static batch |
@@ -393,15 +395,15 @@ The following table describes the current status of major subsystems.
 | Threadpool execution | Development | Wave-parallel execution with parity validation; `lancius_pool_wait` timeout support |
 | GPU acceleration | Not supported | CPU-only runtime |
 | Dynamic shapes | Not supported | Static graph execution only |
-| Production LLM serving | Not supported | Research and development milestone only |
+| Micromodels | Development | Mute-mathematician target <100M params: `train_micromodel` + `eval_verifier` + train-lib + sandbox gates |
 
-> v12R1 targets honest numerics and strict boundaries, not expanded scope.
+> v12R2 targets a mute mathematician (<100M, scores never speaks), not fluency.
 <!-- /SECTION:FEATURE_STATUS -->
 
 <!-- SECTION:KNOWN_LIMITATIONS -->
 ## Known Limitations
 
-Lancius `v12R1` is a development milestone.
+Lancius `v12R2` is a development milestone.
 
 Its limitations are intentional boundaries. They define what this release is
 not claiming to be.
@@ -421,7 +423,7 @@ restated here only as essence, so the two can never drift apart:
 - v2 integrity required by default (`checksum == 0` rejected unless
   `LANCIUS_ALLOW_LEGACY_UNVERIFIED=1`).
 
-The next milestone (`v12R2`) is scoped in `docs/v12R2_SCOPE.md`.
+The current milestone (`v12R2`) is scoped in `docs/v12R2_SCOPE.md`.
 <!-- /SECTION:KNOWN_LIMITATIONS -->
 
 <!-- SECTION:MODEL_FORMAT -->
@@ -582,7 +584,7 @@ cycle completes its hardening gate.
 <!-- SECTION:SECURITY -->
 ## Security
 
-Lancius `v12R1` is a development milestone, not a hardened release.
+Lancius `v12R2` is a development milestone, not a hardened release.
 Report issues privately before public disclosure; treat untrusted model
 files as untrusted input (CRC is integrity, not trust). The policy lives
 in **`SECURITY.md`** — stated there, not repeated here.

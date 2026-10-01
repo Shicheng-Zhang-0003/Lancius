@@ -21,7 +21,7 @@ Historical baseline (v11A3 gate, complete):
 - model format v2 frozen with CRC32 integrity
 - stable C API covers core inference workflow
 
-Live v12R1 gate is Validation batch below (`make check/long/sanitizers`
+Live v12R2 gate is Validation batch below (`make check/long/sanitizers`
 + despot probes + `probe_v6`); historical checklist above is not the
 current gate.
 
