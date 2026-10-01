@@ -121,15 +121,18 @@ Binary compatibility is **guaranteed** for v2 models written by v11S and later.
 
 ### Fixed
 
-This section used to repeat the Highlights above bullet-for-bullet. The
-single record is `CHANGELOG.md` (v12R1 batches, despot truth V2/V3,
-hardening batch V4); the machine-checked proofs are
+The single record is `CHANGELOG.md` (v12R1 batches, despot truth V2/V3,
+hardening batches V4/V5, despot audit V6); the machine-checked proofs are
 `docs/DESPOT_TRUTH_V2.md` and `make check`.
 In short: N-dim broadcast, softmax guards, mandatory CRC integrity,
 validated attention, `int64` INT8, OOM errors, abort-free hot paths,
 strict ONNX, training alignment, widened API codes, honest audit exits,
-despot truth V2/V3 gradient and loader truth, hardening batch V4
-(race conditions, memory safety, quantization, portability, CLI injection).
+despot truth V2/V3 gradient and loader truth, hardening batches V4/V5
+(race conditions, memory safety, quantization, portability, CLI injection,
+queue use-before-init, IR NULLs, optimizer, planner align),
+despot audit V6 (exact 4D broadcast backward, CE_BWD guards, VM/scheduler
+NULL-deref, pool UAF, arena wrap, 32B align, mkstemp/fsync, per-channel
+refuse, quantizer/optimizer/vision checks, capped fetches, tar-slip).
 
 ### Improved
 
@@ -153,7 +156,9 @@ The following remain intentionally deferred:
 - production LLM serving
 - final binary compatibility guarantees
 
-### New in Hardening Batch V4
+### New in Hardening Batches V4/V5 + Despot V6
+
+V4 essence (full list in `CHANGELOG.md`):
 
 - **Per-channel quantization** support (in addition to existing per-tensor)
 - **Dequantization** support
@@ -164,6 +169,16 @@ The following remain intentionally deferred:
 - **Serialization portability**: `uint64_t` sizing, byte swapping, CRC32
   `call_once` init
 - **Build hardening**: `-Werror`, version consistency, Threads dependency
+
+V5 essence: queue use-before-init, IR NULLs→errors, optimizer mask,
+dequant scale, CE R/C, 32B split, silent lib, examples, converter 1s.
+
+V6 essence: exact 4D broadcast backward (permute+reshape), CE_BWD guards,
+conv_bwd_w/LN/RMSN guards, VM `ndim!=2`/tape/`out_reg`/shape checks,
+scheduler NULL-deref/errors, pool malloc+free + errors, arena checked grow,
+static 32B align + `posix_memalign`, v2 `mkstemp`/`ftello`/CONST/ROPE/scale,
+v1 tmp+FP32, quantizer/optimizer/vision checks, capped fetches, tar-slip,
+`.d` purge. Proven by `make check/long/sanitizers` + `probe_v6`.
 <!-- /SECTION:WHATS_CHANGED -->
 
 <!-- SECTION:BUILDING -->
@@ -494,7 +509,7 @@ Each document owns one thing; start here, then follow pointers:
 - `CHANGELOG.md` — per-batch fix history (the only fix list)
 - `KNOWN_LIMITATIONS.md` — binding boundaries (the only contract)
 - `MANIFEST.md` — compatibility contract (the only compat statement)
-- `docs/DESPOT_TRUTH_V2.md` — audit proofs incl. V3 addendum
+- `docs/DESPOT_TRUTH_V2.md` — audit proofs incl. V3/V4/V5/V6 addenda
 - `docs/ARCHITECTURE.md` — subsystem contracts and pipeline
 - `docs/v12R2_SCOPE.md` — next-milestone scope (binding for v12R2)
 - `docs/releases/v12R1/GITHUB_RELEASE_v12R1.md` — v12R1 release notes

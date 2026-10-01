@@ -174,3 +174,66 @@ Behavioral deltas vs §1–§10:
 - **Python:** `onnx_to_lancius.py` shape filtering fixed.
 - **Autodiff:** NOP comment clarified.
 - **Code quality:** Magic numbers replaced with named constants throughout.
+
+## 12. Despot audit V6 (2026-10-01) — full-system hostile pass, 45 defects
+
+Policy unchanged: plausible ≠ proof; every defect code-backed, fixed,
+re-proven by `make check` + `check-long` + `check-sanitizers` +
+`test_grad_check (8.6e-10, 5.8e-8)` + `probe_v6` in
+`/tmp/opencode/lancius-despot-logs`. Scratch under `/tmp/opencode/`;
+repo `temp/` stays empty.
+
+§1 Math (autodiff/kernels/scheduler exec):
+`y=broadcast(x)`, `dx[I]=sum_{J:bcast(J)=I} grad[J]`.
+4D reduction exact via permute+reshape+sum_axis0/1:
+d==0 `[D0,R]->sum_axis0`, d==3 `[P,D3]->sum_axis1`,
+d==1 `permute(1,0,2,3)->[D1,R]->sum_axis0->permute back`,
+d==2 `permute(2,0,1,3)->[D2,R]->sum_axis0->permute(1,2,0,3)`.
+Prior dim2/3 flatten `[pre,Dd*post]->sum_axis1` summed post dims too
+(wrong values) plus reshape-target order bug (`RESHAPE_MISMATCH`);
+dim0/1 called 2D-only sums on 4D (`INVALID_RANK`).
+ndim!=2,4 with needed reduction fails loud (`UNSUPPORTED_OP`,
+no `SUM_AXIS_ND`). `CE_BWD` ctor `2D + xe==ye + ge==1`
+(was `g[0]`-only silent); exec same guards (was OOB read).
+`conv_bwd_w` stride/pad/`H+2p>=K` (was missing).
+`LAYERNORM/RMSNORM` `ie==total` (was OOB `in+b*hidden`).
+
+§2 Runtime (VM/scheduler/pool/arena):
+VM `ndim!=2` reject (was `>2`, so 1D `[5]->5x0` mismatch);
+inputs validated before `reg_map` (was `NULL+0`/OOB);
+tape `pc+need<=len` (was 3-word overread);
+`out_reg<num_regs`, `code/rows/cols!=NULL`;
+`RELU/SOFTMAX in==out`, `SUM out==1x1` (was OOB/uninit leak).
+Scheduler `!inputs/input_count/inputs[k]` first on every op;
+`!buffer->NULL_PTR` everywhere (was silent uninit).
+Pool create/submit set `OOM/INTERNAL/LIMIT`;
+grow `malloc+linearize+free` (was `realloc` then UAF read of freed
+`pool->queue`, plus `nq` leak on `tmp`-OOM, plus silent drop).
+Arena grow `checked_add` + fresh-block fit re-check
+(was wrap to 16MB + OOB `used+=SIZE_MAX`).
+Static pool: plan path requires 32B base (offsets 32-aligned);
+bump path starts at `base_pad`; CLI `posix_memalign(32)`.
+
+§3 Persistence/IR/quant:
+v2 save `mkstemp+fsync+rename`; per-channel refused (no silent drop);
+`ftello/off_t`, empty body savable; loader `set_error` on all paths,
+`ndim==0` reject, `INPUT 2/3/4-D`, `CONST 1..4-D` (scalar shape overwrite),
+`ROPE` case `(seq,heads,hd/2)`, `INT8 scale>0 finite`.
+v1 save `tmp+rename`, `FP32` branch; load `NULL_PTR/IO/INVALID_MODEL/OOM`,
+`INT8 scale`, `FP32` branch.
+Quantizer never clears sticky error; per-tensor frees stale per-channel;
+dequant checks per-channel `s>0 finite`, frees stale owned FP64.
+Fusion `memcmp(shape)==0`. `conv_bwd/maxpool_bwd/gqa` mirror fwd checks.
+Vision `BWD` rank/stride/`eH/eW` + `NULL_PTR`.
+`graph_runtime/node_rt` set errors; stable `scratch` allocate-first.
+
+§4 Ops:
+`manage_datasets` chunked capped; `onnx_to_lancius` 2GB pre-stat;
+`distill` realloc-tmp + `fopen/malloc/fwrite/fseek` checks;
+`run_trained_batch/parity_runner` unified cleanup + checked elems;
+`train_cifar10` tar-list slip validation; `make clean` purges `.d`.
+
+Proven: `make check` green (73/73, 265/265, 49/49, 19/19, 11/11,
+despot probe, verifier `3.9e-09`, distill selftest),
+`check-long` (soak 3/3, fuzz 500/0), `check-sanitizers` clean + restore,
+`probe_v6` (dim0/1/2/3, multi-dim, `CE_BWD`, VM rank) all truth holds.

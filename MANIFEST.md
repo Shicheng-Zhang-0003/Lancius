@@ -1,6 +1,6 @@
 # Lancius Compatibility Manifest
 
-## v12R1 Milestone (development, 2026-09-21) + despot truth V2/V3 (2026-09-28) + hardening batch V4 (2026-09-28) + hardening batch V5 (2026-09-30)
+## v12R1 Milestone (development, 2026-09-21) + despot truth V2/V3 (2026-09-28) + hardening batch V4 (2026-09-28) + hardening batch V5 (2026-09-30) + despot audit V6 (2026-10-01)
 
 v12R1 is the first development milestone of the v12 cycle, not a stable
 release. Public github tag: `V1.2RC1`. It inherits the v11S contract below, with the following additions:
@@ -37,27 +37,23 @@ release. Public github tag: `V1.2RC1`. It inherits the v11S contract below, with
 - No new operators, subsystems, training features, or format changes
   beyond additive `broadcast_to_shape` constructor (same `BROADCAST` opcode).
 
-Hardening batch V4 (2026-09-28) — 26 defects fixed:
+Hardening batch V4 (2026-09-28) — 26 defects fixed: contract deltas only,
+enumeration in `CHANGELOG.md` (autodiff reduce, races, leaks, abort→errors,
+dangling sched, portability, CRC call_once, pool timeout, VM overflow,
+per-channel+dequant, CLI fork+execvp, Python/build).
 
-- Autodiff: BROADCAST backward correctly reduces over broadcast dimensions;
-  NULL checks on `fwd_n->inputs`; OOB reads on shape/axes arrays fixed (pads
-  to 4D); off-by-one in node capacity check fixed.
-- Kernels: race conditions in `kernel_conv2d_bwd_in` and MaxPool2D backward
-  fixed (thread-local accumulators).
-- Memory: IR node allocation leaks fixed; `abort()` removed from library code;
-  all `fprintf`/`printf` replaced with `lancius_set_error`.
-- Stable API: dangling `wrapper->sched` fixed; `set_owner` updates `int8_owner`.
-- Serialization: portability fixed (`uint64_t`, byte swapping); CRC32 table
-  init race fixed (`call_once`); NOP IDs no longer mapped to NULL; double-read
-  for CRC eliminated.
-- Threadpool: `lancius_pool_wait` timeout support added.
-- Bytecode VM: overflow checks added.
-- Quantization: per-channel quantization and dequantization support added.
-- CLI: command injection fixed (`fork+execvp`).
-- Python: security fixes, stale versions removed, error handling improved.
-- Build: version consistency, `-Werror`, Threads dependency; `train_cifar10`
-  links `-lpthread`; `.gitignore` updated; `lancius.pc.in` version fixed.
-- Code quality: magic numbers replaced with named constants.
+Hardening batch V5 (2026-09-30) — 12 defects fixed: contract deltas only,
+enumeration in `CHANGELOG.md` (queue use-before-init, IR NULLs→errors,
+optimizer mask, dequant scale, CE R/C, 32B split, silent lib, examples,
+converter 1s).
+
+Despot audit V6 (2026-10-01) — 45 defects fixed: contract deltas (no format
+break): 4D broadcast backward exact; CE_BWD 2D+scalar; conv/LN/RMSN guards;
+VM ndim!=2/tape/out_reg/shape; scheduler NULL-deref/errors; pool malloc+free
++errors; arena checked grow; static 32B align (plan requires aligned base,
+bump aligns start); v2 mkstemp/ftello/empty/CONST/ROPE/scale; v1 tmp+FP32;
+quantizer/optimizer/vision; capped fetches; tar-slip; .d purge.
+Enumeration in `CHANGELOG.md`, proofs in `docs/DESPOT_TRUTH_V2.md` §12.
 
 Internal headers and experimental paths (transformer builders, training
 loops, ONNX converter, quantizer) may change in v12R2 without notice.

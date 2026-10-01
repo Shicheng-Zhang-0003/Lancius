@@ -1,5 +1,48 @@
 # Lancius Changelog
 
+## despot audit V6 (2026-10-01) — math, runtime, persistence, ops
+
+Hostile formula-by-formula, line-by-line audit of the entire system.
+45 defects confirmed by execution and fixed, re-proven by `make check`,
+`make check-long`, `make check-sanitizers`, finite-difference grad check
+(`8.6e-10`, `5.8e-8`), despot probe, and new `probe_v6`
+(`broadcast dim0/1/2/3 4D`, `CE_BWD`, VM rank, layernorm builder).
+
+- Math: BROADCAST 4D backward rewritten exact via permute+reshape+sum_axis
+  (was dim2/3 RESHAPE_MISMATCH + dim0/1 INVALID_RANK on 4D; dim2/3 flatten
+  was mathematically wrong, summing post dims too); `CE_BWD` ctor requires
+  2D + scalar grad (was silent g[0]-only); `CE_BWD` exec requires xe==ye==R*C
+  + ge==1 (was OOB); `conv_bwd_w` stride/pad guards (was missing);
+  LAYERNORM/RMSNORM exec require input elems == output elems (was OOB).
+- Runtime: VM ndim!=2 rejected (was 0D/1D compiled to Rx0); compiler
+  validates inputs before reg_map (was NULL+OOB); VM tape OOB guarded;
+  out_reg + program invariants validated; RELU/SOFTMAX input==output dims,
+  SUM out==1x1 enforced; scheduler validates inputs before deref on
+  ATTENTION/ADD/MATMUL/MUL/SUB/TRANSPOSE/SUM/BROADCAST/GQA (was NULL-deref);
+  all silent returns set NULL_PTR/GRAPH_INVALID; parallel skips set errors;
+  threadpool create sets OOM/INTERNAL, submit sets LIMIT/OOM/GRAPH_INVALID,
+  grow is malloc+linearize+free (was realloc-UAF + leak + silent drop);
+  arena grow checked + fit re-check (was wrap to 16MB + OOB); static pool
+  32B-aligned base required on plan path, bump path aligns start;
+  CLI uses posix_memalign 32B.
+- Persistence: v2 save mkstemp+fsync+rename (was predictable .tmp);
+  per-channel save refused (was silent drop); ftello/off_t + empty graph
+  savable (was long truncation + reject); loader sets errors everywhere,
+  ndim==0 rejected, INPUT 2/3/4-D only, CONST 1..4-D round-trips, ROPE
+  persistable, INT8 scale >0 finite validated; v1 save tmp+rename + FP32
+  branch (was truncate + drop); v1 load errors + INT8 scale + FP32 branch;
+  quantizer never clears sticky error, per-tensor drops stale per-channel,
+  dequant checks per-channel scale + frees stale FP64; fusion requires shape
+  equality; conv_bwd/maxpool_bwd/gqa builders validated; vision BWD
+  validated + NULL_PTR; runtime queries set errors; stable API scratch
+  allocate-first.
+- Ops: `manage_datasets.py` chunked capped MNIST/CIFAR (was unbounded
+  read); `onnx_to_lancius.py` 2GB pre-stat (was unbounded load);
+  `distill_prm800k` realloc tmp, fopen/malloc/fwrite/fseek checks;
+  `run_trained_batch`/`parity_runner` unified cleanup + checked elems +
+  short-read/write fail; `train_cifar10` tar-slip member validation;
+  `make clean` removes `.d` files.
+
 ## hardening batch V5 (2026-09-30) — threadpool, IR honesty, example hardening
 
 Comprehensive bug-fix campaign across threadpool, IR, compiler, runtime,

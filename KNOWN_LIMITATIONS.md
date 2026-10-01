@@ -106,26 +106,16 @@ and do NOT abort.
     user paths always exec without a shell. Long trains (cifar10, hours)
     are confirmed interactively in the TUI.
 
-## v12R1 hardening batch V5 (2026-09-30)
+## v12R1 hardening batches V5/V6 — boundary impact only (enumeration in `CHANGELOG.md`)
 
--   Thread pool queue growth use-before-initialization fixed (was reading
-    from uninitialized buffer during realloc)
--   Command injection in `distill_prm800k` fixed (replaced `system()` with
-    `mkdir()`)
--   IR silent NULL returns fixed (6 locations now set error codes)
--   Optimizer error clearing on success fixed (no longer masks prior errors)
--   Quantizer zero-scale check added (dequantization validates scale > 0)
--   Scheduler cross-entropy consistency fixed (forward/backward use same
-    R/C source)
--   Memory planner alignment fixed (free block splitting maintains 32-byte
-    alignment)
--   Stable API duplicate include removed
--   Serializer fprintf/printf removed (library code is silent)
--   Vision ops fprintf removed (replaced with lancius_set_error)
--   Example files hardened (parity_runner, run_trained_batch unchecked
-    allocations and ignored I/O returns fixed)
--   ONNX converter shape filtering fixed (interior 1s preserved)
--   Autodiff NOP comment clarified (no null pointer dereference)
+-   V5 (2026-09-30): no scope change; 12 correctness fixes within existing
+    boundaries.
+-   V6 (2026-10-01): no scope change; 45 correctness fixes. Notable
+    boundaries tightened: VM is 2D-only (`ndim!=2` rejected); broadcast
+    backward exact for 2D/4D else `UNSUPPORTED_OP` (still no `SUM_AXIS_ND`);
+    `CE_BWD` requires 2D + scalar grad; v2 per-channel save refused
+    (format unchanged); static plan path requires 32B-aligned base
+    (bump path aligns internally); `CONST` 1..4-D and `ROPE` now persist.
 
 ## Philosophy
 

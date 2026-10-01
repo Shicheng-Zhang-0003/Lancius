@@ -74,7 +74,7 @@ Trainers abort on raw `NaN/>1000/<0` and exit 1 at ≤ chance accuracy.
 Per-channel quantization and dequantization are supported alongside
 per-tensor quantization.
 
-## Subsystem Contracts (despot V2 + hardening batch V4)
+## Subsystem Contracts (despot V2/V3 + hardening batches V4/V5 + despot V6)
 
 - **Kernels:** pure pointers+dims, FP64-first, FP32 matmul with FP64 accum,
   INT8 symmetric per-tensor and per-channel, dequantization supported,
@@ -99,11 +99,17 @@ per-tensor quantization.
   `wrapper->sched` fixed; `set_owner` updates `int8_owner`.
 - **CLI:** user paths executed via `fork+execvp` (no shell injection).
 - **Quantization:** per-tensor and per-channel quantization; dequantization
-  support.
-- **Build:** `-Werror` enforced; version consistency; Threads dependency.
+  support; V6 never clears sticky error, per-tensor drops stale per-channel,
+  dequant checks scales + frees stale FP64.
+- **Build:** `-Werror` enforced; version consistency; Threads dependency;
+  V6 `.d` purge, tar-slip validation, capped fetches.
 - **Validation:** every audit in `make check` propagates failures; `probe_v2`
   pins SUM-3D, RESHAPE, SUM_AXIS, `broadcast_to_shape`, N-D partial fail-loud,
-  attention NaN→NUMERICAL.
+  attention NaN→NUMERICAL; V6 `probe_v6` pins 4D dim0/1/2/3, CE_BWD, VM rank.
+- **V6 deltas:** VM `ndim!=2`/tape/`out_reg`/shape; scheduler NULL-deref/errors;
+  pool `malloc+free` + errors; arena checked grow; static 32B align;
+  v2 `mkstemp`/`ftello`/CONST/ROPE/scale; v1 tmp+FP32; fusion shape equality;
+  builders/vision validated. See `docs/DESPOT_TRUTH_V2.md` §12.
 
 ## Future Direction
 

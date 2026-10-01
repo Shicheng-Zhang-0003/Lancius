@@ -11,7 +11,7 @@ v12R1 is the first development milestone of the v12 cycle
 (progression `S → R1 → R2 → R3 → S`; v12R1 is the R1 phase),
 built on the v11S stable baseline.
 
-The v11A3 hardening gate is complete:
+Historical baseline (v11A3 gate, complete):
 - `make check` green
 - `make check-long` green
 - sanitizer validation green
@@ -20,11 +20,17 @@ The v11A3 hardening gate is complete:
 - model format v2 frozen with CRC32 integrity
 - stable C API covers core inference workflow
 
+Live v12R1 gate is Validation batch below (`make check/long/sanitizers`
++ despot probes + `probe_v6`); historical checklist above is not the
+current gate.
+
 ## v12R1 theme: hardening plus numerical correctness
 
 Bottom-up correctness pass over all layers, then a hostile,
 formula-by-formula audit of every numeric path. Each confirmed
-defect fixed and re-proven by independent execution (see CHANGELOG):
+defect fixed and re-proven by independent execution.
+Full per-batch record lives in `CHANGELOG.md`; essence only here
+(see also `docs/DESPOT_TRUTH_V2.md`):
 - N-dimensional broadcast `ADD`/`SUB`/`MUL` correct in scheduler, IR shape
   inference, and bytecode VM (was flat-loop wrong + OOB)
 - Softmax zero-sum guard in scheduler and VM
@@ -67,17 +73,25 @@ defect fixed and re-proven by independent execution (see CHANGELOG):
   stable API duplicate include removed; serializer fprintf/printf removed;
   vision ops fprintf removed; example files hardened (parity_runner, run_trained_batch);
   ONNX converter shape filtering fixed; autodiff NOP comment clarified
+- Despot audit V6 (2026-10-01, 45 defects): exact 4D broadcast backward
+  (permute+reshape), CE_BWD ctor/exec guards, conv_bwd_w/LN/RMSN guards;
+  VM ndim!=2/tape/out_reg/shape; scheduler NULL-deref/errors; pool
+  malloc+free/errors; arena checked grow; static 32B align + posix_memalign;
+  v2 mkstemp/ftello/CONST/ROPE/scale; v1 tmp+FP32; quantizer/optimizer/vision;
+  capped fetches; distill checks; tar-slip; .d purge. See CHANGELOG §V6
+  and `docs/DESPOT_TRUTH_V2.md` §12 + `probe_v6`.
 
 ## Feature freeze
 
-v11S inherits the v11A3 feature freeze:
+v11S/v11A3 historical freeze (not v12R1 scope):
 - no new operators
 - no new runtime subsystems
 - no new training features
 - no new model-format changes
 
-Only critical bug fixes are accepted post-release. v12R1 adds no scope,
-only correctness within existing scope.
+v12R1 adds correctness within scope plus additive primitives only
+(`broadcast_to_shape`, TANH/MSE, per-channel quant/dequant, pool timeout);
+see `CHANGELOG.md` for deltas.
 
 ## Validation batch — v12R1
 
@@ -95,6 +109,9 @@ a hardening of an already-gated path) plus pytorch parity
 V4 fixes verified by the same gate plus new audits for race conditions,
 quantization (per-channel + dequant), serialization portability, and CLI
 security (fork+execvp).
+V6 fixes verified by the same gates (all green from clean tree) plus
+`probe_v6` (4D dim0/1/2/3 + multi-dim, CE_BWD, VM rank) and
+`test_grad_check` still `8.6e-10`, `5.8e-8`.
 
 ## Operator status
 
