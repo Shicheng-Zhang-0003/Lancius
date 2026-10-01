@@ -24,7 +24,7 @@ src/runtime/lancius_sandbox.c
 
 OBJS = $(SRCS:.c=.o)
 -include $(OBJS:.o=.d)
-all: liblancius.a lancius audit_internals stress_test test_torture generate_text run_llm train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_despot_probe train_verifier_head distill_prm800k audit_train_lib audit_sandbox train_micromodel eval_verifier
+all: liblancius.a lancius audit_internals stress_test test_torture train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_despot_probe train_verifier_head distill_prm800k audit_train_lib audit_sandbox train_micromodel eval_verifier
 lancius: examples/lancius_cli.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 liblancius.a: $(OBJS)
@@ -38,7 +38,7 @@ clean:
 	rm -f $(OBJS:.o=.d) src/*/*.d *.d
 	rm -f src/runtime/lancius_memory_planner.o src/core/lancius_stable_api.o
 	rm -f train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check
-	rm -f run_llm generate_text test_torture stress_test audit_internals
+	rm -f test_torture stress_test audit_internals
 	rm -f audit_memory_pool audit_flash_attention audit_modern_llm audit_ffi
 	rm -f audit_threadpool_parity audit_nan_injection test_diamond_memory soak_fuzz
 	rm -f parity_runner run_trained_batch
@@ -56,10 +56,6 @@ test_path_bg: examples/test_path_bg.c liblancius.a
 run_edge: examples/run_edge.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS)
 test_grad_check: examples/test_grad_check.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS)
-run_llm: examples/run_llm.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS)
-generate_text: examples/generate_text.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS)
 test_torture: examples/test_torture.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS)
