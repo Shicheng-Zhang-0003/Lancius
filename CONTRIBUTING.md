@@ -65,7 +65,7 @@ Each document owns one thing (single-owner rule):
 -   `CHANGELOG.md` — per-batch fix history
 -   `docs/ARCHITECTURE.md` — subsystem contracts
 -   `docs/DESPOT_TRUTH_V2.md` — mathematical audit
--   `docs/v12R2_SCOPE.md` — next milestone scope
+-   `docs/v12R2_SCOPE.md` — current milestone scope
 -   `SECURITY.md` — security policy and improvements
 -   `CONTRIBUTING.md` — this file
 

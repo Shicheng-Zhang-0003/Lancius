@@ -237,3 +237,24 @@ Proven: `make check` green (73/73, 265/265, 49/49, 19/19, 11/11,
 despot probe, verifier `3.9e-09`, distill selftest),
 `check-long` (soak 3/3, fuzz 500/0), `check-sanitizers` clean + restore,
 `probe_v6` (dim0/1/2/3, multi-dim, `CE_BWD`, VM rank) all truth holds.
+
+## 13. Despot audit V7 (2026-10-03) — error channels, grad shapes, per-channel honesty
+
+Math proofs (`temp/proofs/`): per-channel W ch0=0.5/ch1=100 now refuses
+`UNSUPPORTED_OP` instead of executing ch0=100.0 (was smax lie); 1x1 grad
+where 3x3 required now `SHAPE_MISMATCH` at build (was dw 63 vs 1053);
+1x1 grad where 2x2 pool required now `SHAPE_MISMATCH` (was 3/4 zero);
+`test_grad_check` heap-copies analytic grads (was arena-reset luck).
+
+Programming proofs: every conv overflow guard sets `OVERFLOW`; OpenMP
+`layernorm/rmsnorm/attention/GQA/bwd` errors propagate via
+`omp_err_*` shared flags + master re-set (pattern mirrors
+`vision_ops.c` maxpool-bwd `omp_alloc_failed`); v1/v2 saves set codes;
+KV-cache/VM/pool_wait/RoPE/stable-magic/`ValueError`/`fsync` all fail
+loud with the narrowest code. `make -Werror` clean.
+
+Operational proofs: `cmake -B temp/cmake-check` configures with train
+sources; `make check` green from clean tree; version grep shows no stale
+`v12R1`-as-current (except frozen history under `docs/v11A*`,
+`docs/releases/`, `CHANGELOG.md` history sections which are intentionally
+historical).

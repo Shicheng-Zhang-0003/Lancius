@@ -101,10 +101,22 @@ and do NOT abort.
     2D MLP subset.
 -   `export_lancius_onnx.py` refuses `checksum == 0` files unless passed
     `--allow-legacy` (mirrors the C loader default).
--   Operator (`./lancius`): `status`/`models`/`demo`/`doctor` are
+-   Operator (`./lancius`): `quickstart`/`status`/`models`/`demo`/`doctor`/`eval` are
     informational or self-contained; `train` shells only fixed binaries,
     user paths always exec without a shell. Long trains (cifar10, hours)
     are confirmed interactively in the TUI.
+
+-   Stable handles carry magic tags; wrong-type/stale/destroyed handles
+    return `INVALID_HANDLE`. Tensor handles borrow from their graph.
+-   Bytecode VM sets error codes on every reject (OOM vs corrupt tape
+    distinguishable); `pool_wait` timeout reports `LIMIT`/`INTERNAL`.
+-   KV-cache, save paths, layernorm/rmsnorm/attention/GQA workers, and
+    conv overflow guards all report through the error channel (no silent
+    success); OpenMP worker errors propagate via shared flags.
+-   `conv2d_bwd_w`/`maxpool2d_bwd` builders + executors verify grad
+    N/C/H_out/W_out (wrong-shaped grads rejected, never silently wrong).
+-   RoPE `2*head_dim` overflow guarded; `vectors_to_lancius.py` raises
+    `ValueError` (no `assert`).
 
 ## v12R1 hardening batches V5/V6 — boundary impact only (enumeration in `CHANGELOG.md`)
 

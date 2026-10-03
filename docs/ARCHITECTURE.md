@@ -1,4 +1,4 @@
-# Lancius v12R1 Architecture Overview
+# Lancius v12R2 Architecture Overview
 
 ## High Level Pipeline
 
@@ -39,12 +39,14 @@ The architecture separates:
 
 ### Runtime First
 
-Lancius v12R1 prioritizes predictable execution over maximum feature
+Lancius v12R2 prioritizes predictable execution over maximum feature
 count. Every hot path returns errors (`OOM/OVERFLOW/NUMERICAL/SHAPE_MISMATCH`)
 instead of aborting or emitting silent values. The despot truth batch V2
 closed the last silent-drop paths (see `docs/DESPOT_TRUTH_V2.md`).
 Hardening batches V4 and V5 extended this to threadpool, IR, examples,
-and Python tooling.
+and Python tooling. Despot audit V7 (2026-10-03) closed the remaining
+silent-success paths: OpenMP worker errors, save/KV/VM/pool error
+channels, grad-shape guards, per-channel refuse, stable-handle magic.
 
 ### Memory Awareness
 
@@ -58,7 +60,7 @@ on diamond graphs. Arena uses 32B footprints with `SIZE_MAX`-guarded
 
 ### Numerical Honesty
 
-v12R1 executes N-dimensional trailing-rank broadcast
+v12R2 executes N-dimensional trailing-rank broadcast
 (`out[I]=A[bcast(I)] OP B[bcast(I)]`, `out=max(a,b)`), max-subtracted
 softmax/CE with `NUMERICAL` zero-sum guards, Flash/GQA/KV-cache attention
 with `NaN→NUMERICAL` (zero stays zeros for causal safety), tanh-approx GELU
