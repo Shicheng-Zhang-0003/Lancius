@@ -1,9 +1,9 @@
 <!-- SECTION:HEADER -->
 # Lancius v12R2
 
-> **Internal milestone:** `v12R1`
-> **Public release:** `V1.2RC1`
-> **Status:** Development milestone (R1 — first v12 milestone)
+> **Internal milestone:** `v12R2`
+> **Public release:** `V1.2RC2`
+> **Status:** Development milestone (R2 — second v12 milestone)
 
 Lancius is a lightweight C machine-learning compiler and runtime focused on
 bare-metal inference, static graph execution, memory planning, and low-level
@@ -14,8 +14,8 @@ It represents the completion of the v11A3 hardening gate:
 feature freeze, loader hardening, model-format freeze with CRC32 integrity,
 sanitizer and fuzz validation, and full regression defense.
 
-`v12R1` builds on the `v11S` stable baseline.
-Its themes are **hardening** (loader integrity, execution contracts, stability
+`v12R2` builds on the `v12R1` hardening baseline (itself on `v11S`).
+Its themes are **learning** (R2-1..R2-6) on top of inherited **hardening** (loader integrity, execution contracts, stability
 guards) and **mathematical correctness**: a hostile,
 formula-by-formula audit of every numeric path, with each confirmed defect
 fixed and re-proven by independent execution. Hardening batches V4 and V5
@@ -28,7 +28,7 @@ total).
 
 | Internal Version | Public Version       | Release Type      |
 |------------------|----------------------|-------------------|
-| `v12R1`          | `V1.2RC1`      | Development Milestone    |
+| `v12R2`          | `V1.2RC2`      | Development Milestone    |
 
 Lancius uses the following internal milestone progression:
 
@@ -44,17 +44,17 @@ Where:
 - `R3` is the freeze, hardening, and bug-hunting milestone
 - the next `S` is the stable release candidate
 
-`v12R1` is the first development milestone of the v12 cycle (the R1 phase
-in R-series numbering), built on the `v11S` stable baseline.
+`v12R2` is the second development milestone of the v12 cycle (the R2 phase
+in R-series numbering), built on the `v11S` stable baseline via `v12R1`.
 
 > This is a development milestone.
 > Binary compatibility is guaranteed for v2 models written by v11S+.
 <!-- /SECTION:RELEASE_IDENTITY -->
 
 <!-- SECTION:HIGHLIGHTS -->
-## v12R1 Highlights
+## v12R2 Highlights
 
-`v12R1` makes Lancius numerically honest: every kernel, executor, gradient,
+`v12R2` keeps v12R1 numerical honesty and proves Lancius can learn: every kernel, executor, gradient,
 shape formula, serializer field, and converter mapping was independently
 re-derived and re-executed. Plausible outputs were not accepted as proof.
 
@@ -115,6 +115,10 @@ Widened FFI error codes (`GRAPH_CYCLE`/`OVERFLOW`/`NUMERICAL`/
 The v2 model format remains the active development format.
 
 Binary compatibility is **guaranteed** for v2 models written by v11S and later.
+
+R2-1..R2-6 (learn to verify): train-lib (SGD/SGDM/AdamW), char-v1
+problem encoder, micromodel bridge (loss 0.291094->0.000010),
+eval_verifier harness, sandbox caps, CLI eval verb. See `CHANGELOG.md`.
 <!-- /SECTION:HIGHLIGHTS -->
 
 <!-- SECTION:WHATS_CHANGED -->
@@ -202,7 +206,7 @@ sudo apt install build-essential
 
 ### Build with Make
 
-From inside the `v12R1/` directory:
+From inside the `v12R2/` directory:
 
 ```bash
 make clean
@@ -408,7 +412,7 @@ Lancius `v12R2` is a development milestone.
 Its limitations are intentional boundaries. They define what this release is
 not claiming to be.
 
-> `v12R1` is a development milestone. The limitations below define its supported scope.
+> `v12R2` is a development milestone. The limitations below define its supported scope.
 
 The binding contract lives in one place: **`KNOWN_LIMITATIONS.md`**. It is
 restated here only as essence, so the two can never drift apart:
@@ -513,7 +517,7 @@ Each document owns one thing; start here, then follow pointers:
 - `MANIFEST.md` — compatibility contract (the only compat statement)
 - `docs/DESPOT_TRUTH_V2.md` — audit proofs incl. V3/V4/V5/V6 addenda
 - `docs/ARCHITECTURE.md` — subsystem contracts and pipeline
-- `docs/v12R2_SCOPE.md` — next-milestone scope (binding for v12R2)
+- `docs/v12R2_SCOPE.md` — current-milestone scope (binding for v12R2)
 - `docs/releases/v12R1/GITHUB_RELEASE_v12R1.md` — v12R1 release notes
 - `docs/releases/v11S/GITHUB_RELEASE_v11S.md` — v11S release notes
 - `docs/releases/v10S/RELEASE_NOTES_v10S.md` — historical v10S notes
@@ -523,7 +527,7 @@ Each document owns one thing; start here, then follow pointers:
 - `SECURITY.md` — security reporting policy
 
 > Historical files (`v11A*`, `v10S`) describe their own milestones, not
-> v12R1. Quoting them for current behavior is a documentation bug —
+> v12R2. Quoting them for current behavior is a documentation bug —
 > report it.
 <!-- /SECTION:DOCUMENTATION -->
 
@@ -546,28 +550,29 @@ For public GitHub releases, internal milestones are mapped as follows:
 | `v11A2`            | `V1.1-AlphaRC2`      | Transformer runtime usability        |
 | `v11A3`            | `V1.1-AlphaRC3`      | Freeze, hardening, and bug hunting   |
 | `v11S`             | `V1.1`               | Stable release                       |
-| `v12R1`            | `V1.2RC1`            | Current development milestone: hardening plus numerical correctness |
-| `v12R2`            | `V1.2RC2`            | Next development milestone (R2 phase) |
+| `v12R1`            | `V1.2RC1`            | Previous development milestone: hardening plus numerical correctness |
+| `v12R2`            | `V1.2RC2`            | Current development milestone (R2 phase: mute mathematician learns) |
 
 ### Current Milestone
 
 This release is:
 
 ```text
-v12R1
+v12R2
 ```
 
 Its theme is:
 
-> Hardening and numerical correctness: loader integrity, execution
-> contracts, and a hostile audit of every math path, with each
-> confirmed defect fixed and re-proven.
+> Mute mathematician learns: v12R1 honesty kept, plus train-lib,
+> char-v1 encoder, micromodel bridge, verifier eval, sandbox caps,
+> CLI eval — scores, never speaks.
 
-Previous milestone: v11S / V1.1 (stable).
+Previous milestone: v12R1 / V1.2RC1 (hardening plus numerical correctness).
+Stable baseline: v11S / V1.1.
 
 ### Next Milestone
 
-The next milestone is `v12R2` (the R2 phase, public `V1.2RC2`), followed by the v12 freeze,
+The next milestone is `v12R3` (the R3 freeze/hardening phase), followed by the v12 freeze,
 hardening, and bug-hunting phase (R3) and the `v12S` stable release
 candidate (public `V1.2`). Scope — not just direction — is fixed in
 `docs/v12R2_SCOPE.md`; candidate work listed anywhere else is stale

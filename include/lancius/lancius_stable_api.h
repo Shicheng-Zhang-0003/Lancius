@@ -18,7 +18,13 @@ extern "C" {
   #define LANCIUS_EXPORT __attribute__((visibility("default")))
 #endif
 
-// Opaque Handles for FFI Safety (Python/Rust/Go cannot corrupt internal structs)
+/* Opaque handles for FFI safety. Lifetimes (binding contract):
+ * - context owns an arena; destroy with lancius_destroy_context when done.
+ * - graph handles are independent of the context after creation (context may
+ *   be destroyed first); destroy each graph with lancius_graph_destroy_stable.
+ * - tensor handles borrow from their graph (do NOT free); they die with it.
+ * - handles carry magic tags; wrong-type / stale / destroyed handles return
+ *   INVALID_HANDLE instead of corrupting memory. NULL always fails loud. */
 typedef void* lancius_context;
 typedef void* lancius_graph_handle;
 typedef void* lancius_tensor_handle;

@@ -25,7 +25,14 @@ Live v12R2 gate is Validation batch below (`make check/long/sanitizers`
 + despot probes + `probe_v6`); historical checklist above is not the
 current gate.
 
-## v12R1 theme: hardening plus numerical correctness
+## v12R2 theme: mute mathematician learns (R2-1..R2-6)
+
+v12R1 honesty kept; R2 proves learning: R2-1 train-lib (SGD/SGDM/AdamW-decoupled/clip/cosine),
+R2-2 char-v1 encoder + manifests, R2-3 micromodel bridge (0.291094->0.000010),
+R2-4 eval_verifier harness, R2-5 sandbox caps + replay, R2-6 CLI eval + ABI/binding + FP32 parity.
+Generation scrapped (mute scores, never speaks). See `CHANGELOG.md` R2-1..R2-6 and `docs/v12R2_SCOPE.md`.
+
+## v12R1 theme: hardening plus numerical correctness (inherited baseline)
 
 Bottom-up correctness pass over all layers, then a hostile,
 formula-by-formula audit of every numeric path. Each confirmed
@@ -94,7 +101,7 @@ v12R1 adds correctness within scope plus additive primitives only
 (`broadcast_to_shape`, TANH/MSE, per-channel quant/dequant, pool timeout);
 see `CHANGELOG.md` for deltas.
 
-## Validation batch — v12R1
+## Validation batch — v12R2
 
 Build clean under `-Wall -Wextra -Werror`; `audit_regression_13c` 49/49,
 `audit_known_answer` 73/73, `audit_transformer_known_answer` 265/265,
@@ -117,8 +124,10 @@ V6 fixes verified by the same gates (all green from clean tree) plus
 ## Operator status
 
 `./lancius` (`examples/lancius_cli.c`) is the ordinary-user operator:
-`doctor`/`status`/`models [--check]`/`demo`/`help`, per-verb `--help`,
-`datasets`/`train`/`run`/`info`/`convert`/`export`/`generate`, and a `tui`
+`quickstart`/`doctor`/`status`/`models [--check]`/`demo`/`help`, per-verb `--help`,
+`datasets`/`train`/`run`/`info`/`convert`/`export`/`eval`/`generate (fails loud -> eval)`, and a `tui`
 that calls verbs directly (no re-exec), validates inputs, confirms long
 trains, and pauses on ttys. User paths exec without a shell. `demo`
-proves an install in one command; `make check` covers `info`/`run`.
+proves an install in one command; `make check` covers `info`/`run`/`eval`. `train_mnist/cifar10` stay manual-only
+(see `KNOWN_LIMITATIONS.md`); `run_edge`/`parity_runner`/`run_trained_batch` are manual
+parity runners, not gate members.

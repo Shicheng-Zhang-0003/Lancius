@@ -1,5 +1,44 @@
 # Lancius Changelog
 
+## despot audit V7 (2026-10-03) — math, programming, operational truth
+
+Hostile formula-by-formula, line-by-line audit of the entire system.
+17 confirmed defects, all fixed and re-proven by `make check` green from a
+clean tree (`make clean && make -j && make check`), `-Werror` clean,
+finite-difference grad check unchanged, plus targeted execution proofs in
+`temp/proofs/`. No format break; no stable-ABI break beyond additive
+`INVALID_HANDLE` strictness (wrong-type/stale handles now fail loud).
+
+- Math: per-channel INT8 execution refused loud (`UNSUPPORTED_OP`, dequantize
+  first) — was silent smax mis-scale (200x error, err 0); `conv2d_bwd_w` +
+  `maxpool2d_bwd` builders + executors verify grad N/C/H_out/W_out — was
+  silent partial/wrong gradients (63 vs 1053) + OOB; `test_grad_check`
+  copies analytic grads off the scratch arena before reset — was
+  use-after-reset by allocation luck.
+- Programming: conv overflow guards set `OVERFLOW` (were silent success);
+  layernorm/rmsnorm/attention/GQA/conv-bwd OpenMP worker errors propagate
+  via shared flags (were `_Thread_local`-lost); v1/v2 save paths set
+  `NULL_PTR/IO/OOM/OVERFLOW/LIMIT/INVALID_DTYPE` (were bare -1) and
+  `save_stable` maps internal causes (no blind IO); KV-cache API reports
+  through the error channel; VM compile early-NULLs + all ~30 execute
+  rejects set codes (OOM vs corrupt tape distinguishable); `pool_wait`
+  sets `NULL_PTR/INTERNAL/LIMIT`; RoPE `2*head_dim` wrap guarded;
+  stable handles carry magic tags (`INVALID_HANDLE` on mismatch) with
+  documented lifetimes; `vectors_to_lancius.py` raises `ValueError`
+  (no `assert`); `fsync` failures unlink + report `IO` (no false success).
+- Operational: CMake globs `src/train/*.c` (was missing train lib);
+  `make install` banner `v12R2`; `.gitignore` covers `*.onnx.data` + `temp/`;
+  version identity reconciled to `v12R2/V1.2RC2` (README/STATUS/MANIFEST/
+  ARCHITECTURE/CONTRIBUTING fixed; `V1.2-RC2` hyphen unified to `V1.2RC2`);
+  STATUS validation batch renamed v12R2 + R2 theme + `info/run/eval` +
+  manual-only pointers + `quickstart/eval` verbs; `v12R2_SCOPE` V4/V5
+  trimmed to essence+pointer (single-owner); KNOWN_LIMITATIONS documents
+  per-channel refuse, magic handles, VM/pool/KV error channels, grad-shape
+  guards, RoPE guard.
+- Proven: `make check` green; `temp/logs/` + `temp/proofs/` hold rebuild,
+  gate, CMake-configure, and per-channel/grad-shape/ABI-manual proofs.
+
+
 ## v12R2 (in progress) — mute mathematician <100M, generation scrapped
 
 - Language generation scrapped: `examples/generate_text.c`/`run_llm.c`

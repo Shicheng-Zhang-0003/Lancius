@@ -153,39 +153,12 @@ Python-orchestrated). Target stays below 100M: anything larger is out.
 
 ## v12R1 bug-fix campaign (applied before R2 work)
 
-A comprehensive bug-fix campaign closed **38 defects** across the codebase
-before R2 development began (26 in V4 + 12 in V5). All fixes are validated
-by `make check`, `check-sanitizers`, and the despot truth probes.
-
-### Autodiff & gradients
-- **BROADCAST backward** fixed — gradient now correctly reduces over broadcast dimensions
-- **Race conditions** fixed in `conv2d_bwd_in` and `maxpool2d_bwd` (threadpool parity restored)
-- **NULL checks** added throughout autodiff — every pointer dereference guarded
-- **OOB reads** on shape/axes arrays fixed — all index accesses bounds-checked
-- **Off-by-one** in node capacity check fixed — graph allocation no longer overflows
-- **Dangling pointer** in stable API fixed — `lancius_graph_destroy` no longer leaves stale handles
-
-### Safety & security
-- **Command injection** in CLI fixed — user file paths no longer pass through a shell
-- **`abort()` removed** from library code — all internal paths return errors instead
-- **Memory leaks** in IR fixed — all allocation paths have matching frees
-- **Overflow checks** added in bytecode VM — integer arithmetic no longer wraps silently
-
-### Correctness & portability
-- **`fprintf`/`printf` replaced** with `lancius_set_error` — all error paths use the stable API
-- **Serialization portability** fixed — v2 format uses fixed-width little-endian fields exclusively
-- **CRC32 race condition** fixed — checksum computation is now thread-safe
-- **NOP handling** in serializer fixed — no longer produces corrupt output
-- **Threadpool timeout** added — worker threads no longer hang indefinitely
-
-### Quantization
-- **Per-channel quantization** added — INT8 scales computed per output channel
-- **Dequantization** added — INT8 → FP32/FP64 conversion path complete
-
-### Build & tooling
-- **Python scripts** fixed — `manage_datasets.py`, `onnx_to_lancius.py`, exporters all corrected
-- **Build system** fixed — CMake and Makefile targets now consistent
-- **Makefile** fixed — dependency tracking and parallel build correctness
+A comprehensive bug-fix campaign closed **38 defects** before R2 work
+(26 in V4 + 12 in V5: autodiff reduce/races/NULLs/OOB, CLI injection,
+abort→errors, leaks, VM overflow, fprintf→errors, portability, CRC
+call_once, pool timeout, per-channel+dequant, Python/build). No scope
+change. Full enumeration lives once in `CHANGELOG.md` (single-owner);
+essence only here.
 
 ## Validation contract (inherited from v12R1, extended)
 
