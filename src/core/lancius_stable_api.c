@@ -82,12 +82,23 @@ typedef struct {
 
 // V1.0 FIX: Wrap the graph with its execution state (scratch arena & schedule)
 // This prevents the dangling pointer segfault when reading outputs!
+typedef struct lancius_tensor_internal lancius_tensor_internal;
 typedef struct {
     uint32_t magic;
     lancius_graph* g;
     lancius_arena* scratch;
     lancius_schedule* sched;
+    /* External audit V8: tensor wrappers borrowed from this graph.
+     * Freed + invalidated on graph destroy (no leak, no silent reuse). */
+    lancius_tensor_internal** tensors;
+    size_t ntensors;
+    size_t ctensors;
 } lancius_graph_internal;
+
+struct lancius_tensor_internal {
+    uint32_t magic;
+    lancius_node* node;
+};
 
 /* Despot audit: stable handles were raw casts with NULL-check only, so a
  * stale / wrong-graph / destroyed-graph pointer passed validation.
@@ -95,6 +106,7 @@ typedef struct {
  * with INVALID_HANDLE instead of corrupting memory. */
 #define LANCIUS_CTX_MAGIC 0xC7A9C7A9u
 #define LANCIUS_GRAPH_MAGIC 0x6A9A6A9Au
+#define LANCIUS_TENSOR_MAGIC 0x7E5507E5u
 
 static int ctx_valid(lancius_context ctx) {
     if (!ctx) return 0;
@@ -104,6 +116,37 @@ static int ctx_valid(lancius_context ctx) {
 static int graph_valid(lancius_graph_handle g) {
     if (!g) return 0;
     return ((const lancius_graph_internal*)g)->magic == LANCIUS_GRAPH_MAGIC;
+}
+
+static int tensor_valid(lancius_tensor_handle t) {
+    if (!t) return 0;
+    return ((const lancius_tensor_internal*)t)->magic == LANCIUS_TENSOR_MAGIC;
+}
+
+/* External audit V8: tensor handles were raw node* (any forged pointer
+ * derefed). Wrap with magic; wrappers are borrowed (die with the graph).
+ * NOTE: the graph must outlive its tensors (documented contract); wrapper
+ * magic catches forged/cross-type handles, graph-destroy invalidates all. */
+static lancius_tensor_handle wrap_tensor(lancius_graph_internal* w, lancius_node* n) {
+    if (!w || !n) return NULL;
+    lancius_tensor_internal* t = (lancius_tensor_internal*)malloc(sizeof(*t));
+    if (!t) { set_error(LANCIUS_ERR_OOM); return NULL; }
+    t->magic = LANCIUS_TENSOR_MAGIC;
+    t->node = n;
+    if (w->ntensors >= w->ctensors) {
+        size_t nc = w->ctensors ? w->ctensors * 2 : 16;
+        lancius_tensor_internal** nl = (lancius_tensor_internal**)realloc(w->tensors, nc * sizeof(*nl));
+        if (!nl) { free(t); set_error(LANCIUS_ERR_OOM); return NULL; }
+        w->tensors = nl;
+        w->ctensors = nc;
+    }
+    w->tensors[w->ntensors++] = t;
+    return (lancius_tensor_handle)t;
+}
+
+static lancius_node* unwrap_tensor(lancius_tensor_handle t) {
+    if (!tensor_valid(t)) return NULL;
+    return ((lancius_tensor_internal*)t)->node;
 }
 
 LANCIUS_EXPORT lancius_context lancius_create_context(void) {
@@ -143,6 +186,9 @@ LANCIUS_EXPORT lancius_graph_handle lancius_graph_create_stable(lancius_context 
     if (!wrapper->scratch) { lancius_graph_destroy(wrapper->g); free(wrapper); set_error(LANCIUS_ERR_OOM); return NULL; }
     wrapper->sched = NULL;
     wrapper->magic = LANCIUS_GRAPH_MAGIC;
+    wrapper->tensors = NULL;
+    wrapper->ntensors = 0;
+    wrapper->ctensors = 0;
 
     set_error(LANCIUS_OK);
     return (lancius_graph_handle)wrapper;
@@ -153,6 +199,10 @@ LANCIUS_EXPORT void lancius_graph_destroy_stable(lancius_graph_handle g) {
     if (!graph_valid(g)) { if (!g) return; set_error(LANCIUS_ERR_INVALID_HANDLE); return; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     wrapper->magic = 0;
+    for (size_t i = 0; i < wrapper->ntensors; i++) {
+        if (wrapper->tensors[i]) { wrapper->tensors[i]->magic = 0; free(wrapper->tensors[i]); }
+    }
+    free(wrapper->tensors);
     if (wrapper->sched) lancius_schedule_destroy(wrapper->sched);
     if (wrapper->scratch) lancius_arena_destroy(wrapper->scratch);
     if (wrapper->g) lancius_graph_destroy(wrapper->g);
@@ -173,8 +223,10 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_input(lancius_graph_handle g, s
     lancius_node* n = lancius_input(wrapper->g, rows, cols);
     /* Despot truth: shape/LIMIT failures were all reported as OOM. */
     if (!n) { sync_internal_error(); if (g_last_error == LANCIUS_OK) set_error(LANCIUS_ERR_OOM); return NULL; }
+    lancius_tensor_handle h = wrap_tensor(wrapper, n);
+    if (!h) return NULL;
     set_error(LANCIUS_OK);
-    return (lancius_tensor_handle)n;
+    return h;
 }
 
 LANCIUS_EXPORT lancius_tensor_handle lancius_add_matmul(lancius_graph_handle g, lancius_tensor_handle a, lancius_tensor_handle b) {
@@ -182,10 +234,16 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_matmul(lancius_graph_handle g, 
     if (!g || !a || !b) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
     if (!graph_valid(g)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
-    lancius_node* n = lancius_matmul(wrapper->g, (lancius_node*)a, (lancius_node*)b);
+    if (!tensor_valid(a) || !tensor_valid(b)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
+    lancius_node* na = unwrap_tensor(a);
+    lancius_node* nb = unwrap_tensor(b);
+    if (!na || !nb) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
+    lancius_node* n = lancius_matmul(wrapper->g, na, nb);
     if (!n) { sync_internal_error(); if (g_last_error == LANCIUS_OK) set_error(LANCIUS_ERR_SHAPE_MISMATCH); return NULL; }
+    lancius_tensor_handle h = wrap_tensor(wrapper, n);
+    if (!h) return NULL;
     set_error(LANCIUS_OK);
-    return (lancius_tensor_handle)n;
+    return h;
 }
 
 LANCIUS_EXPORT lancius_tensor_handle lancius_add_relu(lancius_graph_handle g, lancius_tensor_handle a) {
@@ -193,16 +251,23 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_relu(lancius_graph_handle g, la
     if (!g || !a) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
     if (!graph_valid(g)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
-    lancius_node* n = lancius_relu(wrapper->g, (lancius_node*)a);
+    if (!tensor_valid(a)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
+    lancius_node* na = unwrap_tensor(a);
+    if (!na) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
+    lancius_node* n = lancius_relu(wrapper->g, na);
     if (!n) { sync_internal_error(); if (g_last_error == LANCIUS_OK) set_error(LANCIUS_ERR_SHAPE_MISMATCH); return NULL; }
+    lancius_tensor_handle h = wrap_tensor(wrapper, n);
+    if (!h) return NULL;
     set_error(LANCIUS_OK);
-    return (lancius_tensor_handle)n;
+    return h;
 }
 
 LANCIUS_EXPORT lancius_status lancius_bind_data(lancius_tensor_handle t, double* data_ptr) {
     set_error(LANCIUS_OK);
     if (!t || !data_ptr) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
-    lancius_node* n = (lancius_node*)t;
+    if (!tensor_valid(t)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return LANCIUS_ERR_INVALID_HANDLE; }
+    lancius_node* n = unwrap_tensor(t);
+    if (!n) { set_error(LANCIUS_ERR_INVALID_HANDLE); return LANCIUS_ERR_INVALID_HANDLE; }
     /* A2: external data binding is explicitly non-owned */
     lancius_node_bind_external(n, data_ptr);
     set_error(LANCIUS_OK);
@@ -248,7 +313,9 @@ LANCIUS_EXPORT lancius_status lancius_compile_and_run(lancius_graph_handle g) {
 LANCIUS_EXPORT lancius_status lancius_read_output(lancius_tensor_handle t, double* out_buffer, size_t buffer_size) {
     set_error(LANCIUS_OK);
     if (!t || !out_buffer) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
-    lancius_node* n = (lancius_node*)t;
+    if (!tensor_valid(t)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return LANCIUS_ERR_INVALID_HANDLE; }
+    lancius_node* n = unwrap_tensor(t);
+    if (!n) { set_error(LANCIUS_ERR_INVALID_HANDLE); return LANCIUS_ERR_INVALID_HANDLE; }
     if (n->dtype != LANCIUS_DTYPE_FP64) { set_error(LANCIUS_ERR_UNSUPPORTED_OP); return LANCIUS_ERR_UNSUPPORTED_OP; }
     if (!n->runtime_data) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
 
@@ -284,6 +351,9 @@ LANCIUS_EXPORT lancius_graph_handle lancius_graph_load_stable(lancius_context ct
     wrapper->scratch = lancius_arena_create(64 * 1024 * 1024); /* 64MB default for loaded models */
     wrapper->sched = NULL;
     wrapper->magic = LANCIUS_GRAPH_MAGIC;
+    wrapper->tensors = NULL;
+    wrapper->ntensors = 0;
+    wrapper->ctensors = 0;
     if (!wrapper->scratch) { lancius_graph_destroy(g); free(wrapper); set_error(LANCIUS_ERR_OOM); return NULL; }
     set_error(LANCIUS_OK);
     return (lancius_graph_handle)wrapper;
@@ -312,7 +382,9 @@ LANCIUS_EXPORT lancius_status lancius_graph_save_stable(lancius_graph_handle g, 
 LANCIUS_EXPORT size_t lancius_tensor_element_count(lancius_tensor_handle t) {
     set_error(LANCIUS_OK);
     if (!t) { set_error(LANCIUS_ERR_NULL_PTR); return 0; }
-    lancius_node* n = (lancius_node*)t;
+    if (!tensor_valid(t)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return 0; }
+    lancius_node* n = unwrap_tensor(t);
+    if (!n) { set_error(LANCIUS_ERR_INVALID_HANDLE); return 0; }
     size_t elems = 0;
     if (!lancius_node_elements_checked(n, &elems)) { set_error(LANCIUS_ERR_SHAPE_MISMATCH); return 0; }
     set_error(LANCIUS_OK);
@@ -327,7 +399,15 @@ LANCIUS_EXPORT int lancius_tensor_get_dtype(lancius_tensor_handle t) {
         return -1;
     }
 
-    lancius_node* n = (lancius_node*)t;
+    if (!tensor_valid(t)) {
+        set_error(LANCIUS_ERR_INVALID_HANDLE);
+        return -1;
+    }
+    lancius_node* n = unwrap_tensor(t);
+    if (!n) {
+        set_error(LANCIUS_ERR_INVALID_HANDLE);
+        return -1;
+    }
     set_error(LANCIUS_OK);
     return (int)n->dtype;
 }

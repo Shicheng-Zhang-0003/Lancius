@@ -583,6 +583,18 @@ lancius_node* lancius_conv2d_bwd(lancius_graph* g, const lancius_node* grad, con
     if (stride == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
     if (fwd_in->shape[1] != fwd_w->shape[1]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
     if (lancius_validate_conv2d(fwd_in->shape[2], fwd_in->shape[3], fwd_w->shape[2], fwd_w->shape[3], stride, pad) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
+    /* External audit V8: grad shape was never verified (1x1 grad where 3x3
+     * required built fine, matching the bwd_w/maxpool_bwd holes closed in
+     * V7). Require grad == [N, C_out, eH, eW]. */
+    {
+        size_t H_in = fwd_in->shape[2], W_in = fwd_in->shape[3];
+        size_t K_h = fwd_w->shape[2], K_w = fwd_w->shape[3];
+        if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }
+        size_t eH = (H_in + 2 * (size_t)pad - K_h) / stride + 1;
+        size_t eW = (W_in + 2 * (size_t)pad - K_w) / stride + 1;
+        if (grad->shape[0] != fwd_in->shape[0] || grad->shape[1] != fwd_w->shape[0] ||
+            grad->shape[2] != eH || grad->shape[3] != eW) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    }
     lancius_node* n = alloc_node(g, LANCIUS_OP_CONV2D_BWD, 4, 3);
     if (n) {
         memcpy(n->shape, fwd_in->shape, sizeof(size_t)*4);
