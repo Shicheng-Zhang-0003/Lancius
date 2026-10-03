@@ -66,7 +66,12 @@ and do NOT abort.
     Conv with `dilations!=1`/`group!=1`/`auto_pad!=NOTSET` raises;
     MaxPool with `pads!=0`/`dilations!=1`/`ceil_mode!=0`/`auto_pad` raises.
     MatMul is 2D-only (N-D batch would silently collapse — rejected by scope).
--   Quantizer: 4D FP64 conv weights only; all-zero weights stay FP64.
+-   Converter: Reshape carries the data input only (shape tensors never
+     emitted; 1D helpers would be unloadable); Relu/Add/Flatten/MatMul
+     ndim follows data rank; `allowzero=1` explicit-0 and `0+-1` mixes
+     raise. Micromodels accept any feat 1..64 (distill 16-dim loads).
+     Bare `make` builds all (`.DEFAULT_GOAL := all`; depfiles trailed).
+     Quantizer: 4D FP64 conv weights only; all-zero weights stay FP64.
     Per-tensor and per-channel quantization supported; dequantization
     supported. INT8 Add is row-bias (`[1,N]+[R,N]`) only; other INT8
     broadcasts fall through to exact FP64 broadcast, never miscompute.
@@ -107,13 +112,16 @@ and do NOT abort.
     are confirmed interactively in the TUI.
 
 -   Stable handles carry magic tags; wrong-type/stale/destroyed handles
-    return `INVALID_HANDLE`. Tensor handles borrow from their graph.
+    return `INVALID_HANDLE`. Tensor handles are magic-tagged wrappers
+    borrowed from their graph (graph must outlive tensors; destroy
+    invalidates all). Forged pointers fail loud; use-after-graph-free
+    remains caller-UB by contract.
 -   Bytecode VM sets error codes on every reject (OOM vs corrupt tape
     distinguishable); `pool_wait` timeout reports `LIMIT`/`INTERNAL`.
 -   KV-cache, save paths, layernorm/rmsnorm/attention/GQA workers, and
     conv overflow guards all report through the error channel (no silent
     success); OpenMP worker errors propagate via shared flags.
--   `conv2d_bwd_w`/`maxpool2d_bwd` builders + executors verify grad
+-   `conv2d_bwd`/`conv2d_bwd_w`/`maxpool2d_bwd` builders + executors verify grad
     N/C/H_out/W_out (wrong-shaped grads rejected, never silently wrong).
 -   RoPE `2*head_dim` overflow guarded; `vectors_to_lancius.py` raises
     `ValueError` (no `assert`).
