@@ -1,6 +1,7 @@
 #include "lancius/lancius_transformer.h"
 #include "lancius/lancius_ir.h"
 #include "lancius/lancius_kernels.h"
+#include "lancius/lancius_error.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -33,6 +34,7 @@ lancius_kv_cache* lancius_kv_cache_create(
     lancius_dtype dtype
 ) {
     if (max_seq_len == 0 || n_heads == 0 || head_dim == 0) {
+        lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE);
         return NULL;
     }
 
@@ -41,6 +43,7 @@ lancius_kv_cache* lancius_kv_cache_create(
      * FP64 only. FP32 comes later in the A2 FP32 path.
      */
     if (dtype != LANCIUS_DTYPE_FP64) {
+        lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_DTYPE);
         return NULL;
     }
 
@@ -49,21 +52,25 @@ lancius_kv_cache* lancius_kv_cache_create(
      * RoPE requires an even head dimension.
      */
     if ((head_dim % 2) != 0) {
+        lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE);
         return NULL;
     }
 
     if (n_heads > SIZE_MAX / head_dim) {
+        lancius_set_error(LANCIUS_ERROR_OVERFLOW);
         return NULL;
     }
 
     size_t hidden_size = n_heads * head_dim;
 
     if (hidden_size == 0 || max_seq_len > SIZE_MAX / hidden_size) {
+        lancius_set_error(LANCIUS_ERROR_OVERFLOW);
         return NULL;
     }
 
     lancius_kv_cache* cache = (lancius_kv_cache*)calloc(1, sizeof(lancius_kv_cache));
     if (!cache) {
+        lancius_set_error(LANCIUS_ERROR_OOM);
         return NULL;
     }
 
@@ -76,7 +83,7 @@ lancius_kv_cache* lancius_kv_cache_create(
 
     size_t total_elems = max_seq_len * hidden_size;
     /* Despot truth: free the half-built cache instead of leaking it. */
-    if (total_elems > SIZE_MAX / sizeof(double)) { free(cache); return NULL; }
+    if (total_elems > SIZE_MAX / sizeof(double)) { free(cache); lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }
 
     cache->k = (double*)calloc(total_elems, sizeof(double));
     cache->v = (double*)calloc(total_elems, sizeof(double));
@@ -85,6 +92,7 @@ lancius_kv_cache* lancius_kv_cache_create(
         free(cache->k);
         free(cache->v);
         free(cache);
+        lancius_set_error(LANCIUS_ERROR_OOM);
         return NULL;
     }
 
@@ -116,27 +124,32 @@ int lancius_kv_cache_append(
     size_t num_tokens
 ) {
     if (!cache || !k || !v || num_tokens == 0) {
+        lancius_set_error(LANCIUS_ERROR_NULL_PTR);
         return -1;
     }
 
     if (cache->dtype != LANCIUS_DTYPE_FP64) {
+        lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_DTYPE);
         return -1;
     }
 
     if (num_tokens > cache->max_seq_len) {
+        lancius_set_error(LANCIUS_ERROR_LIMIT);
         return -1;
     }
 
     if (cache->seq_len > cache->max_seq_len - num_tokens) {
+        lancius_set_error(LANCIUS_ERROR_LIMIT);
         return -1;
     }
 
     if (cache->hidden_size > SIZE_MAX / num_tokens) {
+        lancius_set_error(LANCIUS_ERROR_OVERFLOW);
         return -1;
     }
 
     size_t elems = num_tokens * cache->hidden_size;
-    if (elems > SIZE_MAX / sizeof(double)) return -1;
+    if (elems > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return -1; }
     size_t bytes = elems * sizeof(double);
 
     double* k_dst = cache->k + (cache->seq_len * cache->hidden_size);
@@ -175,6 +188,7 @@ const void* lancius_kv_cache_k_buffer(
     size_t* active_seq_len
 ) {
     if (!cache) {
+        lancius_set_error(LANCIUS_ERROR_NULL_PTR);
         return NULL;
     }
 
@@ -190,6 +204,7 @@ const void* lancius_kv_cache_v_buffer(
     size_t* active_seq_len
 ) {
     if (!cache) {
+        lancius_set_error(LANCIUS_ERROR_NULL_PTR);
         return NULL;
     }
 
@@ -202,6 +217,7 @@ const void* lancius_kv_cache_v_buffer(
 
 void lancius_node_bind_transformer_state(lancius_node* n, void* state) {
     if (!n || !n->rt) {
+        lancius_set_error(LANCIUS_ERROR_NULL_PTR);
         return;
     }
 
@@ -219,6 +235,7 @@ int lancius_transformer_apply_rope_token(
     int position
 ) {
     if (!cache || !q || !k || position < 0) {
+        lancius_set_error(LANCIUS_ERROR_NULL_PTR);
         return -1;
     }
 
@@ -226,14 +243,17 @@ int lancius_transformer_apply_rope_token(
      * max_seq_len would rotate with frequencies the cache was never sized
      * for and desync the caller's position bookkeeping. */
     if ((size_t)position >= cache->max_seq_len) {
+        lancius_set_error(LANCIUS_ERROR_LIMIT);
         return -1;
     }
 
     if (cache->dtype != LANCIUS_DTYPE_FP64) {
+        lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_DTYPE);
         return -1;
     }
 
     if (cache->head_dim == 0 || (cache->head_dim % 2) != 0) {
+        lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE);
         return -1;
     }
 
@@ -257,6 +277,7 @@ int lancius_kv_cache_prefill(
     size_t prompt_len
 ) {
     if (!cache || !k || !v || prompt_len == 0) {
+        lancius_set_error(LANCIUS_ERROR_NULL_PTR);
         return -1;
     }
 
@@ -269,6 +290,7 @@ int lancius_kv_cache_append_generation_token(
     const void* v
 ) {
     if (!cache || !k || !v) {
+        lancius_set_error(LANCIUS_ERROR_NULL_PTR);
         return -1;
     }
 

@@ -126,7 +126,7 @@ void lancius_pool_submit(lancius_pool* pool, lancius_task_fn fn, void* arg) {
 }
 
 int lancius_pool_wait(lancius_pool* pool, uint32_t timeout_ms) {
-    if (!pool) return -1;
+    if (!pool) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return -1; }
     pthread_mutex_lock(&pool->mutex);
     if (timeout_ms == 0) {
         /* Infinite wait (legacy behavior). */
@@ -141,6 +141,7 @@ int lancius_pool_wait(lancius_pool* pool, uint32_t timeout_ms) {
     struct timespec deadline;
     if (clock_gettime(CLOCK_REALTIME, &deadline) != 0) {
         pthread_mutex_unlock(&pool->mutex);
+        lancius_set_error(LANCIUS_ERROR_INTERNAL);
         return -1;
     }
     deadline.tv_sec += (time_t)(timeout_ms / 1000u);
@@ -156,6 +157,7 @@ int lancius_pool_wait(lancius_pool* pool, uint32_t timeout_ms) {
     pthread_mutex_unlock(&pool->mutex);
     if (rc == 0) return 0;
     /* ETIMEDOUT (or any other wait error) — caller decides how to proceed. */
+    lancius_set_error(rc == ETIMEDOUT ? LANCIUS_ERROR_LIMIT : LANCIUS_ERROR_INTERNAL);
     return -1;
 }
 
