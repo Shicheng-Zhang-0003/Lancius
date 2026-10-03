@@ -115,12 +115,11 @@ int main() {
         }
     }
     lancius_schedule_execute(bwd_sched, scratch);
-    lancius_arena_reset(scratch);
 
-    double* ag_w1 = tg->grad_nodes[W1->id] ? tg->grad_nodes[W1->id]->runtime_data : NULL;
-    double* ag_w2 = tg->grad_nodes[W2->id] ? tg->grad_nodes[W2->id]->runtime_data : NULL;
+    double* ag_w1_ptr = tg->grad_nodes[W1->id] ? tg->grad_nodes[W1->id]->runtime_data : NULL;
+    double* ag_w2_ptr = tg->grad_nodes[W2->id] ? tg->grad_nodes[W2->id]->runtime_data : NULL;
 
-    if (!ag_w1 || !ag_w2) {
+    if (!ag_w1_ptr || !ag_w2_ptr) {
         printf("FATAL: Autodiff failed to produce gradients.\n");
         lancius_schedule_destroy(bwd_sched);
         lancius_training_graph_destroy(tg);
@@ -130,6 +129,25 @@ int main() {
         lancius_graph_destroy(g);
         return 1;
     }
+    /* Despot audit: grads live in the scratch arena; lancius_arena_reset()
+     * below invalidates them and compute_loss() reuses the arena, so the
+     * old code compared freed memory by allocation-order luck. Copy out. */
+    double* ag_w1 = (double*)malloc(w1_sz * sizeof(double));
+    double* ag_w2 = (double*)malloc(w2_sz * sizeof(double));
+    if (!ag_w1 || !ag_w2) {
+        fprintf(stderr, "FATAL: OOM copying analytic grads\n");
+        free(ag_w1); free(ag_w2);
+        lancius_schedule_destroy(bwd_sched);
+        lancius_training_graph_destroy(tg);
+        lancius_schedule_destroy(fwd_sched);
+        lancius_arena_destroy(scratch);
+        free(X->runtime_data); free(W1->runtime_data); free(W2->runtime_data); free(Y->runtime_data);
+        lancius_graph_destroy(g);
+        return 1;
+    }
+    memcpy(ag_w1, ag_w1_ptr, w1_sz * sizeof(double));
+    memcpy(ag_w2, ag_w2_ptr, w2_sz * sizeof(double));
+    lancius_arena_reset(scratch);
 
     printf("[2/3] Computing Finite Differences (Perturbing Weights)...\n");
     double* fd_w1 = (double*)calloc(w1_sz, sizeof(double));
@@ -188,7 +206,7 @@ int main() {
 
     int ok = (max_err_w1 < TOL) && (max_err_w2 < TOL);
 
-    free(fd_w1); free(fd_w2);
+    free(fd_w1); free(fd_w2); free(ag_w1); free(ag_w2);
     lancius_schedule_destroy(bwd_sched);
     lancius_training_graph_destroy(tg);
     lancius_schedule_destroy(fwd_sched);

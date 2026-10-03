@@ -44,17 +44,17 @@ void kernel_conv2d_fwd(double* out, const double* in, const double* w,
     size_t H_out = (H_in + 2*pad - K_h)/stride + 1;
     size_t W_out = (W_in + 2*pad - K_w)/stride + 1;
     if (N && C_out && H_out && W_out) {
-        if (N > SIZE_MAX / C_out) return;
-        if (N * C_out > SIZE_MAX / H_out) return;
-        if (N * C_out * H_out > SIZE_MAX / W_out) return;
-        if (N * C_out * H_out * W_out > SIZE_MAX / sizeof(double)) return;
+        if (N > SIZE_MAX / C_out) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        if (N * C_out > SIZE_MAX / H_out) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        if (N * C_out * H_out > SIZE_MAX / W_out) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        if (N * C_out * H_out * W_out > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     }
     /* Despot truth: in_idx ni*(C*H*W) and w_idx co*(C*Kh*Kw) must not wrap. */
-    if (C_in != 0 && H_in > SIZE_MAX / W_in) return;
-    if (C_in != 0 && K_h > SIZE_MAX / K_w) return;
-    if (C_in * H_in != 0 && W_in > SIZE_MAX / (C_in * H_in)) return;
-    if (C_in * K_h != 0 && K_w > SIZE_MAX / (C_in * K_h)) return;
-    if (C_out != 0 && (C_in * K_h * K_w) > SIZE_MAX / C_out) return;
+    if (C_in != 0 && H_in > SIZE_MAX / W_in) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (C_in != 0 && K_h > SIZE_MAX / K_w) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (C_in * H_in != 0 && W_in > SIZE_MAX / (C_in * H_in)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (C_in * K_h != 0 && K_w > SIZE_MAX / (C_in * K_h)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (C_out != 0 && (C_in * K_h * K_w) > SIZE_MAX / C_out) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     memset(out, 0, N*C_out*H_out*W_out*sizeof(double));
 
     #pragma omp parallel for collapse(2) schedule(static)
@@ -93,16 +93,23 @@ void kernel_conv2d_bwd_in(double* out, const double* grad, const double* w,
     if (stride == 0 || K_h == 0 || K_w == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
     if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     if (N && C_in && H_in && W_in) {
-        if (N > SIZE_MAX / C_in) return;
-        if (N * C_in > SIZE_MAX / H_in) return;
-        if (N * C_in * H_in > SIZE_MAX / W_in) return;
-        if (N * C_in * H_in * W_in > SIZE_MAX / sizeof(double)) return;
+        if (N > SIZE_MAX / C_in) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        if (N * C_in > SIZE_MAX / H_in) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        if (N * C_in * H_in > SIZE_MAX / W_in) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        if (N * C_in * H_in * W_in > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     }
     memset(out, 0, N*C_in*H_in*W_in*sizeof(double));
-    #pragma omp parallel
+    /* Despot audit: lancius_set_error() is _Thread_local, so errors set
+     * inside OpenMP workers are invisible to the caller. Propagate via
+     * a shared flag re-set by the master after the parallel region. */
+    int omp_err_bwd_in = LANCIUS_ERROR_OK;
+    #pragma omp parallel shared(omp_err_bwd_in)
     {
         double* local_in = (double*)calloc(N*C_in*H_in*W_in, sizeof(double));
-        if (!local_in) { lancius_set_error(LANCIUS_ERROR_OOM); }
+        if (!local_in) {
+            #pragma omp critical
+            { if (omp_err_bwd_in == LANCIUS_ERROR_OK) omp_err_bwd_in = LANCIUS_ERROR_OOM; }
+        }
         else {
             #pragma omp for collapse(2) schedule(static)
             for(size_t ni=0; ni<N; ni++) {
@@ -135,6 +142,7 @@ void kernel_conv2d_bwd_in(double* out, const double* grad, const double* w,
             free(local_in);
         }
     }
+    if (omp_err_bwd_in != LANCIUS_ERROR_OK) lancius_set_error(omp_err_bwd_in);
 }
 
 void kernel_conv2d_bwd_w(double* out, const double* grad, const double* in,
@@ -147,18 +155,22 @@ void kernel_conv2d_bwd_w(double* out, const double* grad, const double* in,
     if (stride == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
     if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     if (H_in + 2*pad < K_h || W_in + 2*pad < K_w) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
-    if (C_out > SIZE_MAX / C_in) return;
-    if (C_out * C_in > SIZE_MAX / K_h) return;
-    if (C_out * C_in * K_h > SIZE_MAX / K_w) return;
+    if (C_out > SIZE_MAX / C_in) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (C_out * C_in > SIZE_MAX / K_h) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+    if (C_out * C_in * K_h > SIZE_MAX / K_w) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     size_t w_elems = C_out*C_in*K_h*K_w;
-    if (w_elems > SIZE_MAX / sizeof(double)) return;
+    if (w_elems > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     memset(out, 0, w_elems * sizeof(double));
 
     // TITANIUM THREAD-LOCAL ACCUMULATOR: Prevents OpenMP race conditions on weight gradients
-    #pragma omp parallel
+    int omp_err_bwd_w = LANCIUS_ERROR_OK;
+    #pragma omp parallel shared(omp_err_bwd_w)
     {
         double* local_w = (double*)calloc(w_elems, sizeof(double));
-        if(!local_w) { lancius_set_error(LANCIUS_ERROR_OOM); }
+        if(!local_w) {
+            #pragma omp critical
+            { if (omp_err_bwd_w == LANCIUS_ERROR_OK) omp_err_bwd_w = LANCIUS_ERROR_OOM; }
+        }
         else {
             #pragma omp for collapse(2) schedule(static)
             for(size_t ni=0; ni<N; ni++) {
@@ -191,6 +203,7 @@ void kernel_conv2d_bwd_w(double* out, const double* grad, const double* in,
             free(local_w);
         }
     }
+    if (omp_err_bwd_w != LANCIUS_ERROR_OK) lancius_set_error(omp_err_bwd_w);
 }
 
 
@@ -205,10 +218,10 @@ void kernel_conv2d_relu_fwd(double* out, const double* in, const double* w,
     size_t H_out = (H_in + 2*pad - K_h)/stride + 1;
     size_t W_out = (W_in + 2*pad - K_w)/stride + 1;
     if (N && C_out && H_out && W_out) {
-        if (N > SIZE_MAX / C_out) return;
-        if (N * C_out > SIZE_MAX / H_out) return;
-        if (N * C_out * H_out > SIZE_MAX / W_out) return;
-        if (N * C_out * H_out * W_out > SIZE_MAX / sizeof(double)) return;
+        if (N > SIZE_MAX / C_out) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        if (N * C_out > SIZE_MAX / H_out) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        if (N * C_out * H_out > SIZE_MAX / W_out) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        if (N * C_out * H_out * W_out > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     }
     memset(out, 0, N*C_out*H_out*W_out*sizeof(double));
 
@@ -252,10 +265,10 @@ void kernel_conv2d_int8_fwd(double* out, const int8_t* in, const int8_t* w, doub
     size_t H_out = (H_in + 2*pad - K_h)/stride + 1;
     size_t W_out = (W_in + 2*pad - K_w)/stride + 1;
     if (N && C_out && H_out && W_out) {
-        if (N > SIZE_MAX / C_out) return;
-        if (N * C_out > SIZE_MAX / H_out) return;
-        if (N * C_out * H_out > SIZE_MAX / W_out) return;
-        if (N * C_out * H_out * W_out > SIZE_MAX / sizeof(double)) return;
+        if (N > SIZE_MAX / C_out) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        if (N * C_out > SIZE_MAX / H_out) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        if (N * C_out * H_out > SIZE_MAX / W_out) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        if (N * C_out * H_out * W_out > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     }
     memset(out, 0, N*C_out*H_out*W_out*sizeof(double));
     double final_scale = scale_in * scale_w;
@@ -296,7 +309,8 @@ void kernel_layernorm(double* out, const double* in, const double* gamma, const 
                       size_t num_instances, size_t hidden_size, double eps) {
     if (!out || !in || !gamma || !beta) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
     if (num_instances == 0 || hidden_size == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
-    #pragma omp parallel for schedule(static)
+    int omp_err_ln = LANCIUS_ERROR_OK;
+    #pragma omp parallel for schedule(static) shared(omp_err_ln)
     for(size_t b=0; b<num_instances; b++) {
         const double* x = in + b * hidden_size;
         double* y = out + b * hidden_size;
@@ -312,7 +326,8 @@ void kernel_layernorm(double* out, const double* in, const double* gamma, const 
         double denom = sqrt(var + eps);
         if (denom <= 0.0 || denom != denom) {
             /* Despot truth: degenerate norm denominator is NUMERICAL, not silent beta. */
-            lancius_set_error(LANCIUS_ERROR_NUMERICAL);
+            #pragma omp critical
+            { if (omp_err_ln == LANCIUS_ERROR_OK) omp_err_ln = LANCIUS_ERROR_NUMERICAL; }
             for(size_t i=0; i<hidden_size; i++) y[i] = beta[i];
             continue;
         }
@@ -321,6 +336,7 @@ void kernel_layernorm(double* out, const double* in, const double* gamma, const 
             y[i] = (x[i] - mean) * inv_std * gamma[i] + beta[i];
         }
     }
+    if (omp_err_ln != LANCIUS_ERROR_OK) lancius_set_error(omp_err_ln);
 }
 
 /* Despot truth: GELU here is the tanh approximation (Hendrycks-Gimpel tanh
@@ -386,11 +402,15 @@ void kernel_attention(double* out, const double* q, const double* k, const doubl
     // Eliminates the O(N^2) attention matrix allocation. Memory bound strictly to O(head_dim) per thread.
     if (!out || !q || !k || !v) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
     if (seq_len == 0 || n_heads == 0 || head_dim == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
-    #pragma omp parallel
+    int omp_err_attn = LANCIUS_ERROR_OK;
+    #pragma omp parallel shared(omp_err_attn)
     {
         double* o_i = (double*)calloc(head_dim, sizeof(double));
         double scale = 1.0 / sqrt((double)head_dim);
-    if (!o_i) { lancius_set_error(LANCIUS_ERROR_OOM); }
+    if (!o_i) {
+        #pragma omp critical
+        { if (omp_err_attn == LANCIUS_ERROR_OK) omp_err_attn = LANCIUS_ERROR_OOM; }
+    }
     else { /* v11S C2 fix: OOM guard now reports */
 
         #pragma omp for collapse(2) schedule(static)
@@ -434,7 +454,8 @@ void kernel_attention(double* out, const double* q, const double* k, const doubl
                  * not silent zeros. Zero denominator (fully masked row) stays
                  * zeros for causal safety; NaN must never masquerade as 0. */
                 if (l_i != l_i) {
-                    lancius_set_error(LANCIUS_ERROR_NUMERICAL);
+                    #pragma omp critical
+                    { if (omp_err_attn == LANCIUS_ERROR_OK) omp_err_attn = LANCIUS_ERROR_NUMERICAL; }
                     memset(out_row, 0, head_dim * sizeof(double));
                 } else if (l_i > 0.0) {
                     double inv_l = 1.0 / l_i;
@@ -451,6 +472,7 @@ void kernel_attention(double* out, const double* q, const double* k, const doubl
 
         free(o_i);
     }
+    if (omp_err_attn != LANCIUS_ERROR_OK) lancius_set_error(omp_err_attn);
 }
 
 
@@ -529,7 +551,8 @@ void kernel_attention_kv_cache(double* out, const double* q, const double* k_cac
 void kernel_rmsnorm(double* out, const double* in, const double* gamma, size_t num_instances, size_t hidden_size, double eps) {
     if (!out || !in || !gamma) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
     if (num_instances == 0 || hidden_size == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
-    #pragma omp parallel for schedule(static)
+    int omp_err_rms = LANCIUS_ERROR_OK;
+    #pragma omp parallel for schedule(static) shared(omp_err_rms)
     for (size_t i = 0; i < num_instances; i++) {
         double sq_sum = 0.0;
         const double* row = in + i * hidden_size;
@@ -540,7 +563,8 @@ void kernel_rmsnorm(double* out, const double* in, const double* gamma, size_t n
         double* out_row = out + i * hidden_size;
         if (rms <= 0.0 || rms != rms) {
             /* Despot truth: degenerate norm denominator is NUMERICAL, not silent zeros. */
-            lancius_set_error(LANCIUS_ERROR_NUMERICAL);
+            #pragma omp critical
+            { if (omp_err_rms == LANCIUS_ERROR_OK) omp_err_rms = LANCIUS_ERROR_NUMERICAL; }
             for (size_t j = 0; j < hidden_size; j++) out_row[j] = 0.0;
             continue;
         }
@@ -549,6 +573,7 @@ void kernel_rmsnorm(double* out, const double* in, const double* gamma, size_t n
             out_row[j] = (row[j] * inv_rms) * gamma[j];
         }
     }
+    if (omp_err_rms != LANCIUS_ERROR_OK) lancius_set_error(omp_err_rms);
 }
 
 void kernel_swiglu(double* out, const double* gate, const double* up, size_t elements) {
@@ -580,10 +605,14 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
     size_t group_size = n_heads_q / n_heads_kv;
     double scale = 1.0 / sqrt((double)head_dim);
 
-    #pragma omp parallel
+    int omp_err_gqa = LANCIUS_ERROR_OK;
+    #pragma omp parallel shared(omp_err_gqa)
     {
         double* o_i = (double*)calloc(head_dim, sizeof(double));
-    if (!o_i) { lancius_set_error(LANCIUS_ERROR_OOM); }
+    if (!o_i) {
+        #pragma omp critical
+        { if (omp_err_gqa == LANCIUS_ERROR_OK) omp_err_gqa = LANCIUS_ERROR_OOM; }
+    }
     else { /* OOM now reported */
     #pragma omp for collapse(2) schedule(static)
         for (size_t i = 0; i < seq_len; i++) {
@@ -612,7 +641,8 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
                 double* out_row = out + (i * hidden_size_q) + (hq * head_dim);
                 /* Despot truth: NaN denominator is NUMERICAL, not silent zeros. */
                 if (l_i != l_i) {
-                    lancius_set_error(LANCIUS_ERROR_NUMERICAL);
+                    #pragma omp critical
+                    { if (omp_err_gqa == LANCIUS_ERROR_OK) omp_err_gqa = LANCIUS_ERROR_NUMERICAL; }
                     memset(out_row, 0, head_dim * sizeof(double));
                 } else if (l_i > 0.0) {
                     double inv_l = 1.0 / l_i;
@@ -627,6 +657,7 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
 
         free(o_i);
     }
+    if (omp_err_gqa != LANCIUS_ERROR_OK) lancius_set_error(omp_err_gqa);
 }
 
 

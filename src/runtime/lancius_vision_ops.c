@@ -56,6 +56,16 @@ void lancius_execute_vision_op(lancius_node* n) {
             lancius_set_error(LANCIUS_ERROR_NUMERICAL);
             return;
         }
+        /* Despot audit: per-channel scales are stored in
+         * rt->scale_per_channel but the INT8 kernel takes a single
+         * scale_w. Executing with smax silently mis-scales every
+         * channel (proven 200x error). Refuse loud: caller must
+         * lancius_dequantize_graph() first for exact per-channel math. */
+        if ((w_node->rt && w_node->rt->scale_per_channel) ||
+            (in_node->rt && in_node->rt->scale_per_channel)) {
+            lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
+            return;
+        }
 
         kernel_conv2d_int8_fwd(n->runtime_data, in, w, scale_in, scale_w,
             in_node->shape[0], in_node->shape[1], in_node->shape[2], in_node->shape[3],
@@ -235,6 +245,19 @@ void lancius_execute_vision_op(lancius_node* n) {
         /* Despot V6 truth: rank/stride guards (was unchecked). */
         if (in_node->ndim != 4 || grad_node->ndim != 4 || n->ndim != 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
         if (n->stride == 0 || n->shape[2] == 0 || n->shape[3] == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_STRIDE); return; }
+        /* Despot audit: wrong-shaped grad executed silently wrong.
+         * Verify N/C_out/H_out/W_out against fwd_in + kernel/stride/pad. */
+        {
+            size_t H_in = in_node->shape[2], W_in = in_node->shape[3];
+            size_t K_h = n->shape[2], K_w = n->shape[3];
+            if (n->pad > (SIZE_MAX - H_in) / 2 || n->pad > (SIZE_MAX - W_in) / 2) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+            if (H_in + 2 * (size_t)n->pad < K_h || W_in + 2 * (size_t)n->pad < K_w) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+            size_t eH = (H_in + 2 * (size_t)n->pad - K_h) / n->stride + 1;
+            size_t eW = (W_in + 2 * (size_t)n->pad - K_w) / n->stride + 1;
+            if (grad_node->shape[0] != in_node->shape[0] || grad_node->shape[1] != n->shape[0] ||
+                grad_node->shape[2] != eH || grad_node->shape[3] != eW) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+            if (in_node->shape[1] != n->shape[1]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        }
         kernel_conv2d_bwd_w(n->runtime_data, grad, in,
             in_node->shape[0], in_node->shape[1], in_node->shape[2], in_node->shape[3],
             n->shape[0], grad_node->shape[2], grad_node->shape[3],
@@ -253,6 +276,18 @@ void lancius_execute_vision_op(lancius_node* n) {
         size_t K = n->kernel_h;
         size_t stride = n->stride;
         size_t H_out = grad_node->shape[2], W_out = grad_node->shape[3];
+        /* Despot audit: verify grad == [N,C,Ho,Wo] with Ho/Wo derived
+         * from fwd_in (was: H_out/W_out taken blindly from grad). */
+        if (stride == 0 || K == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_STRIDE); return; }
+        if (H_in < K || W_in < K) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+        {
+            size_t eH = (H_in - K) / stride + 1;
+            size_t eW = (W_in - K) / stride + 1;
+            if (grad_node->shape[0] != N || grad_node->shape[1] != C ||
+                H_out != eH || W_out != eW) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+            if (n->shape[0] != N || n->shape[1] != C ||
+                n->shape[2] != H_in || n->shape[3] != W_in) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        }
 
         /* Despot truth: output byte size is checked; corrupt shapes fail loud. */
         size_t out_elems = 0;
