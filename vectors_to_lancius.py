@@ -22,9 +22,11 @@ def main(x_path, t_path, out_path, feat=8):
         xb = f.read()
     with open(t_path, "rb") as f:
         tb = f.read()
-    assert len(xb) % (feat * 8) == 0, "X.bin size not multiple of FEAT*8"
+    if len(xb) % (feat * 8) != 0:
+        raise ValueError("X.bin size not multiple of FEAT*8")
     n = len(xb) // (feat * 8)
-    assert len(tb) == n * 8, f"T.bin size {len(tb)} != {n}*8"
+    if len(tb) != n * 8:
+        raise ValueError(f"T.bin size {len(tb)} != {n}*8")
     print(f"bridge: {n} rows x {feat} -> {out_path}")
     # Minimal v2 graph: INPUT X [N,8], INPUT T [N,1]. No compute edges needed
     # for the bridge gate (C loop binds externals); file must load + CRC verify.

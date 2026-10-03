@@ -26,6 +26,7 @@ file(GLOB_RECURSE LANCIUS_SRCS
     "src/math/*.c"
     "src/runtime/*.c"
     "src/compiler/*.c"
+    "src/train/*.c"
 )
 
 # Static Library (For internal examples)
