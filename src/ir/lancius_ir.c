@@ -505,6 +505,18 @@ lancius_node* lancius_conv2d_bwd_w(lancius_graph* g, const lancius_node* grad, c
     if (grad->ndim != 4 || fwd_in->ndim != 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     if (k_h == 0 || k_w == 0 || stride == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
     if (grad->shape[1] == 0 || fwd_in->shape[1] == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
+    /* Despot audit: wrong-shaped grad trained wrong with clean error code
+     * (1x1 grad where 3x3 required gave dw 63 vs 1053). Verify grad
+     * N/C_out/H_out/W_out consistency against fwd_in + k/stride/pad. */
+    {
+        size_t H_in = fwd_in->shape[2], W_in = fwd_in->shape[3];
+        if (pad > (SIZE_MAX - H_in) / 2 || pad > (SIZE_MAX - W_in) / 2) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return NULL; }
+        if (H_in + 2 * (size_t)pad < k_h || W_in + 2 * (size_t)pad < k_w) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
+        size_t eH = (H_in + 2 * (size_t)pad - k_h) / stride + 1;
+        size_t eW = (W_in + 2 * (size_t)pad - k_w) / stride + 1;
+        if (grad->shape[0] != fwd_in->shape[0]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+        if (grad->shape[2] != eH || grad->shape[3] != eW) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    }
     lancius_node* n = alloc_node(g, LANCIUS_OP_CONV2D_BWD_W, 4, 2);
     if (n) {
         n->shape[0] = grad->shape[1]; n->shape[1] = fwd_in->shape[1];
@@ -585,6 +597,17 @@ lancius_node* lancius_maxpool2d_bwd(lancius_graph* g, const lancius_node* grad, 
     if (grad->ndim != 4 || fwd_in->ndim != 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     if (kernel == 0 || stride == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
     if (fwd_in->shape[2] < kernel || fwd_in->shape[3] < kernel) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
+    /* Despot audit: wrong-shaped grad gave silent partial gradient
+     * (1x1 grad where 2x2 required zeroed 3/4 of truth; oversized
+     * grad OOB-read fwd_in). Verify grad == [N,C,Ho,Wo]. */
+    {
+        size_t H_in = fwd_in->shape[2];
+        size_t eH = (H_in - kernel) / stride + 1;
+        size_t W_in = fwd_in->shape[3];
+        size_t eW = (W_in - kernel) / stride + 1;
+        if (grad->shape[0] != fwd_in->shape[0] || grad->shape[1] != fwd_in->shape[1] ||
+            grad->shape[2] != eH || grad->shape[3] != eW) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    }
     lancius_node* n = alloc_node(g, LANCIUS_OP_MAXPOOL2D_BWD, 4, 2);
     if (n) {
         memcpy(n->shape, fwd_in->shape, sizeof(size_t)*4);
@@ -651,6 +674,8 @@ lancius_node* lancius_rope(lancius_graph* g, const lancius_node* qk, size_t seq_
         lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE);
         return NULL;
     }
+    /* Despot audit: 2*head_dim can wrap SIZE_MAX (caller-controlled). */
+    if (head_dim > SIZE_MAX / 2) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
     if (qk->ndim != 3) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
     if (qk->shape[0] != seq_len || qk->shape[1] != n_heads || qk->shape[2] != 2 * head_dim) {
         lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH);
