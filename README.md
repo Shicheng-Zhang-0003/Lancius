@@ -298,6 +298,9 @@ This runs the primary regression and correctness suite, including:
 - quantization audits (per-channel quant, dequant roundtrip)
 - serialization portability audit (uint64_t, byte swapping, CRC32 call_once)
 - CLI security audit (fork+execvp, no shell injection)
+- N-dim reduction audit (per-axis sums 1..4-D, broadcast training exactness)
+- norm/activation/batched backward audit (finite-diff ~1e-9..1e-11)
+- training convergence audit (XOR solve, determinism, checkpoint resume)
 
 Every audit in the gate propagates failures through its exit code: a green
 `make check` means every check passed, not just that binaries ran.
@@ -387,7 +390,7 @@ The following table describes the current status of major subsystems.
 |---|---|---|
 | Core tensor ops | Development | Add/Sub/Mul (N-dim broadcast-correct), MatMul, ReLU, Softmax (zero-sum guarded), Sum, Broadcast, Transpose |
 | Vision ops | Development | Conv2D, MaxPool2D, Flatten, fused Conv2D+ReLU; `FLATTEN`/`RESHAPE` verify element equality |
-| Training ops | Experimental | CrossEntropy backward, Conv backward, MaxPool backward; He init, `[-1,1]` CIFAR norm |
+| Training ops | Development | N-dim broadcast reduction (`SUM_AXIS_ND`), batched-matmul/GELU/LayerNorm/RMSNorm backward incl. gamma/beta (finite-diff ~1e-9..1e-11), global-norm clip, XOR convergence + checkpoint-resume gates; attention/GQA/SwiGLU/RoPE backward staged (fail loud) |
 | Transformer kernels | Experimental | LayerNorm, RMSNorm, GELU, RoPE, Attention, KV-cache attention, SwiGLU, GQA (validated shapes; math primitives only, no generation flows) |
 | KV-cache runtime | Experimental | Stateful cache object, FP64-only for now; step parity audited, generation demos scrapped |
 | Language generation | Scrapped | No prefill/generation demos, no streaming generation, no `generate` verb (`lancius generate` fails loud → use `lancius eval`) |

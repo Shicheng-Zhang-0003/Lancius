@@ -272,3 +272,38 @@ magic gap, allowzero gap, exporter assert, makefile default-goal hijack,
 converter 1D-helper + ndim lies (parity RED), micromodel FEAT gap, eval
 tautology. All closed above; parity re-measured `3.42e-07` (not marked
 RED — the bug was the converter, the number reproduces exactly).
+
+## 15. R3 training-wrap (in progress) — N-dim, batched, norm exactness
+
+Closed VJPs (all re-proven by independent execution + finite differences;
+oracles in `temp/proofs/r3_probe_nd.c`, `temp/proofs/r3_probe_bwd.c`):
+
+- `SUM_AXIS_ND` (id 42): `y[i]=sum_{k} x[i,k]` along one axis, rank kept.
+  VJP: `dx=broadcast_to_shape(dy)`. N-dim partial broadcast backward:
+  align trailing ranks; per axis with input-dim 1 sum via `SUM_AXIS_ND`;
+  drop reduced leading dims by exact reshape. Old ([2,1,4] vs [2,3,4])
+  fail-loud now trains with grads `-0.0625` exact by hand.
+- `TRANSPOSE_BATCHED` (id 43): `out[b,i,j]=in[b,j,i]`. Self-inverse VJP.
+  `MATMUL_BATCHED` VJP: `dA=dY@Bt, dB=At@dY` (finite-diff ~1e-10/1e-11).
+- GELU tanh-approx `G=0.5x(1+T)`: `G'=0.5(1+T)+0.5x(1-T^2)C(1+3ax^2)`,
+  clamps mirror fwd (`>10 -> 1`, `<-10 -> 0`), NaN propagates
+  (finite-diff 1.25e-09).
+- LayerNorm `y=(x-mu)/sig*g+b`: `dx=(d-mean(d)-xhat*mean(d*xhat))/sig`
+  with `d=g*g` (NOT `g` alone — first cut missed the gamma weighting and
+  finite-diff caught it at 0.77); `dg=sum_b(g*xhat)`; `db=sum_b(g)`.
+  Degenerate sig -> NUMERICAL + zeros, mirroring fwd (finite-diff
+  2e-09/1.7e-11/6e-11).
+- RMSNorm `y=x/rms*g`: `dx=(g*g-x*mean(g*y)/rms)/rms`;
+  `dg=sum_b(g*x/rms)`. Degenerate rms -> NUMERICAL + zeros
+  (finite-diff 1.1e-10/1.9e-10).
+- Executor placement: new ids sort after `CONV2D`, so all new cases run
+  ahead of the vision-op router (first cut sat after it and the router
+  rejected op 42 — caught by execution, fixed by relocation).
+- Optimizer: global-norm clip `s=min(1,max/norm)` over tensor lists
+  (per-tensor clip unchanged); AdamW bias correction already exact.
+- Convergence: 2-4-1 tanh XOR through graph+autodiff+SGD solves 4/4 in
+  28ms; same-seed rerun agrees 1e-12; v2 checkpoint at half-time resumes
+  to the same loss 1e-9 (moments stay caller-owned by stateless-lib
+  contract; weights persist via v2).
+- Scope held: attention/GQA/SwiGLU/RoPE backward stays fail-loud;
+  per-channel INT8 still refuses execution (dequantize first).

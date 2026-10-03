@@ -47,6 +47,11 @@ enumeration in `CHANGELOG.md` (queue use-before-init, IR NULLs→errors,
 optimizer mask, dequant scale, CE R/C, 32B split, silent lib, examples,
 converter 1s).
 
+R3 training-wrap (in progress) — additive correctness: SUM_AXIS_ND (42),
+TRANSPOSE_BATCHED (43), norm/activation _BWD (44..49); old files load
+identically (ids appended), new-op files require a new loader; v1 loader
+rejects new ids like all post-v11S ops.
+
 Despot audit V6 (2026-10-01) — 45 defects fixed: contract deltas (no format
 break): 4D broadcast backward exact; CE_BWD 2D+scalar; conv/LN/RMSN guards;
 VM ndim!=2/tape/out_reg/shape; scheduler NULL-deref/errors; pool malloc+free

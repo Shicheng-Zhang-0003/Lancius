@@ -105,7 +105,9 @@ see `CHANGELOG.md` for deltas.
 
 Build clean under `-Wall -Wextra -Werror`; `audit_regression_13c` 49/49,
 `audit_known_answer` 73/73, `audit_transformer_known_answer` 265/265,
-`audit_fp32_path` 19/19, `audit_fault_injection` 11/11 green;
+`audit_fp32_path` 19/19, `audit_fault_injection` 12/12,
+`audit_sum_axis_nd` 21/21, `audit_train_bwd` 24/24,
+`audit_train_converge` 12/12 green;
 `make check`, `make check-long`, and `make check-sanitizers` green with
 failure-propagating exit codes; broadcast/planner/softmax/CE fixes verified
 by the despot probe (`audit_despot_probe`, in the `make check` gate);
@@ -117,6 +119,7 @@ a hardening of an already-gated path) plus pytorch parity
 V4 fixes verified by the same gate plus new audits for race conditions,
 quantization (per-channel + dequant), serialization portability, and CLI
 security (fork+execvp).
+R3 training-wrap verified by the same gates plus the new training gates (N-dim reduction exactness, norm/batched finite-diffs ~1e-9..1e-11, XOR convergence + determinism + checkpoint resume, global-norm clip).
 V6 fixes verified by the same gates (all green from clean tree) plus
 `probe_v6` (4D dim0/1/2/3 + multi-dim, CE_BWD, VM rank) and
 `test_grad_check` still `8.6e-10`, `5.8e-8`.

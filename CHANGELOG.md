@@ -1,5 +1,33 @@
 # Lancius Changelog
 
+## R3 training-wrap (in progress) — actual framework that safely trains
+
+v12R2 proves Lancius can learn; this batch closes the remaining
+fail-loud holes so MLP/CNN/norm graphs train end-to-end with proofs:
+
+- R2-7: `LANCIUS_OP_SUM_AXIS_ND` (id 42) end-to-end — builder, checked
+  row-major executor (ahead of the vision router), v2 persistence (axis in
+  axes[0]), forward clone, VJP via broadcast-back, general N-dim partial
+  reduction in `accum_grad` plus the BROADCAST VJP (2D/4D proven paths
+  kept). 3D `[2,1,4]+[2,3,4]` trains (was fail-loud) with exact grads;
+  `audit_sum_axis_nd` 21/21 in `make check` (values 1..4-D, 2D
+  equivalence, bad-axis reject, roundtrip, 3D exact, finite-diff 4.1e-12).
+- R2-8: batched transpose (id 43, forward + persistable) unlocks
+  `MATMUL_BATCHED` backward (`dA=dY@Bt, dB=At@dY`, finite-diff ~1e-10);
+  dedicated `LAYERNORM_BWD[_GAMMA,_BETA]` (44..46), `RMSNORM_BWD[_GAMMA]`
+  (47..48), `GELU_BWD` (49) kernels + pre-router executors + builders +
+  VJPs incl. gamma/beta grads (finite-diff ~1e-9..1e-11); fault gate now
+  asserts bmm success + GQA still fail-loud; `audit_train_bwd` 24/24.
+  Attention/GQA/SwiGLU/RoPE backward stays fail-loud by staged scope.
+- R2-9: `lancius_clip_global_norm` multi-tensor clip (+ audit proofs);
+  `audit_train_converge` 12/12: 2-4-1 tanh XOR via graph+autodiff+SGD
+  solves 4/4 in 28ms, same-seed rerun agrees 1e-12, v2 checkpoint at
+  half-time resumes to the same loss 1e-9. Optimizer moments stay
+  caller-owned (stateless lib contract); weights checkpoint via v2.
+- No format break (ids appended; old files load identically), no
+  stable-ABI break (additive builders + widened success surface).
+
+
 ## despot audit V8 (2026-10-03) — external-truth re-audit
 
 Same audit as V7, re-proven against live external sources (not repo lore):
