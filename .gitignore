@@ -34,6 +34,7 @@ distill_prm800k
 audit_train_lib
 audit_sandbox
 audit_sum_axis_nd
+audit_train_bwd
 train_micromodel
 eval_verifier
 

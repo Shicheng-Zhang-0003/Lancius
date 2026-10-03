@@ -304,7 +304,9 @@ static const char *dtype_name(int dt) {
 
 static int is_backward_op(int op) {
     return op == 12 || op == 13 || op == 21 || op == 24 ||
-           op == 25 || op == 26 || op == 39 || op == 41;
+           op == 25 || op == 26 || op == 39 || op == 41 ||
+           op == 44 || op == 45 || op == 46 || op == 47 ||
+           op == 48 || op == 49;
 }
 
 static int is_reserved_op(int op) {

@@ -26,7 +26,7 @@ OBJS = $(SRCS:.c=.o)
 # Default goal must precede any -include: depfiles define %-targets that
 # would otherwise hijack the default goal (bare `make` built only arena.o).
 .DEFAULT_GOAL := all
-all: liblancius.a lancius audit_internals stress_test test_torture train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_despot_probe train_verifier_head distill_prm800k audit_train_lib audit_sandbox train_micromodel eval_verifier audit_sum_axis_nd
+all: liblancius.a lancius audit_internals stress_test test_torture train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_despot_probe train_verifier_head distill_prm800k audit_train_lib audit_sandbox train_micromodel eval_verifier audit_sum_axis_nd audit_train_bwd
 lancius: examples/lancius_cli.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 liblancius.a: $(OBJS)
@@ -47,7 +47,7 @@ clean:
 	rm -f audit_regression_13c regression_roundtrip.lancius regression_bad_*.lancius regression_trunc_*.lancius regression_huge_*.lancius
 	rm -f audit_known_answer audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_flash_attention
 	rm -f audit_despot_probe train_verifier_head distill_prm800k lancius
-	rm -f audit_train_lib audit_sandbox train_micromodel eval_verifier audit_sum_axis_nd
+	rm -f audit_train_lib audit_sandbox train_micromodel eval_verifier audit_sum_axis_nd audit_train_bwd audit_train_bwd
 .PHONY: all clean check check-long check-sanitizers
 train_cifar10: examples/train_cifar10.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
@@ -161,6 +161,7 @@ check: all
 	./distill_prm800k --selftest
 	./audit_train_lib
 	./audit_sum_axis_nd
+	./audit_train_bwd
 	./audit_sandbox
 	./train_micromodel
 	./eval_verifier
@@ -236,6 +237,10 @@ audit_fault_injection: examples/audit_fault_injection.c liblancius.a
 
 # --- R3: N-dim reduction training gate ---
 audit_sum_axis_nd: examples/audit_sum_axis_nd.c liblancius.a
+	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
+
+# --- R3: norm/activation/batched backward gate ---
+audit_train_bwd: examples/audit_train_bwd.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 
 # Dependency tracking (must trail all explicit targets so included

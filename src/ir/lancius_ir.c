@@ -446,6 +446,100 @@ lancius_node* lancius_sum_axis_nd(lancius_graph* g, const lancius_node* a, uint3
     }
     return n;
 }
+/* R3-2 builders. Validation mirrors the forward ops so corrupt graphs fail
+ * at build, never silently at execution. */
+lancius_node* lancius_transpose_batched(lancius_graph* g, const lancius_node* a) {
+    if (!g || !a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (a->ndim != 3) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
+    if (lancius_validate_shape(a->shape, a->ndim) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
+    lancius_node* n = alloc_node(g, LANCIUS_OP_TRANSPOSE_BATCHED, 3, 1);
+    if (n) {
+        n->shape[0] = a->shape[0]; n->shape[1] = a->shape[2]; n->shape[2] = a->shape[1];
+        n->inputs[0] = a;
+    }
+    return n;
+}
+static int norm_bwd_shapes_ok(const lancius_node* grad, const lancius_node* x, const lancius_node* gamma, const lancius_node* beta_or_null) {
+    if (!grad || !x || !gamma) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return 0; }
+    if (grad->ndim != x->ndim || grad->ndim < 1 || grad->ndim > 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return 0; }
+    for (uint8_t i = 0; i < grad->ndim; i++) {
+        if (grad->shape[i] != x->shape[i]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
+    }
+    size_t total = 0, ge = 0;
+    if (!lancius_node_elements_checked(x, &total) || total == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return 0; }
+    if (!lancius_node_elements_checked(gamma, &ge) || ge == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
+    if (total % ge != 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
+    if (beta_or_null) {
+        size_t be = 0;
+        if (!lancius_node_elements_checked(beta_or_null, &be) || be != ge) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
+    }
+    return 1;
+}
+lancius_node* lancius_layernorm_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* x, const lancius_node* gamma, const lancius_node* beta) {
+    if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (!norm_bwd_shapes_ok(grad, x, gamma, beta)) return NULL;
+    lancius_node* n = alloc_node(g, LANCIUS_OP_LAYERNORM_BWD, x->ndim, 4);
+    if (n) {
+        memcpy(n->shape, x->shape, sizeof(size_t) * x->ndim);
+        n->inputs[0] = grad; n->inputs[1] = x; n->inputs[2] = gamma; n->inputs[3] = beta;
+    }
+    return n;
+}
+lancius_node* lancius_layernorm_bwd_gamma(lancius_graph* g, const lancius_node* grad, const lancius_node* x, const lancius_node* gamma) {
+    if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (!norm_bwd_shapes_ok(grad, x, gamma, NULL)) return NULL;
+    lancius_node* n = alloc_node(g, LANCIUS_OP_LAYERNORM_BWD_GAMMA, gamma->ndim, 3);
+    if (n) {
+        memcpy(n->shape, gamma->shape, sizeof(size_t) * gamma->ndim);
+        n->inputs[0] = grad; n->inputs[1] = x; n->inputs[2] = gamma;
+    }
+    return n;
+}
+lancius_node* lancius_layernorm_bwd_beta(lancius_graph* g, const lancius_node* grad, const lancius_node* beta) {
+    if (!g || !grad || !beta) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    size_t be = 0, ge = 0;
+    if (!lancius_node_elements_checked(beta, &be) || be == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    if (!lancius_node_elements_checked(grad, &ge) || ge == 0 || ge % be != 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    lancius_node* n = alloc_node(g, LANCIUS_OP_LAYERNORM_BWD_BETA, beta->ndim, 2);
+    if (n) {
+        memcpy(n->shape, beta->shape, sizeof(size_t) * beta->ndim);
+        n->inputs[0] = grad; n->inputs[1] = beta;
+    }
+    return n;
+}
+lancius_node* lancius_rmsnorm_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* x, const lancius_node* gamma) {
+    if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (!norm_bwd_shapes_ok(grad, x, gamma, NULL)) return NULL;
+    lancius_node* n = alloc_node(g, LANCIUS_OP_RMSNORM_BWD, x->ndim, 3);
+    if (n) {
+        memcpy(n->shape, x->shape, sizeof(size_t) * x->ndim);
+        n->inputs[0] = grad; n->inputs[1] = x; n->inputs[2] = gamma;
+    }
+    return n;
+}
+lancius_node* lancius_rmsnorm_bwd_gamma(lancius_graph* g, const lancius_node* grad, const lancius_node* x, const lancius_node* gamma) {
+    if (!g) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (!norm_bwd_shapes_ok(grad, x, gamma, NULL)) return NULL;
+    lancius_node* n = alloc_node(g, LANCIUS_OP_RMSNORM_BWD_GAMMA, gamma->ndim, 3);
+    if (n) {
+        memcpy(n->shape, gamma->shape, sizeof(size_t) * gamma->ndim);
+        n->inputs[0] = grad; n->inputs[1] = x; n->inputs[2] = gamma;
+    }
+    return n;
+}
+lancius_node* lancius_gelu_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* x) {
+    if (!g || !grad || !x) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (grad->ndim != x->ndim) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    for (uint8_t i = 0; i < grad->ndim; i++) {
+        if (grad->shape[i] != x->shape[i]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+    }
+    lancius_node* n = alloc_node(g, LANCIUS_OP_GELU_BWD, x->ndim, 2);
+    if (n) {
+        memcpy(n->shape, x->shape, sizeof(size_t) * x->ndim);
+        n->inputs[0] = grad; n->inputs[1] = x;
+    }
+    return n;
+}
 
 lancius_node* lancius_conv2d(lancius_graph* g, const lancius_node* in, const lancius_node* w, uint32_t stride, uint32_t pad) {
     if (!in || !w) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }

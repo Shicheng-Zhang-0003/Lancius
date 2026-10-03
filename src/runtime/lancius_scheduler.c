@@ -527,8 +527,6 @@ static void execute_node_math(lancius_node* n) {
     /* R3-1: N-dim reduction sorts after CONV2D, so like TANH/MSE it must
      * be handled before the vision-op router below (router rejects it). */
     else if (n->op == LANCIUS_OP_SUM_AXIS_ND) {
-        /* R3-1: generic single-axis reduction. out[i] = sum over axis extent
-         * of the corresponding input fiber. Row-major, checked counts. */
         if (!n->inputs || n->input_count < 1 || !n->inputs[0]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
         double* a = n->inputs[0]->runtime_data; if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         const lancius_node* in = n->inputs[0];
@@ -576,6 +574,84 @@ static void execute_node_math(lancius_node* n) {
             for (size_t k = 0; k < ax_extent; k++) s += a[base + k * in_str[axis]];
             n->runtime_data[o] = s;
         }
+    }
+    else if (n->op == LANCIUS_OP_TRANSPOSE_BATCHED) {
+        /* R3-2: 3D batched transpose [B,M,K] -> [B,K,M]. */
+        if (!n->inputs || n->input_count < 1 || !n->inputs[0]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
+        double* xa = n->inputs[0]->runtime_data; if (!xa || !n->runtime_data) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+        const lancius_node* xa_in = n->inputs[0];
+        if (xa_in->ndim != 3 || n->ndim != 3) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
+        size_t tB = xa_in->shape[0], tM = xa_in->shape[1], tK = xa_in->shape[2];
+        if (n->shape[0] != tB || n->shape[1] != tK || n->shape[2] != tM) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        for (size_t b = 0; b < tB; b++)
+            for (size_t k = 0; k < tK; k++)
+                for (size_t m = 0; m < tM; m++)
+                    n->runtime_data[(b * tK + k) * tM + m] = xa[(b * tM + m) * tK + k];
+        return;
+    }
+    else if (n->op == LANCIUS_OP_LAYERNORM_BWD || n->op == LANCIUS_OP_LAYERNORM_BWD_GAMMA ||
+             n->op == LANCIUS_OP_LAYERNORM_BWD_BETA || n->op == LANCIUS_OP_RMSNORM_BWD ||
+             n->op == LANCIUS_OP_RMSNORM_BWD_GAMMA || n->op == LANCIUS_OP_GELU_BWD) {
+        /* R3-2 norm/activation backwards. Instance split mirrors forward:
+         * hidden = gamma elems, instances = total / hidden. */
+        bool nln_dx = (n->op == LANCIUS_OP_LAYERNORM_BWD);
+        bool nln_g = (n->op == LANCIUS_OP_LAYERNORM_BWD_GAMMA);
+        bool nln_b = (n->op == LANCIUS_OP_LAYERNORM_BWD_BETA);
+        bool nrms_dx = (n->op == LANCIUS_OP_RMSNORM_BWD);
+        bool nrms_g = (n->op == LANCIUS_OP_RMSNORM_BWD_GAMMA);
+        uint32_t bwd_need = (nln_dx) ? 4 : ((nln_g || nrms_dx || nrms_g) ? 3 : 2);
+        if (!n->inputs || n->input_count < bwd_need) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
+        for (uint32_t bi = 0; bi < bwd_need; bi++) {
+            if (!n->inputs[bi]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
+        }
+        double* gd = n->inputs[0]->runtime_data;
+        if (!gd || !n->runtime_data) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+        if (n->op == LANCIUS_OP_GELU_BWD) {
+            double* xb = n->inputs[1]->runtime_data;
+            if (!xb) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+            size_t bwd_ge = 0, bwd_xe = 0;
+            if (!lancius_node_elements_checked(n->inputs[0], &bwd_ge) ||
+                !lancius_node_elements_checked(n->inputs[1], &bwd_xe) || bwd_ge != bwd_xe || bwd_ge == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+            kernel_gelu_bwd(n->runtime_data, gd, xb, bwd_ge);
+            return;
+        }
+        if (nln_b) {
+            size_t bwd_hidden = 0, bwd_total = 0;
+            if (!lancius_node_elements_checked(n->inputs[1], &bwd_hidden) || bwd_hidden == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+            if (!lancius_node_elements_checked(n->inputs[0], &bwd_total) || bwd_total == 0 || bwd_total % bwd_hidden != 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+            size_t bwd_oe = 0;
+            if (!lancius_node_elements_checked(n, &bwd_oe) || bwd_oe != bwd_hidden) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+            kernel_layernorm_bwd_beta(n->runtime_data, gd, bwd_total / bwd_hidden, bwd_hidden);
+            return;
+        }
+        double* xb = n->inputs[1]->runtime_data;
+        double* gam = n->inputs[2]->runtime_data;
+        if (!xb || !gam) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+        size_t bwd_hidden = 0, bwd_total = 0;
+        if (!lancius_node_elements_checked(n->inputs[2], &bwd_hidden) || bwd_hidden == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        if (!lancius_node_elements_checked(n->inputs[0], &bwd_total) || bwd_total == 0 || bwd_total % bwd_hidden != 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        {
+            size_t bwd_xe = 0;
+            if (!lancius_node_elements_checked(n->inputs[1], &bwd_xe) || bwd_xe != bwd_total) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        }
+        size_t bwd_ninst = bwd_total / bwd_hidden;
+        if (nln_dx || nrms_dx) {
+            /* dx carries the input shape (total elems). */
+            size_t bwd_oe = 0;
+            if (!lancius_node_elements_checked(n, &bwd_oe) || bwd_oe != bwd_total) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+            if (nln_dx) { kernel_layernorm_bwd(n->runtime_data, gd, xb, gam, bwd_ninst, bwd_hidden, LANCIUS_NORM_EPS); return; }
+            kernel_rmsnorm_bwd(n->runtime_data, gd, xb, gam, bwd_ninst, bwd_hidden, LANCIUS_NORM_EPS);
+            return;
+        }
+        /* Gamma outputs carry hidden elems in gamma's own shape. */
+        {
+            size_t bwd_oe = 0;
+            if (!lancius_node_elements_checked(n, &bwd_oe) || bwd_oe != bwd_hidden) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        }
+        if (nln_g) { kernel_layernorm_bwd_gamma(n->runtime_data, gd, xb, gam, bwd_ninst, bwd_hidden, LANCIUS_NORM_EPS); return; }
+        if (nrms_g) { kernel_rmsnorm_bwd_gamma(n->runtime_data, gd, xb, gam, bwd_ninst, bwd_hidden, LANCIUS_NORM_EPS); return; }
+        lancius_set_error(LANCIUS_ERROR_INTERNAL);
+        return;
     }
 
     if (n->op >= LANCIUS_OP_CONV2D) { lancius_execute_vision_op(n); return; }
