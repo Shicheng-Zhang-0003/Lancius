@@ -23,7 +23,9 @@ src/train/lancius_train.c \
 src/runtime/lancius_sandbox.c
 
 OBJS = $(SRCS:.c=.o)
--include $(OBJS:.o=.d)
+# Default goal must precede any -include: depfiles define %-targets that
+# would otherwise hijack the default goal (bare `make` built only arena.o).
+.DEFAULT_GOAL := all
 all: liblancius.a lancius audit_internals stress_test test_torture train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_despot_probe train_verifier_head distill_prm800k audit_train_lib audit_sandbox train_micromodel eval_verifier
 lancius: examples/lancius_cli.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
@@ -230,3 +232,7 @@ eval_verifier: examples/eval_verifier.c liblancius.a
 
 audit_fault_injection: examples/audit_fault_injection.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
+
+# Dependency tracking (must trail all explicit targets so included
+# depfiles never become the default goal).
+-include $(OBJS:.o=.d)

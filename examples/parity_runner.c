@@ -4,8 +4,9 @@
 
 int main() {
     printf("  [C] Loading pytorch_lenet.lancius...\n");
+    lancius_clear_error();
     lancius_graph* g = lancius_graph_load("pytorch_lenet.lancius");
-    if(!g) { printf("  [C] FATAL: Failed to load model.\n"); return 1; }
+    if(!g) { printf("  [C] FATAL: Failed to load model (err=%d: %s).\n", (int)lancius_get_error(), lancius_error_string(lancius_get_error())); return 1; }
 
     // Find Input (4D) and Output (2D, 10 classes)
     lancius_node* in_node = NULL;

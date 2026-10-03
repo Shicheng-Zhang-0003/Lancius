@@ -29,7 +29,8 @@ VERSION_V2 = 2
 HEADER_FMT = '<8IQ2I'
 NODE_FMT = '<IIB4QId4I4I3BdQ'
 NODE_SIZE = struct.calcsize(NODE_FMT)
-assert NODE_SIZE == 104, NODE_SIZE
+if NODE_SIZE != 104:
+    raise ValueError(f"v2 node layout drift: got {NODE_SIZE}, want 104")
 
 DTYPE_ELEM = {0: 8, 1: 1, 2: 4, 3: 4}
 
