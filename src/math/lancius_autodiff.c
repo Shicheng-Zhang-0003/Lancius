@@ -108,9 +108,12 @@ static int accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_in
             new_grad = b;
         } else {
             /* Broadcast-compatible partial reduction (e.g. [1,2,1,4] vs
-             * [3,2,5,4]) needs per-axis N-dim sums the IR cannot yet express.
-             * Fail loud instead of inserting a wrong-shaped gradient. */
+             * [3,2,5,4]). R3-1: reducible per axis via SUM_AXIS_ND.
+             * d_input = sum over every axis where input dim == 1 and
+             * grad dim > 1 (trailing-rank aligned); leading extra grad
+             * dims reduce first, then reshape back to input rank. */
             uint8_t nd_g = new_grad->ndim, nd_in = full_input->ndim;
+            if (nd_g < 1 || nd_g > 4 || nd_in < 1 || nd_in > 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return 0; }
             uint8_t nd = (nd_g > nd_in) ? nd_g : nd_in;
             bool compat = true;
             for (uint8_t i = 0; i < nd; i++) {
@@ -122,14 +125,35 @@ static int accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_in
                 if (dg == 0 || di == 0) { compat = false; break; }
             }
             if (!compat) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
-            /* Compatible but shapes differ => needs N-dim axis sums. No silent drop. */
-            bool same = (nd_g == nd_in);
+            /* Reduce, leftmost axis first (axes stay valid: rank kept).
+             * Grad axis a aligns trailing-rank with input axis
+             * ii = a + nd_in - nd_g (negative => leading extra grad dim). */
+            lancius_node* red = new_grad;
+            for (uint8_t a = 0; a < nd_g; a++) {
+                int ii = (int)a + (int)nd_in - (int)nd_g;
+                size_t di = (ii < 0 || ii >= (int)nd_in) ? 1 : full_input->shape[ii];
+                if (di == 1 && red->shape[a] > 1) {
+                    red = lancius_sum_axis_nd(g, red, a);
+                    if (!red) { lancius_set_error(LANCIUS_ERROR_INTERNAL); return 0; }
+                }
+            }
+            /* Drop reduced leading dims when grad outranks input. */
+            if (nd_g > nd_in) {
+                size_t s[4] = {1,1,1,1};
+                for (uint8_t i = 0; i < nd_in; i++) s[i] = full_input->shape[i];
+                lancius_node* rs = lancius_reshape(g, red, nd_in, s[0], s[1], s[2], s[3]);
+                if (!rs) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
+                red = rs;
+            }
+            /* Verify the reduction landed exactly on the input shape. */
+            bool same = (red->ndim == full_input->ndim);
             if (same) {
-                for (uint8_t i = 0; i < nd_g; i++) {
-                    if (new_grad->shape[i] != full_input->shape[i]) { same = false; break; }
+                for (uint8_t i = 0; i < red->ndim; i++) {
+                    if (red->shape[i] != full_input->shape[i]) { same = false; break; }
                 }
             }
             if (!same) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return 0; }
+            new_grad = red;
         }
     }
 
@@ -214,6 +238,7 @@ break;
             case LANCIUS_OP_SUM: n = lancius_sum(tg->graph, in0); break;
             case LANCIUS_OP_SUM_AXIS0: n = lancius_sum_axis0(tg->graph, in0); break;
             case LANCIUS_OP_SUM_AXIS1: n = lancius_sum_axis1(tg->graph, in0); break;
+            case LANCIUS_OP_SUM_AXIS_ND: n = lancius_sum_axis_nd(tg->graph, in0, old->axes[0]); break;
             case LANCIUS_OP_BROADCAST: {
                 size_t s[4] = {1,1,1,1};
                 for (uint8_t _i = 0; _i < old->ndim && _i < 4; _i++) s[_i] = old->shape[_i];
@@ -685,10 +710,27 @@ break;
                             cur_shape[2] = 1;
                         }
                     } else {
-                        lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
-                        free(grad_map); free(fwd_to_full);
-                        lancius_graph_destroy(tg->graph); free(tg);
-                        return NULL;
+                        /* R3-1: general N-dim axis (ndim 1, 3, or any future
+                         * rank): reduce each broadcast axis directly. */
+                        if (!grad || grad->ndim != fwd_n->ndim) {
+                            lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
+                            free(grad_map); free(fwd_to_full);
+                            lancius_graph_destroy(tg->graph); free(tg);
+                            return NULL;
+                        }
+                        for (int d = (int)fwd_n->ndim - 1; d >= 0; d--) {
+                            if (in_shape[d] == 1 && out_shape[d] > 1) {
+                                lancius_node* r = lancius_sum_axis_nd(tg->graph, grad, (uint32_t)d);
+                                if (!r) {
+                                    lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                                    free(grad_map); free(fwd_to_full);
+                                    lancius_graph_destroy(tg->graph); free(tg);
+                                    return NULL;
+                                }
+                                grad = r;
+                                cur_shape[d] = 1;
+                            }
+                        }
                     }
                     if (!grad) {
                         lancius_set_error(LANCIUS_ERROR_INTERNAL);
@@ -802,6 +844,24 @@ break;
                 return NULL;
             }
             lancius_node* b = lancius_broadcast(tg->graph, grad_out, full_input->shape[0], full_input->shape[1]);
+            if (!b) {
+                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, b, fwd_to_full);
+        } else if (fwd_n->op == LANCIUS_OP_SUM_AXIS_ND) {
+            /* R3-1: y = sum_axis_nd(x, a); dy/dx broadcasts grad over axis a.
+             * Exact: d_input[i] = grad_out[proj(i)]. */
+            lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
+            if (!full_input || full_input->ndim < 1 || full_input->ndim > 4) {
+                lancius_set_error(LANCIUS_ERROR_INVALID_RANK);
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
+            lancius_node* b = lancius_broadcast_to_shape(tg->graph, grad_out, full_input->shape, full_input->ndim);
             if (!b) {
                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
                 free(grad_map); free(fwd_to_full);

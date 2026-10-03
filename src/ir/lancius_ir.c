@@ -429,6 +429,23 @@ lancius_node* lancius_sum_axis1(lancius_graph* g, const lancius_node* a) {
     lancius_node* n = alloc_node(g, LANCIUS_OP_SUM_AXIS1, 2, 1);
     if (n) { n->shape[0] = a->shape[0]; n->shape[1] = 1; n->inputs[0] = a; } return n;
 }
+/* R3-1: per-axis N-dim reduction. Keeps rank (reduced dim -> 1) so the
+ * result composes with broadcast/reshape without rank juggling. Axis is
+ * stored in axes[0] so v2 persistence round-trips it. */
+lancius_node* lancius_sum_axis_nd(lancius_graph* g, const lancius_node* a, uint32_t axis) {
+    if (!g || !a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }
+    if (a->ndim < 1 || a->ndim > 4) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return NULL; }
+    if (axis >= a->ndim) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return NULL; }
+    if (lancius_validate_shape(a->shape, a->ndim) != LANCIUS_ERROR_OK) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
+    lancius_node* n = alloc_node(g, LANCIUS_OP_SUM_AXIS_ND, a->ndim, 1);
+    if (n) {
+        for (uint8_t i = 0; i < a->ndim; i++) n->shape[i] = a->shape[i];
+        n->shape[axis] = 1;
+        n->axes[0] = axis;
+        n->inputs[0] = a;
+    }
+    return n;
+}
 
 lancius_node* lancius_conv2d(lancius_graph* g, const lancius_node* in, const lancius_node* w, uint32_t stride, uint32_t pad) {
     if (!in || !w) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return NULL; }

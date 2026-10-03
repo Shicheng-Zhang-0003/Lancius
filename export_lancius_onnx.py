@@ -45,6 +45,7 @@ OP_NAMES = {
     30: 'GELU', 31: 'ROPE', 32: 'ATTENTION', 33: 'KV_CACHE_READ',
     34: 'KV_CACHE_WRITE', 35: 'RMSNORM', 36: 'SWIGLU', 37: 'GQA',
     38: 'TANH', 39: 'TANH_BWD', 40: 'MSE', 41: 'MSE_BWD',
+    42: 'SUM_AXIS_ND',
 }
 
 

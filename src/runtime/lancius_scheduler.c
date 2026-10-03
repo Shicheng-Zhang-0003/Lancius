@@ -524,6 +524,59 @@ static void execute_node_math(lancius_node* n) {
         for (size_t k = 0; k < pe; k++) n->runtime_data[k] = scale * (p[k] - t[k]);
         return;
     }
+    /* R3-1: N-dim reduction sorts after CONV2D, so like TANH/MSE it must
+     * be handled before the vision-op router below (router rejects it). */
+    else if (n->op == LANCIUS_OP_SUM_AXIS_ND) {
+        /* R3-1: generic single-axis reduction. out[i] = sum over axis extent
+         * of the corresponding input fiber. Row-major, checked counts. */
+        if (!n->inputs || n->input_count < 1 || !n->inputs[0]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
+        double* a = n->inputs[0]->runtime_data; if (!a) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+        const lancius_node* in = n->inputs[0];
+        if (in->ndim < 1 || in->ndim > 4 || n->ndim != in->ndim) { lancius_set_error(LANCIUS_ERROR_INVALID_RANK); return; }
+        uint32_t axis = n->axes[0];
+        if (axis >= in->ndim) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+        for (uint8_t i = 0; i < in->ndim; i++) {
+            size_t want = (i == axis) ? 1 : in->shape[i];
+            if (n->shape[i] != want) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+        }
+        size_t in_elems = 0, out_elems = 0;
+        if (!lancius_node_elements_checked(in, &in_elems) || in_elems == 0) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
+        if (!lancius_node_elements_checked(n, &out_elems) || out_elems == 0) { lancius_set_error(LANCIUS_ERROR_LIMIT); return; }
+        /* Row-major strides with overflow guards. */
+        size_t in_str[4] = {0,0,0,0}, out_str[4] = {0,0,0,0};
+        in_str[in->ndim - 1] = 1;
+        for (int i = (int)in->ndim - 2; i >= 0; i--) {
+            size_t d = in->shape[i + 1];
+            if (d != 0 && in_str[i + 1] > SIZE_MAX / d) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+            in_str[i] = in_str[i + 1] * d;
+        }
+        out_str[n->ndim - 1] = 1;
+        for (int i = (int)n->ndim - 2; i >= 0; i--) {
+            size_t d = n->shape[i + 1];
+            if (d != 0 && out_str[i + 1] > SIZE_MAX / d) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+            out_str[i] = out_str[i + 1] * d;
+        }
+        size_t ax_extent = in->shape[axis];
+        if (ax_extent == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+        if (out_elems > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        memset(n->runtime_data, 0, out_elems * sizeof(double));
+        /* Strides are overflow-safe here: every partial product divides the
+         * validated in_elems/out_elems totals (<=100M), and every dim >= 1
+         * (zero-element tensors rejected above). */
+        #pragma omp parallel for schedule(static)
+        for (size_t o = 0; o < out_elems; o++) {
+            size_t rem = o;
+            size_t base = 0;
+            for (uint8_t i = 0; i < n->ndim; i++) {
+                size_t coord = rem / out_str[i];
+                rem %= out_str[i];
+                base += coord * in_str[i];
+            }
+            double s = 0.0;
+            for (size_t k = 0; k < ax_extent; k++) s += a[base + k * in_str[axis]];
+            n->runtime_data[o] = s;
+        }
+    }
 
     if (n->op >= LANCIUS_OP_CONV2D) { lancius_execute_vision_op(n); return; }
 

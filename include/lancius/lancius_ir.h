@@ -35,7 +35,11 @@ typedef enum {
     LANCIUS_OP_TANH,
     LANCIUS_OP_TANH_BWD,
     LANCIUS_OP_MSE,
-    LANCIUS_OP_MSE_BWD
+    LANCIUS_OP_MSE_BWD,
+    /* R3-1: per-axis N-dim reduction. Appended; all prior ids unchanged.
+     * Forward-only (like SUM_AXIS0/1); its VJP broadcasts back. This closes
+     * the N-dim partial-broadcast training hole (was: fail loud). */
+    LANCIUS_OP_SUM_AXIS_ND
 } lancius_opcode;
 
 typedef struct lancius_node {
@@ -201,6 +205,9 @@ lancius_node* lancius_mse(lancius_graph* g, const lancius_node* pred, const lanc
 lancius_node* lancius_mse_bwd(lancius_graph* g, const lancius_node* pred, const lancius_node* target, const lancius_node* grad);
 lancius_node* lancius_sum_axis0(lancius_graph* g, const lancius_node* a);
 lancius_node* lancius_sum_axis1(lancius_graph* g, const lancius_node* a);
+/* R3-1: reduce along one axis of a 1..4-D tensor (axis dim -> 1, rank kept).
+ * Axis persists in n->axes[0]. Forward-only; VJP broadcasts back. */
+lancius_node* lancius_sum_axis_nd(lancius_graph* g, const lancius_node* a, uint32_t axis);
 lancius_node* lancius_cross_entropy(lancius_graph* g, const lancius_node* logits, const lancius_node* targets);
 lancius_node* lancius_permute(lancius_graph* g, const lancius_node* in, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
 lancius_node* lancius_matmul_batched(lancius_graph* g, const lancius_node* a, const lancius_node* b);
