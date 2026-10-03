@@ -35,6 +35,7 @@ audit_train_lib
 audit_sandbox
 audit_sum_axis_nd
 audit_train_bwd
+audit_train_converge
 train_micromodel
 eval_verifier
 

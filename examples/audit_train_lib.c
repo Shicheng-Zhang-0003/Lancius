@@ -96,6 +96,36 @@ int main(void) {
         CHECK(x == 0.0 && lancius_get_error() != LANCIUS_ERROR_OK, "clip NULL sets error");
         lancius_clear_error();
     }
+    /* R3-3 global-norm clip: [3,4]+[6,8] total=sqrt(9+16+36+64)=sqrt(125),
+     * max=sqrt(125)/5 -> scale 0.2. Returns old norm, scales all arrays. */
+    {
+        double g1[2] = {3.0, 4.0};
+        double g2[2] = {6.0, 8.0};
+        double* gs[2] = {g1, g2};
+        size_t ns[2] = {2, 2};
+        double want = sqrt(125.0);
+        double old = lancius_clip_global_norm(gs, ns, 2, want / 5.0);
+        CHECK(dbl_eq(old, want, 1e-9), "global clip returns old norm");
+        CHECK(dbl_eq(g1[0], 0.6, 1e-9) && dbl_eq(g1[1], 0.8, 1e-9) &&
+              dbl_eq(g2[0], 1.2, 1e-9) && dbl_eq(g2[1], 1.6, 1e-9), "global clip scales all");
+        /* No-clip path: total under max untouched. */
+        {
+            double h1[1] = {1.0}, h2[1] = {0.0};
+            double* hs[2] = {h1, h2};
+            size_t ms[2] = {1, 1};
+            double o2 = lancius_clip_global_norm(hs, ms, 2, 5.0);
+            CHECK(dbl_eq(o2, 1.0, 1e-12) && dbl_eq(h1[0], 1.0, 1e-12), "global clip no-op under max");
+        }
+        /* NULL safety + empty set. */
+        {
+            lancius_clear_error();
+            double z = lancius_clip_global_norm(NULL, ns, 2, 1.0);
+            CHECK(z == 0.0 && lancius_get_error() != LANCIUS_ERROR_OK, "global clip NULL sets error");
+            lancius_clear_error();
+            double e = lancius_clip_global_norm(gs, ns, 0, 1.0);
+            CHECK(e == 0.0, "global clip empty no-op");
+        }
+    }
     /* Loss monotonicity: quadratic 0.5*w^2, SGD lr=0.1 from w=1 -> decreases */
     {
         double w = 1.0, prev = 0.5 * w * w;

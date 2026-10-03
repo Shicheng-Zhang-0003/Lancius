@@ -131,6 +131,49 @@ double lancius_clip_grad_norm(double *g, size_t n, double max_norm)
     return norm;
 }
 
+double lancius_clip_global_norm(double **gs, const size_t *ns, size_t ntensors,
+                                 double max_norm)
+{
+    double sum = 0.0;
+    double norm;
+    size_t t, i;
+
+    if (ntensors == 0) {
+        return 0.0;
+    }
+    if (gs == NULL || ns == NULL) {
+        lancius_set_error(LANCIUS_ERROR_NULL_PTR);
+        return 0.0;
+    }
+    for (t = 0; t < ntensors; ++t) {
+        if (gs[t] == NULL && ns[t] != 0) {
+            lancius_set_error(LANCIUS_ERROR_NULL_PTR);
+            return 0.0;
+        }
+        for (i = 0; i < ns[t]; ++i) {
+            sum += gs[t][i] * gs[t][i];
+        }
+    }
+    norm = sqrt(sum);
+    if (!isfinite(max_norm) || !(max_norm > 0.0)) {
+        lancius_set_error(LANCIUS_ERROR_NUMERICAL);
+        return norm;
+    }
+    /* Never rescale zero / NaN / Inf totals: honest no-op. */
+    if (!isfinite(norm) || !(norm > 0.0)) {
+        return norm;
+    }
+    if (norm > max_norm) {
+        double scale = max_norm / norm;
+        for (t = 0; t < ntensors; ++t) {
+            for (i = 0; i < ns[t]; ++i) {
+                gs[t][i] *= scale;
+            }
+        }
+    }
+    return norm;
+}
+
 double lancius_lr_cosine(int step, int total, double lr_max, double lr_min)
 {
     double progress;

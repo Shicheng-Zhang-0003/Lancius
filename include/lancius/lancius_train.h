@@ -27,6 +27,14 @@ void lancius_adamw_step(double *w, double *m, double *v, const double *g, size_t
 /* Scales g in place iff norm > max_norm. Returns old (pre-scale) norm. */
 double lancius_clip_grad_norm(double *g, size_t n, double max_norm);
 
+/* R3-3 global-norm clip over ntensors gradient arrays: total norm
+ * sqrt(sum ||g_i||^2); scales every array in place iff total > max_norm.
+ * Returns old total norm. Same contract: no alloc/abort, NULL-safe
+ * (NULL array or ns with valid ntensors sets error, returns 0.0),
+ * ntensors == 0 is a no-op returning 0.0, NaN/Inf never rescaled. */
+double lancius_clip_global_norm(double **gs, const size_t *ns, size_t ntensors,
+                                 double max_norm);
+
 /* lr_min + 0.5*(lr_max-lr_min)*(1+cos(pi*step/total)), step clamped to [0,total]. */
 double lancius_lr_cosine(int step, int total, double lr_max, double lr_min);
 
