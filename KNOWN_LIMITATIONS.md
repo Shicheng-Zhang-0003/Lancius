@@ -89,13 +89,22 @@ and do NOT abort.
 -   Broadcast follows trailing-rank (NumPy) semantics for `ADD`/`SUB`/`MUL`;
     incompatible shapes are rejected, never read out of bounds.
 -   Autodiff: `SUM` (any 1..4-D via `broadcast_to_shape`), `SUM_AXIS0/1`,
-    `RESHAPE` VJPs exact. N-dim partial broadcast reduction (e.g.
-    `[2,1,4]` vs `[2,3,4]`) has no `SUM_AXIS_ND` op yet and **fails loud**
-    (returns NULL) instead of training as zero. Transformer and
-    `MATMUL_BATCHED` backward fail loud. BROADCAST backward now correctly
-    reduces over broadcast dimensions. See `docs/DESPOT_TRUTH_V2.md`.
+    `SUM_AXIS_ND` (any axis, any 1..4-D), `RESHAPE` VJPs exact. N-dim
+    partial broadcast reduction (e.g. `[2,1,4]` vs `[2,3,4]`) reduces per
+    axis via `SUM_AXIS_ND` (was fail-loud). `MATMUL_BATCHED` backward is
+    exact via the batched transpose. `GELU`/`LayerNorm`/`RMSNorm` backward
+    exact incl. gamma/beta grads (finite-diff ~1e-9..1e-11). Transformer
+    attention/GQA/SwiGLU/RoPE backward still **fails loud** (returns NULL)
+    instead of training as zero — staged scope, not silent. BROADCAST
+    backward reduces over broadcast dimensions. See
+    `docs/DESPOT_TRUTH_V2.md`.
 -   GELU is tanh-approx (GPT-2/BERT variant, ~2e-3 vs erf-exact), not erf-exact.
 -   Norm eps pinned to `LANCIUS_NORM_EPS=1e-5`; not per-node tunable.
+-   Optimizer moments are caller-owned arrays (the train lib is stateless:
+    no alloc/I/O by contract); weight checkpoints persist via v2 models
+    and resume bit-consistently (`audit_train_converge` proves resume
+    matches uninterrupted 1e-9). Global-norm clipping covers multi-tensor
+    grad lists; per-tensor clip unchanged.
 -   Trainers exit 1 on raw `NaN/>1000/<0` and on accuracy ≤ chance (10%);
     `make check` does not run `train_mnist/cifar10` (green says nothing
     about their convergence); LR parity across PyTorch/C batch/scale gaps

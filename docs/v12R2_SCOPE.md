@@ -103,6 +103,29 @@ install verification.
 Gate: FP32-vs-FP64 parity audit; CLI runs a vendored micromodel end to
 end; downstream binding builds against installed headers only.
 
+### R2-7 · N-dim training completeness (the broadcast hole)
+
+`SUM_AXIS_ND` (id 42): per-axis reduction for any 1..4-D tensor, closing
+the N-dim partial-broadcast fail-loud (e.g. `[2,1,4]` vs `[2,3,4]`).
+Gate: values 1..4-D, 2D equivalence, bad-axis reject, v2 roundtrip, 3D
+exact grads, finite-diff (`audit_sum_axis_nd` in `make check`).
+
+### R2-8 · Norm/activation/batched backwards (affine params train)
+
+Batched transpose (id 43, forward + persistable) unlocks `MATMUL_BATCHED`
+backward; dedicated `LAYERNORM_BWD[_GAMMA,_BETA]` (44..46),
+`RMSNORM_BWD[_GAMMA]` (47..48), `GELU_BWD` (49) with pre-router
+executors. Attention/GQA/SwiGLU/RoPE backward stays fail-loud (staged).
+Gate: finite-diff ~1e-9..1e-11 per VJP incl. gamma/beta
+(`audit_train_bwd` in `make check`).
+
+### R2-9 · Convergence + determinism + checkpoint honesty
+
+`lancius_clip_global_norm` multi-tensor clip; `audit_train_converge` in
+`make check`: 2-4-1 tanh XOR through graph+autodiff+SGD solves 4/4,
+same-seed rerun agrees 1e-12, v2 checkpoint at half-time resumes to the
+same loss 1e-9. Moments stay caller-owned (stateless-lib contract).
+
 ## Extended boolean model — specification (models-side)
 
 Value space $V = [-1,1] \cup \{\bot\}$, $\bot$ wire-encoded as $-2$,

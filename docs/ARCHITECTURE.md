@@ -44,7 +44,9 @@ count. Every hot path returns errors (`OOM/OVERFLOW/NUMERICAL/SHAPE_MISMATCH`)
 instead of aborting or emitting silent values. The despot truth batch V2
 closed the last silent-drop paths (see `docs/DESPOT_TRUTH_V2.md`).
 Hardening batches V4 and V5 extended this to threadpool, IR, examples,
-and Python tooling. Despot audit V7 (2026-10-03) closed the remaining
+and Python tooling. R3 training-wrap adds per-axis N-dim reduction, batched transpose,
+and norm/activation backwards (all pre-router executors, all fail-loud
+outside scope). Despot audit V7 (2026-10-03) closed the remaining
 silent-success paths: OpenMP worker errors, save/KV/VM/pool error
 channels, grad-shape guards, per-channel refuse, stable-handle magic.
 
