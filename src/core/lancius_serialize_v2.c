@@ -343,7 +343,7 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
         if (rn.input_count > 16u) goto fail;
         if (rn.weight_elems > 100000000ull) goto fail;
         if (!lancius_dtype_is_valid(rn.dtype)) goto fail;
-        if (rn.op > LANCIUS_MODEL_OP_MSE_BWD) goto fail;
+        if (rn.op > LANCIUS_MODEL_OP_SUM_AXIS_ND) goto fail;
         if (rn.dtype != LANCIUS_DTYPE_FP64 && rn.dtype != LANCIUS_DTYPE_INT8 && rn.dtype != LANCIUS_DTYPE_FP32) goto fail;
         // Hostile fix: bound sparse id (DoS via 10M-pointer realloc + O(n^2))
         if (rn.id >= 10000000u) goto fail;
@@ -467,6 +467,12 @@ break;
 
             case LANCIUS_MODEL_OP_SUM_AXIS1:
                 n = lancius_sum_axis1(g, in0);
+                break;
+
+            case LANCIUS_MODEL_OP_SUM_AXIS_ND:
+                /* R3-1: axis persisted in axes[0]; builder validates. */
+                if (rn.axes[0] >= 4u) goto fail;
+                n = lancius_sum_axis_nd(g, in0, rn.axes[0]);
                 break;
 
             case LANCIUS_MODEL_OP_CONV2D:

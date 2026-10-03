@@ -88,7 +88,9 @@ typedef enum {
     LANCIUS_MODEL_OP_TANH = 38,
     LANCIUS_MODEL_OP_TANH_BWD = 39,
     LANCIUS_MODEL_OP_MSE = 40,
-    LANCIUS_MODEL_OP_MSE_BWD = 41
+    LANCIUS_MODEL_OP_MSE_BWD = 41,
+    /* R3-1: appended; prior ids unchanged. Axis persists in node axes[0]. */
+    LANCIUS_MODEL_OP_SUM_AXIS_ND = 42
 } lancius_model_op;
 
 /*

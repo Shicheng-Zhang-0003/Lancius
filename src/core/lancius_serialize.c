@@ -216,7 +216,7 @@ lancius_graph* lancius_graph_load(const char* path) {
 
         if (fread(&op, sizeof(uint32_t), 1, f) != 1) goto fail;
         op = ser_from_le32(op);
-        if (op > LANCIUS_OP_MSE_BWD) goto fail;
+        if (op > LANCIUS_OP_SUM_AXIS_ND) goto fail;
         if (fread(&ndim, sizeof(uint8_t), 1, f) != 1) goto fail;
         if (ndim == 0 || ndim > 4) goto fail;
         /* v12R1 fix: shape read as fixed-width uint64_t (was native size_t). */
