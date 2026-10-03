@@ -1,5 +1,42 @@
 # Lancius Changelog
 
+## despot audit V8 (2026-10-03) — external-truth re-audit
+
+Same audit as V7, re-proven against live external sources (not repo lore):
+NumPy/PyTorch oracles, ONNX spec, C11/POSIX/OpenMP/CMake/Python docs,
+plus independent re-execution of every AI-output claim. 8 confirmed
+defects, all fixed and re-proven by `make clean && make -j && make check`
++ `check-sanitizers` + `audit_pytorch_parity.py` green (`3.42e-07`).
+
+- Math: `conv2d_bwd` builder + executor verify grad `[N,C_out,eH,eW]`
+  incl. grad-C vs weight-C_out (was silent wrong-channel + OOB; V7 had
+  closed bwd_w/maxpool_bwd, this hole remained).
+- Programming: stable tensor handles are magic-tagged wrappers borrowed
+  from their graph (were raw `node*`, any forged pointer derefed);
+  wrong-type/stale wrappers return `INVALID_HANDLE`; graph destroy
+  invalidates + frees all wrappers. ONNX Reshape honors `allowzero`
+  (explicit-0 raises; 0+-1 mix raises). `export_lancius_onnx.py`
+  layout guard is `raise ValueError` (was `assert`, stripped under -O).
+  Makefile sets `.DEFAULT_GOAL := all` with depfiles trailed last (bare
+  `make` built only `arena.o` after any clean build — incremental builds
+  were silently stale for all later edits).
+- Converter truth (parity was RED): Reshape shape tensors no longer
+  emitted as 1D INPUTs (loader rejects 1D by design); Reshape carries
+  data-input only; Relu/Add/Flatten/MatMul ndim follows data rank (2D
+  RELU was emitted 4D). Fresh LeNet converts 21 nodes (was 22 with
+  helper), loads OK, parity `3.42e-07` bit-for-bit the documented value.
+  `parity_runner` + `lancius info` print `(err=N: string)` on reject.
+- AI outputs: `train_micromodel` is feat-agnostic (`feat=xn/tn`, any
+  1..64; 16-dim distill bins load `32 rows x 16`, loss falls; rejections
+  say shape-rejected vs not-found honestly); synthetic stays 8-dim with
+  `0.291094->0.000010` endpoints. `eval_verifier` De Morgan is a real
+  check (`max(-a,-b)` independently + distinct-input case).
+- Proven: `make check` green from clean tree; `check-sanitizers` green;
+  parity `3.42e-07`; micromodel synthetic + 16-dim both fall;
+  `allowzero=1` + `0+-1` both raise; no `assert` in exporter/bridge/
+  converter guards.
+
+
 ## despot audit V7 (2026-10-03) — math, programming, operational truth
 
 Hostile formula-by-formula, line-by-line audit of the entire system.

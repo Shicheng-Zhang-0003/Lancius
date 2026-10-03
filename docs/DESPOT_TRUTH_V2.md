@@ -258,3 +258,17 @@ sources; `make check` green from clean tree; version grep shows no stale
 `v12R1`-as-current (except frozen history under `docs/v11A*`,
 `docs/releases/`, `CHANGELOG.md` history sections which are intentionally
 historical).
+
+## 14. Despot audit V8 (2026-10-03) — external-truth re-audit
+
+Every V7 claim re-derived from outside the repo: stable-softmax/CE vs
+max-sub/log-sum-exp oracles, LayerNorm/RMSNorm/GELU/RoPE/attention/GQA
+vs published formulas, INT8/broadcast/conv/optimizer vs NumPy/PyTorch,
+`_Thread_local`/mkstemp+fsync/ftello/OpenMP/`assert`/IEEE-754 vs
+C11/POSIX/spec docs, CMake train-glob via fresh configure, ONNX Reshape
+`allowzero` vs live spec, distill/micromodel/eval/grad/parity/gates by
+independent re-execution. Findings: conv_bwd grad hole, tensor-handle
+magic gap, allowzero gap, exporter assert, makefile default-goal hijack,
+converter 1D-helper + ndim lies (parity RED), micromodel FEAT gap, eval
+tautology. All closed above; parity re-measured `3.42e-07` (not marked
+RED — the bug was the converter, the number reproduces exactly).
