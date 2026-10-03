@@ -76,21 +76,41 @@ LANCIUS_EXPORT const char* lancius_get_error_string(lancius_status err) {
 }
 
 typedef struct {
+    uint32_t magic;
     lancius_arena* arena;
 } lancius_context_internal;
 
 // V1.0 FIX: Wrap the graph with its execution state (scratch arena & schedule)
 // This prevents the dangling pointer segfault when reading outputs!
 typedef struct {
+    uint32_t magic;
     lancius_graph* g;
     lancius_arena* scratch;
     lancius_schedule* sched;
 } lancius_graph_internal;
 
+/* Despot audit: stable handles were raw casts with NULL-check only, so a
+ * stale / wrong-graph / destroyed-graph pointer passed validation.
+ * Magic tags make cross-type and use-after-destroy misuse fail loud
+ * with INVALID_HANDLE instead of corrupting memory. */
+#define LANCIUS_CTX_MAGIC 0xC7A9C7A9u
+#define LANCIUS_GRAPH_MAGIC 0x6A9A6A9Au
+
+static int ctx_valid(lancius_context ctx) {
+    if (!ctx) return 0;
+    return ((const lancius_context_internal*)ctx)->magic == LANCIUS_CTX_MAGIC;
+}
+
+static int graph_valid(lancius_graph_handle g) {
+    if (!g) return 0;
+    return ((const lancius_graph_internal*)g)->magic == LANCIUS_GRAPH_MAGIC;
+}
+
 LANCIUS_EXPORT lancius_context lancius_create_context(void) {
     set_error(LANCIUS_OK);
     lancius_context_internal* ctx = (lancius_context_internal*)malloc(sizeof(lancius_context_internal));
     if (!ctx) { set_error(LANCIUS_ERR_OOM); return NULL; }
+    ctx->magic = LANCIUS_CTX_MAGIC;
     ctx->arena = lancius_arena_create(64 * 1024 * 1024); // 64MB default scratch
     if (!ctx->arena) { free(ctx); set_error(LANCIUS_ERR_OOM); return NULL; }
     set_error(LANCIUS_OK);
@@ -101,13 +121,15 @@ LANCIUS_EXPORT void lancius_destroy_context(lancius_context ctx) {
     set_error(LANCIUS_OK);
     if (!ctx) return;
     lancius_context_internal* internal = (lancius_context_internal*)ctx;
+    if (internal->magic != LANCIUS_CTX_MAGIC) { set_error(LANCIUS_ERR_INVALID_HANDLE); return; }
+    internal->magic = 0;
     if (internal->arena) lancius_arena_destroy(internal->arena);
     free(internal);
 }
 
 LANCIUS_EXPORT lancius_graph_handle lancius_graph_create_stable(lancius_context ctx) {
     set_error(LANCIUS_OK);
-    if (!ctx) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
+    if (!ctx_valid(ctx)) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
 
     lancius_graph_internal* wrapper = (lancius_graph_internal*)malloc(sizeof(lancius_graph_internal));
     if (!wrapper) { set_error(LANCIUS_ERR_OOM); return NULL; }
@@ -120,6 +142,7 @@ LANCIUS_EXPORT lancius_graph_handle lancius_graph_create_stable(lancius_context 
      * NULL scratch, crashing later in schedule_execute. */
     if (!wrapper->scratch) { lancius_graph_destroy(wrapper->g); free(wrapper); set_error(LANCIUS_ERR_OOM); return NULL; }
     wrapper->sched = NULL;
+    wrapper->magic = LANCIUS_GRAPH_MAGIC;
 
     set_error(LANCIUS_OK);
     return (lancius_graph_handle)wrapper;
@@ -127,8 +150,9 @@ LANCIUS_EXPORT lancius_graph_handle lancius_graph_create_stable(lancius_context 
 
 LANCIUS_EXPORT void lancius_graph_destroy_stable(lancius_graph_handle g) {
     set_error(LANCIUS_OK);
-    if (!g) return;
+    if (!graph_valid(g)) { if (!g) return; set_error(LANCIUS_ERR_INVALID_HANDLE); return; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
+    wrapper->magic = 0;
     if (wrapper->sched) lancius_schedule_destroy(wrapper->sched);
     if (wrapper->scratch) lancius_arena_destroy(wrapper->scratch);
     if (wrapper->g) lancius_graph_destroy(wrapper->g);
@@ -138,6 +162,7 @@ LANCIUS_EXPORT void lancius_graph_destroy_stable(lancius_graph_handle g) {
 LANCIUS_EXPORT lancius_tensor_handle lancius_add_input(lancius_graph_handle g, size_t rows, size_t cols) {
     set_error(LANCIUS_OK);
     if (!g) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
+    if (!graph_valid(g)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     /* v12R1-205: prevent abort() via stable API on oversized tensors */
     size_t elems = 0;
@@ -155,6 +180,7 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_input(lancius_graph_handle g, s
 LANCIUS_EXPORT lancius_tensor_handle lancius_add_matmul(lancius_graph_handle g, lancius_tensor_handle a, lancius_tensor_handle b) {
     set_error(LANCIUS_OK);
     if (!g || !a || !b) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
+    if (!graph_valid(g)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     lancius_node* n = lancius_matmul(wrapper->g, (lancius_node*)a, (lancius_node*)b);
     if (!n) { sync_internal_error(); if (g_last_error == LANCIUS_OK) set_error(LANCIUS_ERR_SHAPE_MISMATCH); return NULL; }
@@ -165,6 +191,7 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_matmul(lancius_graph_handle g, 
 LANCIUS_EXPORT lancius_tensor_handle lancius_add_relu(lancius_graph_handle g, lancius_tensor_handle a) {
     set_error(LANCIUS_OK);
     if (!g || !a) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
+    if (!graph_valid(g)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     lancius_node* n = lancius_relu(wrapper->g, (lancius_node*)a);
     if (!n) { sync_internal_error(); if (g_last_error == LANCIUS_OK) set_error(LANCIUS_ERR_SHAPE_MISMATCH); return NULL; }
@@ -185,6 +212,7 @@ LANCIUS_EXPORT lancius_status lancius_bind_data(lancius_tensor_handle t, double*
 LANCIUS_EXPORT lancius_status lancius_compile_and_run(lancius_graph_handle g) {
     set_error(LANCIUS_OK);
     if (!g) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
+    if (!graph_valid(g)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return LANCIUS_ERR_INVALID_HANDLE; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
 
     if (wrapper->sched) { lancius_schedule_destroy(wrapper->sched); wrapper->sched = NULL; }
@@ -247,6 +275,7 @@ LANCIUS_EXPORT lancius_status lancius_read_output(lancius_tensor_handle t, doubl
 LANCIUS_EXPORT lancius_graph_handle lancius_graph_load_stable(lancius_context ctx, const char* path) {
     set_error(LANCIUS_OK);
     if (!ctx || !path) { set_error(LANCIUS_ERR_NULL_PTR); return NULL; }
+    if (!ctx_valid(ctx)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
     lancius_graph* g = lancius_graph_load(path);
     if (!g) { sync_internal_error(); if (g_last_error == LANCIUS_OK) set_error(LANCIUS_ERR_IO); return NULL; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)malloc(sizeof(lancius_graph_internal));
@@ -254,6 +283,7 @@ LANCIUS_EXPORT lancius_graph_handle lancius_graph_load_stable(lancius_context ct
     wrapper->g = g;
     wrapper->scratch = lancius_arena_create(64 * 1024 * 1024); /* 64MB default for loaded models */
     wrapper->sched = NULL;
+    wrapper->magic = LANCIUS_GRAPH_MAGIC;
     if (!wrapper->scratch) { lancius_graph_destroy(g); free(wrapper); set_error(LANCIUS_ERR_OOM); return NULL; }
     set_error(LANCIUS_OK);
     return (lancius_graph_handle)wrapper;
@@ -262,9 +292,15 @@ LANCIUS_EXPORT lancius_graph_handle lancius_graph_load_stable(lancius_context ct
 LANCIUS_EXPORT lancius_status lancius_graph_save_stable(lancius_graph_handle g, const char* path) {
     set_error(LANCIUS_OK);
     if (!g || !path) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
+    if (!graph_valid(g)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return LANCIUS_ERR_INVALID_HANDLE; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     /* v11S H1 fix: propagate save failure to FFI consumers */
+    lancius_clear_error();
     if (lancius_graph_save(wrapper->g, path) != 0) {
+        lancius_error ierr = lancius_get_error();
+        lancius_clear_error();
+        if (ierr == LANCIUS_ERROR_NULL_PTR) { set_error(LANCIUS_ERR_NULL_PTR); return LANCIUS_ERR_NULL_PTR; }
+        if (ierr == LANCIUS_ERROR_OVERFLOW || ierr == LANCIUS_ERROR_LIMIT) { set_error(LANCIUS_ERR_OVERFLOW); return LANCIUS_ERR_OVERFLOW; }
         set_error(LANCIUS_ERR_IO);
         return LANCIUS_ERR_IO;
     }

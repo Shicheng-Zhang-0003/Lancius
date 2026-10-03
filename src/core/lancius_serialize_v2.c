@@ -122,16 +122,16 @@ static lancius_node* map_get(idmap* m, uint32_t id) {
 int lancius_graph_save_v2(lancius_graph* g, const char* path) {
     char tmp[PATH_MAX];
     FILE* f;
-    if (!g || !path) return -1;
-    if (!is_little_endian()) return -1;
+    if (!g || !path) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return -1; }
+    if (!is_little_endian()) { lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP); return -1; }
 
     /* Despot V6 truth: mkstemp+fsync+rename (was predictable .tmp race). */
     {
-        if (snprintf(tmp, sizeof(tmp), "%s.tmp.XXXXXX", path) >= (int)sizeof(tmp)) return -1;
+        if (snprintf(tmp, sizeof(tmp), "%s.tmp.XXXXXX", path) >= (int)sizeof(tmp)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return -1; }
         int fd = mkstemp(tmp);
-        if (fd < 0) return -1;
+        if (fd < 0) { lancius_set_error(LANCIUS_ERROR_IO); return -1; }
         f = fdopen(fd, "w+b");
-        if (!f) { close(fd); unlink(tmp); return -1; }
+        if (!f) { close(fd); unlink(tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
     }
 
     v2_header h;
@@ -146,12 +146,13 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
 
     if (fwrite(&h, 1, sizeof(h), f) != sizeof(h)) {
         fclose(f); unlink(tmp);
+        lancius_set_error(LANCIUS_ERROR_IO);
         return -1;
     }
 
     for (uint32_t i = 0; i < g->node_count; i++) {
         lancius_node* n = g->nodes[i];
-        if (!n) { fclose(f); unlink(tmp); return -1; }
+        if (!n) { fclose(f); unlink(tmp); lancius_set_error(LANCIUS_ERROR_NULL_PTR); return -1; }
         lancius_runtime_sync_from_legacy(n);
 
         v2_node rn;
@@ -176,9 +177,9 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
         rn.flags = 0;
         rn.dtype = (uint8_t)n->dtype;
         /* Despot truth: invalid dtype was silently coerced to FP64. Fail loud. */
-        if (!lancius_dtype_is_valid(rn.dtype)) { fclose(f); unlink(tmp); return -1; }
+        if (!lancius_dtype_is_valid(rn.dtype)) { fclose(f); unlink(tmp); lancius_set_error(LANCIUS_ERROR_INVALID_DTYPE); return -1; }
         /* Despot V6 truth: per-channel scales not in format; refuse silent drop. */
-        if (n->rt && n->rt->scale_per_channel) { fclose(f); unlink(tmp); return -1; }
+        if (n->rt && n->rt->scale_per_channel) { fclose(f); unlink(tmp); lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP); return -1; }
 
         rn.has_weights = 0;
         rn.scale = n->scale;
@@ -190,7 +191,7 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
 
         if (n->op == LANCIUS_OP_INPUT) {
             size_t ne = 0;
-            if (!lancius_node_elements_checked(n, &ne)) { fclose(f); unlink(tmp); return -1; }
+            if (!lancius_node_elements_checked(n, &ne)) { fclose(f); unlink(tmp); lancius_set_error(LANCIUS_ERROR_LIMIT); return -1; }
             if (rn.dtype == LANCIUS_DTYPE_INT8 && n->runtime_data_int8) {
                 rn.has_weights = 1;
                 data = n->runtime_data_int8;
@@ -213,6 +214,7 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
 
         if (rn.has_weights && elems > 100000000u) {
             fclose(f); unlink(tmp);
+            lancius_set_error(LANCIUS_ERROR_LIMIT);
             return -1;
         }
 
@@ -220,6 +222,7 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
 
         if (fwrite(&rn, 1, sizeof(rn), f) != sizeof(rn)) {
             fclose(f); unlink(tmp);
+            lancius_set_error(LANCIUS_ERROR_IO);
             return -1;
         }
 
@@ -227,6 +230,7 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
             uint32_t in_id = n->inputs[j] ? n->inputs[j]->id : UINT32_MAX;
             if (fwrite(&in_id, sizeof(uint32_t), 1, f) != 1) {
                 fclose(f); unlink(tmp);
+                lancius_set_error(LANCIUS_ERROR_IO);
                 return -1;
             }
         }
@@ -234,6 +238,7 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
         if (rn.has_weights && elems > 0) {
             if (fwrite(data, elem_size, elems, f) != elems) {
                 fclose(f); unlink(tmp);
+                lancius_set_error(LANCIUS_ERROR_IO);
                 return -1;
             }
         }
@@ -247,32 +252,32 @@ int lancius_graph_save_v2(lancius_graph* g, const char* path) {
         off_t body_end, body_size, left;
         uint32_t crc = 0;
         uint8_t chunk[65536];
-        if (fflush(f) != 0) { fclose(f); unlink(tmp); return -1; }
-        if (fseeko(f, 0, SEEK_END) != 0) { fclose(f); unlink(tmp); return -1; }
+        if (fflush(f) != 0) { fclose(f); unlink(tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
+        if (fseeko(f, 0, SEEK_END) != 0) { fclose(f); unlink(tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
         body_end = ftello(f);
-        if (body_end < 0 || body_end < body_start) { fclose(f); unlink(tmp); return -1; }
+        if (body_end < 0 || body_end < body_start) { fclose(f); unlink(tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
         body_size = body_end - body_start;
-        if (fseeko(f, body_start, SEEK_SET) != 0) { fclose(f); unlink(tmp); return -1; }
+        if (fseeko(f, body_start, SEEK_SET) != 0) { fclose(f); unlink(tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
         left = body_size;
         while (left > 0) {
             size_t want = (left < (off_t)sizeof(chunk)) ? (size_t)left : sizeof(chunk);
             size_t got = fread(chunk, 1, want, f);
-            if (got != want) { fclose(f); unlink(tmp); return -1; }
+            if (got != want) { fclose(f); unlink(tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
             crc = lancius_crc32(crc, chunk, got);
             left -= (off_t)got;
         }
         if (crc == 0) crc = 1; /* 0 means legacy/unverified; never emit it */
-        if (fseeko(f, (off_t)offsetof(v2_header, checksum_crc32), SEEK_SET) != 0) { fclose(f); unlink(tmp); return -1; }
-        if (fwrite(&crc, sizeof(uint32_t), 1, f) != 1) { fclose(f); unlink(tmp); return -1; }
-        if (fflush(f) != 0) { fclose(f); unlink(tmp); return -1; }
+        if (fseeko(f, (off_t)offsetof(v2_header, checksum_crc32), SEEK_SET) != 0) { fclose(f); unlink(tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
+        if (fwrite(&crc, sizeof(uint32_t), 1, f) != 1) { fclose(f); unlink(tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
+        if (fflush(f) != 0) { fclose(f); unlink(tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
         {
             int fd2 = fileno(f);
-            if (fd2 >= 0) fsync(fd2);
+            if (fd2 >= 0 && fsync(fd2) != 0) { fclose(f); unlink(tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
         }
-        if (fclose(f) != 0) { unlink(tmp); return -1; }
+        if (fclose(f) != 0) { unlink(tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
     }
 
-    if (rename(tmp, path) != 0) { unlink(tmp); return -1; }
+    if (rename(tmp, path) != 0) { unlink(tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
     return 0;
 }
 

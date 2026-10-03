@@ -62,14 +62,14 @@ int lancius_graph_save(lancius_graph* g, const char* path) {
     if (lancius_graph_save_v2(g, path) == 0) return 0;
 
     /* Despot truth: NULL graph/path derefed (was unguarded). */
-    if (!g || !path || !g->nodes) return -1;
+    if (!g || !path || !g->nodes) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return -1; }
     /* Despot V6 truth: tmp+mkstemp+rename (was truncate-in-place). */
     char v1tmp[4096];
-    if (snprintf(v1tmp, sizeof(v1tmp), "%s.tmp.XXXXXX", path) >= (int)sizeof(v1tmp)) return -1;
+    if (snprintf(v1tmp, sizeof(v1tmp), "%s.tmp.XXXXXX", path) >= (int)sizeof(v1tmp)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return -1; }
     int v1fd = mkstemp(v1tmp);
-    if (v1fd < 0) return -1;
+    if (v1fd < 0) { lancius_set_error(LANCIUS_ERROR_IO); return -1; }
     FILE* f = fdopen(v1fd, "wb");
-    if (!f) { close(v1fd); unlink(v1tmp); return -1; }
+    if (!f) { close(v1fd); unlink(v1tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
     uint32_t magic = ser_to_le32(LANCIUS_MAGIC);
     CHECKED_WRITE(&magic, sizeof(uint32_t), 1, f);
     uint32_t node_count_le = ser_to_le32(g->node_count);
@@ -164,17 +164,18 @@ int lancius_graph_save(lancius_graph* g, const char* path) {
             }
         }
     }
-    if (fflush(f) != 0) { fclose(f); unlink(v1tmp); return -1; }
+    if (fflush(f) != 0) { fclose(f); unlink(v1tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
     {
         int _fd = fileno(f);
-        if (_fd >= 0) fsync(_fd);
+        if (_fd >= 0 && fsync(_fd) != 0) { fclose(f); unlink(v1tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
     }
-    if (fclose(f) != 0) { unlink(v1tmp); return -1; }
-    if (rename(v1tmp, path) != 0) { unlink(v1tmp); return -1; }
+    if (fclose(f) != 0) { unlink(v1tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
+    if (rename(v1tmp, path) != 0) { unlink(v1tmp); lancius_set_error(LANCIUS_ERROR_IO); return -1; }
     return 0;
 wfail:
     fclose(f);
     unlink(v1tmp);
+    lancius_set_error(LANCIUS_ERROR_IO);
     return -1;
 }
 
