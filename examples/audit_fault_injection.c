@@ -124,14 +124,25 @@ int main(void) {
     EXPECT_NULL(lancius_gqa(g, q, k, v, 4, 0), "gqa with n_heads_kv=0 returns NULL");
     EXPECT_NULL(lancius_gqa(g, q, k, v, 2, 4), "gqa with q_heads < kv_heads returns NULL");
 
-    printf("\n[2/4] Autodiff Honesty (Phase 203 fix)\n");
+    printf("\n[2/4] Autodiff Honesty (Phase 203 fix, R3-2: now exact)\n");
     lancius_graph* g2 = lancius_graph_create();
     lancius_node* a3 = lancius_input_3d(g2, 2, 2, 2);
     lancius_node* b3 = lancius_input_3d(g2, 2, 2, 2);
     lancius_node* mm = lancius_matmul_batched(g2, a3, b3);
     lancius_node* loss = lancius_sum(g2, mm);
     lancius_training_graph* tg = lancius_ir_autodiff(g2, loss);
-    EXPECT_NULL(tg, "batched matmul backward fails loudly (returns NULL)");
+    /* R3-2: batched-matmul backward is exact via the batched transpose
+     * (finite-diff ~1e-10 in audit_train_bwd); fail-loud would now be the
+     * lie. A still-unsupported op (GQA) must keep failing loud. */
+    EXPECT_NOT_NULL(tg, "batched matmul backward succeeds (exact VJP)");
+    if (tg) lancius_training_graph_destroy(tg);
+    lancius_node* gq = lancius_input_3d(g2, 2, 4, 4);
+    lancius_node* gk = lancius_input_3d(g2, 2, 2, 4);
+    lancius_node* gv = lancius_input_3d(g2, 2, 2, 4);
+    lancius_node* ga = lancius_gqa(g2, gq, gk, gv, 4, 2);
+    lancius_node* gloss = ga ? lancius_sum(g2, ga) : NULL;
+    lancius_training_graph* tg2 = gloss ? lancius_ir_autodiff(g2, gloss) : NULL;
+    EXPECT_NULL(tg2, "gqa backward still fails loudly (returns NULL)");
     lancius_graph_destroy(g2);
 
     printf("\n[3/4] Loader Hardening (Phase 201 fix)\n");

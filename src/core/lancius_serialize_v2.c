@@ -343,7 +343,7 @@ lancius_graph* lancius_graph_load_v2(const char* path) {
         if (rn.input_count > 16u) goto fail;
         if (rn.weight_elems > 100000000ull) goto fail;
         if (!lancius_dtype_is_valid(rn.dtype)) goto fail;
-        if (rn.op > LANCIUS_MODEL_OP_SUM_AXIS_ND) goto fail;
+        if (rn.op > LANCIUS_MODEL_OP_GELU_BWD) goto fail;
         if (rn.dtype != LANCIUS_DTYPE_FP64 && rn.dtype != LANCIUS_DTYPE_INT8 && rn.dtype != LANCIUS_DTYPE_FP32) goto fail;
         // Hostile fix: bound sparse id (DoS via 10M-pointer realloc + O(n^2))
         if (rn.id >= 10000000u) goto fail;
@@ -502,6 +502,12 @@ break;
 
             case LANCIUS_MODEL_OP_MATMUL_BATCHED:
                 n = lancius_matmul_batched(g, in0, in1);
+                break;
+
+            case LANCIUS_MODEL_OP_TRANSPOSE_BATCHED:
+                /* R3-2: forward-only 3D transpose persists; _BWD ids have
+                 * no case and fail loud at the non-NULL check below. */
+                n = lancius_transpose_batched(g, in0);
                 break;
 
             case LANCIUS_MODEL_OP_RESHAPE:

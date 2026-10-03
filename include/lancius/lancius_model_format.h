@@ -90,7 +90,17 @@ typedef enum {
     LANCIUS_MODEL_OP_MSE = 40,
     LANCIUS_MODEL_OP_MSE_BWD = 41,
     /* R3-1: appended; prior ids unchanged. Axis persists in node axes[0]. */
-    LANCIUS_MODEL_OP_SUM_AXIS_ND = 42
+    LANCIUS_MODEL_OP_SUM_AXIS_ND = 42,
+    /* R3-2: forward batched transpose appended + persistable. _BWD ids are
+     * training artifacts: the saver may emit them, the loader rejects them
+     * (like all _BWD, by design); ids reserved so ranges stay meaningful. */
+    LANCIUS_MODEL_OP_TRANSPOSE_BATCHED = 43,
+    LANCIUS_MODEL_OP_LAYERNORM_BWD = 44,
+    LANCIUS_MODEL_OP_LAYERNORM_BWD_GAMMA = 45,
+    LANCIUS_MODEL_OP_LAYERNORM_BWD_BETA = 46,
+    LANCIUS_MODEL_OP_RMSNORM_BWD = 47,
+    LANCIUS_MODEL_OP_RMSNORM_BWD_GAMMA = 48,
+    LANCIUS_MODEL_OP_GELU_BWD = 49
 } lancius_model_op;
 
 /*

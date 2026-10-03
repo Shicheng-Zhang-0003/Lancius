@@ -662,6 +662,200 @@ void kernel_gqa(double* out, const double* q, const double* k, const double* v, 
 
 
 /*
+ * R3-2 training backwards for GELU/LayerNorm/RMSNorm.
+ *
+ * Closed forms (verify against docs/DESPOT_TRUTH_V2.md R3-2 section):
+ * - GELU tanh-approx G(x)=0.5x(1+T), T=tanh(C(x+ax^3)), C=sqrt(2/pi),
+ *   a=0.044715: G'(x)=0.5(1+T)+0.5x(1-T^2)C(1+3ax^2). Clamps mirror fwd
+ *   (x>10 -> 1, x<-10 -> 0); NaN propagates.
+ * - LayerNorm y=(x-mu)/sig*g+b: dx=g*gam/sig - gam/sig*(mean(g)+xhat*mean(g*xhat)),
+ *   dg_j=sum_b g*xhat, db_j=sum_b g. Degenerate sig -> NUMERICAL + zeros.
+ * - RMSNorm y=x/rms*gam: dx=(g*gam-x*m/rms)/rms, m=mean(g*y);
+ *   dg_j=sum_b g*x/rms. Degenerate rms -> NUMERICAL + zeros.
+ */
+void kernel_gelu_bwd(double* out, const double* grad, const double* x, size_t elements) {
+    if (!out || !grad || !x) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    static const double C = 0.7978845608028654;
+    static const double A = 0.044715;
+    #pragma omp parallel for simd schedule(static)
+    for (size_t i = 0; i < elements; i++) {
+        double xi = x[i];
+        double gi = grad[i];
+        /* NaN propagates (fwd passes NaN through): any NaN in -> NaN out. */
+        if (xi != xi) { out[i] = xi; continue; }
+        if (gi != gi) { out[i] = gi; continue; }
+        if (xi > 10.0) { out[i] = gi; continue; }
+        if (xi < -10.0) { out[i] = 0.0; continue; }
+        double x2 = xi * xi;
+        double inner = C * (xi + A * xi * x2);
+        double t = tanh(inner);
+        double d = 0.5 * (1.0 + t) + 0.5 * xi * (1.0 - t * t) * C * (1.0 + 3.0 * A * x2);
+        out[i] = gi * d;
+    }
+}
+
+void kernel_layernorm_bwd(double* dx, const double* grad, const double* x, const double* gamma,
+                           size_t num_instances, size_t hidden_size, double eps) {
+    if (!dx || !grad || !x || !gamma) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (num_instances == 0 || hidden_size == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    int omp_err = LANCIUS_ERROR_OK;
+    #pragma omp parallel for schedule(static) shared(omp_err)
+    for (size_t b = 0; b < num_instances; b++) {
+        const double* xb = x + b * hidden_size;
+        const double* gb = grad + b * hidden_size;
+        double* db = dx + b * hidden_size;
+        double mean = 0.0;
+        for (size_t i = 0; i < hidden_size; i++) mean += xb[i];
+        mean /= hidden_size;
+        double var = 0.0;
+        for (size_t i = 0; i < hidden_size; i++) var += (xb[i] - mean) * (xb[i] - mean);
+        var /= hidden_size;
+        double denom = sqrt(var + eps);
+        if (denom <= 0.0 || denom != denom) {
+            #pragma omp critical
+            { if (omp_err == LANCIUS_ERROR_OK) omp_err = LANCIUS_ERROR_NUMERICAL; }
+            for (size_t i = 0; i < hidden_size; i++) db[i] = 0.0;
+            continue;
+        }
+        double mg = 0.0, mgx = 0.0;
+        for (size_t i = 0; i < hidden_size; i++) {
+            double xhat = (xb[i] - mean) / denom;
+            double dg = gb[i] * gamma[i];
+            mg += dg;
+            mgx += dg * xhat;
+        }
+        mg /= hidden_size;
+        mgx /= hidden_size;
+        for (size_t i = 0; i < hidden_size; i++) {
+            double xhat = (xb[i] - mean) / denom;
+            db[i] = (gb[i] * gamma[i] - mg - xhat * mgx) / denom;
+        }
+    }
+    if (omp_err != LANCIUS_ERROR_OK) lancius_set_error(omp_err);
+}
+
+void kernel_layernorm_bwd_gamma(double* dgamma, const double* grad, const double* x, const double* gamma,
+                                 size_t num_instances, size_t hidden_size, double eps) {
+    (void)gamma;
+    if (!dgamma || !grad || !x) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (num_instances == 0 || hidden_size == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    for (size_t i = 0; i < hidden_size; i++) dgamma[i] = 0.0;
+    int omp_err = LANCIUS_ERROR_OK;
+    #pragma omp parallel shared(omp_err)
+    {
+        double* local = (double*)calloc(hidden_size, sizeof(double));
+        if (!local) {
+            #pragma omp critical
+            { if (omp_err == LANCIUS_ERROR_OK) omp_err = LANCIUS_ERROR_OOM; }
+        } else {
+            #pragma omp for schedule(static)
+            for (size_t b = 0; b < num_instances; b++) {
+                const double* xb = x + b * hidden_size;
+                const double* gb = grad + b * hidden_size;
+                double mean = 0.0;
+                for (size_t i = 0; i < hidden_size; i++) mean += xb[i];
+                mean /= hidden_size;
+                double var = 0.0;
+                for (size_t i = 0; i < hidden_size; i++) var += (xb[i] - mean) * (xb[i] - mean);
+                var /= hidden_size;
+                double denom = sqrt(var + eps);
+                if (denom <= 0.0 || denom != denom) {
+                    #pragma omp critical
+                    { if (omp_err == LANCIUS_ERROR_OK) omp_err = LANCIUS_ERROR_NUMERICAL; }
+                    continue;
+                }
+                for (size_t i = 0; i < hidden_size; i++) local[i] += gb[i] * (xb[i] - mean) / denom;
+            }
+            #pragma omp critical
+            {
+                for (size_t i = 0; i < hidden_size; i++) dgamma[i] += local[i];
+            }
+            free(local);
+        }
+    }
+    if (omp_err != LANCIUS_ERROR_OK) lancius_set_error(omp_err);
+}
+
+void kernel_layernorm_bwd_beta(double* dbeta, const double* grad, size_t num_instances, size_t hidden_size) {
+    if (!dbeta || !grad) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (num_instances == 0 || hidden_size == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    for (size_t i = 0; i < hidden_size; i++) dbeta[i] = 0.0;
+    #pragma omp parallel for schedule(static)
+    for (size_t b = 0; b < num_instances; b++) {
+        const double* gb = grad + b * hidden_size;
+        for (size_t i = 0; i < hidden_size; i++) {
+            #pragma omp atomic
+            dbeta[i] += gb[i];
+        }
+    }
+}
+
+void kernel_rmsnorm_bwd(double* dx, const double* grad, const double* x, const double* gamma,
+                         size_t num_instances, size_t hidden_size, double eps) {
+    if (!dx || !grad || !x || !gamma) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (num_instances == 0 || hidden_size == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    int omp_err = LANCIUS_ERROR_OK;
+    #pragma omp parallel for schedule(static) shared(omp_err)
+    for (size_t b = 0; b < num_instances; b++) {
+        const double* xb = x + b * hidden_size;
+        const double* gb = grad + b * hidden_size;
+        double* db = dx + b * hidden_size;
+        double sq = 0.0;
+        for (size_t i = 0; i < hidden_size; i++) sq += xb[i] * xb[i];
+        double rms = sqrt(sq / hidden_size + eps);
+        if (rms <= 0.0 || rms != rms) {
+            #pragma omp critical
+            { if (omp_err == LANCIUS_ERROR_OK) omp_err = LANCIUS_ERROR_NUMERICAL; }
+            for (size_t i = 0; i < hidden_size; i++) db[i] = 0.0;
+            continue;
+        }
+        double m = 0.0;
+        for (size_t i = 0; i < hidden_size; i++) m += gb[i] * xb[i] * gamma[i] / rms;
+        m /= hidden_size;
+        for (size_t i = 0; i < hidden_size; i++) db[i] = (gb[i] * gamma[i] - xb[i] * m / rms) / rms;
+    }
+    if (omp_err != LANCIUS_ERROR_OK) lancius_set_error(omp_err);
+}
+
+void kernel_rmsnorm_bwd_gamma(double* dgamma, const double* grad, const double* x, const double* gamma,
+                               size_t num_instances, size_t hidden_size, double eps) {
+    (void)gamma;
+    if (!dgamma || !grad || !x) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
+    if (num_instances == 0 || hidden_size == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+    for (size_t i = 0; i < hidden_size; i++) dgamma[i] = 0.0;
+    int omp_err = LANCIUS_ERROR_OK;
+    #pragma omp parallel shared(omp_err)
+    {
+        double* local = (double*)calloc(hidden_size, sizeof(double));
+        if (!local) {
+            #pragma omp critical
+            { if (omp_err == LANCIUS_ERROR_OK) omp_err = LANCIUS_ERROR_OOM; }
+        } else {
+            #pragma omp for schedule(static)
+            for (size_t b = 0; b < num_instances; b++) {
+                const double* xb = x + b * hidden_size;
+                const double* gb = grad + b * hidden_size;
+                double sq = 0.0;
+                for (size_t i = 0; i < hidden_size; i++) sq += xb[i] * xb[i];
+                double rms = sqrt(sq / hidden_size + eps);
+                if (rms <= 0.0 || rms != rms) {
+                    #pragma omp critical
+                    { if (omp_err == LANCIUS_ERROR_OK) omp_err = LANCIUS_ERROR_NUMERICAL; }
+                    continue;
+                }
+                for (size_t i = 0; i < hidden_size; i++) local[i] += gb[i] * xb[i] / rms;
+            }
+            #pragma omp critical
+            {
+                for (size_t i = 0; i < hidden_size; i++) dgamma[i] += local[i];
+            }
+            free(local);
+        }
+    }
+    if (omp_err != LANCIUS_ERROR_OK) lancius_set_error(omp_err);
+}
+
+/*
  * v11A2 Section 11:
  * FP32 matmul kernel.
  *

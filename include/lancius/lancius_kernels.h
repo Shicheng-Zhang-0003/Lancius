@@ -58,6 +58,16 @@ void kernel_rmsnorm(double* out, const double* in, const double* gamma, size_t n
 void kernel_swiglu(double* out, const double* gate, const double* up, size_t elements);
 void kernel_gqa(double* out, const double* q, const double* k, const double* v, size_t seq_len, size_t n_heads_q, size_t n_heads_kv, size_t head_dim);
 
+/* R3-2 training backwards. Closed-form VJPs recomputed from (grad, fwd
+ * inputs) with the same eps/degenerate contracts as forward. NaN
+ * propagates; degenerate denominators report NUMERICAL with zeroed outs. */
+void kernel_gelu_bwd(double* out, const double* grad, const double* x, size_t elements);
+void kernel_layernorm_bwd(double* dx, const double* grad, const double* x, const double* gamma, size_t num_instances, size_t hidden_size, double eps);
+void kernel_layernorm_bwd_gamma(double* dgamma, const double* grad, const double* x, const double* gamma, size_t num_instances, size_t hidden_size, double eps);
+void kernel_layernorm_bwd_beta(double* dbeta, const double* grad, size_t num_instances, size_t hidden_size);
+void kernel_rmsnorm_bwd(double* dx, const double* grad, const double* x, const double* gamma, size_t num_instances, size_t hidden_size, double eps);
+void kernel_rmsnorm_bwd_gamma(double* dgamma, const double* grad, const double* x, const double* gamma, size_t num_instances, size_t hidden_size, double eps);
+
 
 
 #endif

@@ -39,7 +39,18 @@ typedef enum {
     /* R3-1: per-axis N-dim reduction. Appended; all prior ids unchanged.
      * Forward-only (like SUM_AXIS0/1); its VJP broadcasts back. This closes
      * the N-dim partial-broadcast training hole (was: fail loud). */
-    LANCIUS_OP_SUM_AXIS_ND
+    LANCIUS_OP_SUM_AXIS_ND,
+    /* R3-2: batched transpose (forward) + norm/activation backwards.
+     * Appended; prior ids unchanged. TRANSPOSE_BATCHED is forward and
+     * persistable; _BWD nodes are training artifacts, never persisted
+     * (loader rejects them like all _BWD, by design). */
+    LANCIUS_OP_TRANSPOSE_BATCHED,
+    LANCIUS_OP_LAYERNORM_BWD,
+    LANCIUS_OP_LAYERNORM_BWD_GAMMA,
+    LANCIUS_OP_LAYERNORM_BWD_BETA,
+    LANCIUS_OP_RMSNORM_BWD,
+    LANCIUS_OP_RMSNORM_BWD_GAMMA,
+    LANCIUS_OP_GELU_BWD
 } lancius_opcode;
 
 typedef struct lancius_node {
@@ -208,6 +219,15 @@ lancius_node* lancius_sum_axis1(lancius_graph* g, const lancius_node* a);
 /* R3-1: reduce along one axis of a 1..4-D tensor (axis dim -> 1, rank kept).
  * Axis persists in n->axes[0]. Forward-only; VJP broadcasts back. */
 lancius_node* lancius_sum_axis_nd(lancius_graph* g, const lancius_node* a, uint32_t axis);
+/* R3-2: 3D batched transpose [B,M,K] -> [B,K,M] (forward, persistable). */
+lancius_node* lancius_transpose_batched(lancius_graph* g, const lancius_node* a);
+/* R3-2 norm/activation backwards (training artifacts, never persisted). */
+lancius_node* lancius_layernorm_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* x, const lancius_node* gamma, const lancius_node* beta);
+lancius_node* lancius_layernorm_bwd_gamma(lancius_graph* g, const lancius_node* grad, const lancius_node* x, const lancius_node* gamma);
+lancius_node* lancius_layernorm_bwd_beta(lancius_graph* g, const lancius_node* grad, const lancius_node* beta);
+lancius_node* lancius_rmsnorm_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* x, const lancius_node* gamma);
+lancius_node* lancius_rmsnorm_bwd_gamma(lancius_graph* g, const lancius_node* grad, const lancius_node* x, const lancius_node* gamma);
+lancius_node* lancius_gelu_bwd(lancius_graph* g, const lancius_node* grad, const lancius_node* x);
 lancius_node* lancius_cross_entropy(lancius_graph* g, const lancius_node* logits, const lancius_node* targets);
 lancius_node* lancius_permute(lancius_graph* g, const lancius_node* in, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
 lancius_node* lancius_matmul_batched(lancius_graph* g, const lancius_node* a, const lancius_node* b);

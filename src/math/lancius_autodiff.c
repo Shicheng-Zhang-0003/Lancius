@@ -239,6 +239,7 @@ break;
             case LANCIUS_OP_SUM_AXIS0: n = lancius_sum_axis0(tg->graph, in0); break;
             case LANCIUS_OP_SUM_AXIS1: n = lancius_sum_axis1(tg->graph, in0); break;
             case LANCIUS_OP_SUM_AXIS_ND: n = lancius_sum_axis_nd(tg->graph, in0, old->axes[0]); break;
+            case LANCIUS_OP_TRANSPOSE_BATCHED: n = lancius_transpose_batched(tg->graph, in0); break;
             case LANCIUS_OP_BROADCAST: {
                 size_t s[4] = {1,1,1,1};
                 for (uint8_t _i = 0; _i < old->ndim && _i < 4; _i++) s[_i] = old->shape[_i];
@@ -292,6 +293,12 @@ break;
             case LANCIUS_OP_CONV2D_BWD:
             case LANCIUS_OP_CONV2D_BWD_W:
             case LANCIUS_OP_MAXPOOL2D_BWD:
+            case LANCIUS_OP_LAYERNORM_BWD:
+            case LANCIUS_OP_LAYERNORM_BWD_GAMMA:
+            case LANCIUS_OP_LAYERNORM_BWD_BETA:
+            case LANCIUS_OP_RMSNORM_BWD:
+            case LANCIUS_OP_RMSNORM_BWD_GAMMA:
+            case LANCIUS_OP_GELU_BWD:
                 lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
                 free(fwd_to_full);
                 free(tg->grad_nodes);
@@ -462,22 +469,48 @@ break;
             accum_grad(tg->graph, grad_map, fwd_n->inputs[1]->id, lancius_mul(tg->graph, gB, A), fwd_to_full);
         
         } else if (
-        fwd_n->op == LANCIUS_OP_RMSNORM ||
         fwd_n->op == LANCIUS_OP_SWIGLU ||
         fwd_n->op == LANCIUS_OP_GQA ||
-        fwd_n->op == LANCIUS_OP_LAYERNORM ||
-        fwd_n->op == LANCIUS_OP_GELU ||
         fwd_n->op == LANCIUS_OP_ROPE ||
         fwd_n->op == LANCIUS_OP_ATTENTION ||
         fwd_n->op == LANCIUS_OP_KV_CACHE_READ ||
         fwd_n->op == LANCIUS_OP_KV_CACHE_WRITE ||
         fwd_n->op == LANCIUS_OP_EMBEDDING
     ) {
-            // v10S HONESTY: Fail loudly instead of passing mathematically incorrect gradients.
+            /* R3-2 scope: SWIGLU/attention/GQA/RoPE/embedding backward stays
+             * fail-loud (no wrong grads). GELU/LayerNorm/RMSNorm train via
+             * the dedicated _BWD VJPs below. */
             lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
             free(grad_map); free(fwd_to_full); 
             lancius_graph_destroy(tg->graph); free(tg); 
             return NULL;
+        } else if (fwd_n->op == LANCIUS_OP_GELU_BWD ||
+                   fwd_n->op == LANCIUS_OP_LAYERNORM_BWD ||
+                   fwd_n->op == LANCIUS_OP_LAYERNORM_BWD_GAMMA ||
+                   fwd_n->op == LANCIUS_OP_LAYERNORM_BWD_BETA ||
+                   fwd_n->op == LANCIUS_OP_RMSNORM_BWD ||
+                   fwd_n->op == LANCIUS_OP_RMSNORM_BWD_GAMMA) {
+            /* R3-2 _BWD nodes only exist in training graphs, never in the
+             * forward graph being differentiated. Reaching here means the
+             * caller passed a training graph as forward: fail loud. */
+            lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
+            free(grad_map); free(fwd_to_full);
+            lancius_graph_destroy(tg->graph); free(tg);
+            return NULL;
+        } else if (fwd_n->op == LANCIUS_OP_GELU) {
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_gelu_bwd(tg->graph, grad_out, fwd_to_full[fwd_n->inputs[0]->id]), fwd_to_full);
+        } else if (fwd_n->op == LANCIUS_OP_LAYERNORM) {
+            lancius_node* X = fwd_to_full[fwd_n->inputs[0]->id];
+            lancius_node* Gm = fwd_to_full[fwd_n->inputs[1]->id];
+            lancius_node* Bt = fwd_to_full[fwd_n->inputs[2]->id];
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_layernorm_bwd(tg->graph, grad_out, X, Gm, Bt), fwd_to_full);
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[1]->id, lancius_layernorm_bwd_gamma(tg->graph, grad_out, X, Gm), fwd_to_full);
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[2]->id, lancius_layernorm_bwd_beta(tg->graph, grad_out, Bt), fwd_to_full);
+        } else if (fwd_n->op == LANCIUS_OP_RMSNORM) {
+            lancius_node* X = fwd_to_full[fwd_n->inputs[0]->id];
+            lancius_node* Gm = fwd_to_full[fwd_n->inputs[1]->id];
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_rmsnorm_bwd(tg->graph, grad_out, X, Gm), fwd_to_full);
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[1]->id, lancius_rmsnorm_bwd_gamma(tg->graph, grad_out, X, Gm), fwd_to_full);
 } else if (fwd_n->op == LANCIUS_OP_MATMUL) {
             lancius_node* A = fwd_to_full[fwd_n->inputs[0]->id];
             lancius_node* B = fwd_to_full[fwd_n->inputs[1]->id];
@@ -744,13 +777,31 @@ break;
         } else if (fwd_n->op == LANCIUS_OP_TRANSPOSE) {
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_transpose(tg->graph, grad_out), fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_MATMUL_BATCHED) {
-            /* v12R1-203: correct batched-matmul backward needs a batched
-               transpose that the IR does not provide. Fail loudly rather
-               than emit mathematically wrong gradients. */
-            lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
-            free(grad_map); free(fwd_to_full);
-            lancius_graph_destroy(tg->graph); free(tg);
-            return NULL;
+            /* R3-2: dA[b] = dY[b] @ B[b]^T, dB[b] = A[b]^T @ dY[b],
+             * expressed with the batched transpose (was: fail loud for
+             * lack of a batched transpose). */
+            lancius_node* A = fwd_to_full[fwd_n->inputs[0]->id];
+            lancius_node* B = fwd_to_full[fwd_n->inputs[1]->id];
+            lancius_node* Bt = lancius_transpose_batched(tg->graph, B);
+            lancius_node* At = lancius_transpose_batched(tg->graph, A);
+            if (!Bt || !At) {
+                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_matmul_batched(tg->graph, grad_out, Bt), fwd_to_full);
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[1]->id, lancius_matmul_batched(tg->graph, At, grad_out), fwd_to_full);
+        } else if (fwd_n->op == LANCIUS_OP_TRANSPOSE_BATCHED) {
+            /* R3-2: transpose is self-inverse; grad flows through one. */
+            lancius_node* tb = lancius_transpose_batched(tg->graph, grad_out);
+            if (!tb) {
+                lancius_set_error(LANCIUS_ERROR_INTERNAL);
+                free(grad_map); free(fwd_to_full);
+                lancius_graph_destroy(tg->graph); free(tg);
+                return NULL;
+            }
+            accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, tb, fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_PERMUTE) {
             /* Despot truth: corrupt axes[i]>=4 wrote past inv_axes (stack OOB). */
             uint32_t inv_axes[4] = {0,0,0,0};
