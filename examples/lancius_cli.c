@@ -872,7 +872,7 @@ static int cmd_info(int argc, char **argv) {
         printf("  note: checksum==0 legacy file; loader needs LANCIUS_ALLOW_LEGACY_UNVERIFIED=1\n");
     g = lancius_graph_load(model);
     if (!g) {
-        printf("FAIL: loader rejected model (see stderr; CRC/integrity?)\n");
+        printf("FAIL: loader rejected model (err=%d: %s; CRC/integrity?)\n", (int)lancius_get_error(), lancius_error_string(lancius_get_error()));
         return 1;
     }
     printf("  loader: OK (CRC/integrity verified), %u nodes resident\n", g->node_count);

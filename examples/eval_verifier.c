@@ -58,8 +58,14 @@ int main(void) {
         double land = (a < b) ? a : b;
         double lor = (a > b) ? a : b;
         CHECK(deq(land, 0.5, 1e-12) && deq(lor, 0.5, 1e-12), "godel idempotent");
-        /* neg(min(a,b)) == max(-a,-b) */
-        CHECK(deq(-land, 0.5*-1.0 < -0.5 ? -0.5 : -0.5, 1e-12), "de morgan shape");
+        /* neg(min(a,b)) == max(-a,-b): independent max on negated inputs */
+        double lor2 = ((-a) > (-b)) ? (-a) : (-b);
+        CHECK(deq(-land, lor2, 1e-12), "de morgan shape");
+        /* distinct-input case: min(0.2,0.7)=0.2, max(-0.2,-0.7)=-0.2 */
+        double c = 0.2, d = 0.7;
+        double lmin = (c < d) ? c : d;
+        double lmaxn = ((-c) > (-d)) ? (-c) : (-d);
+        CHECK(deq(-lmin, lmaxn, 1e-12), "de morgan distinct");
     }
     if (fails) { printf("VERIFIER EVAL: %d FAILURES\n", fails); return 1; }
     printf("VERIFIER EVAL: ANCHORS HOLD, NO CHERRY-PICKS\n");

@@ -63,7 +63,17 @@ def convert(onnx_path, lancius_path):
                     initializer_map[node.output[0]] = val
 
     # 1. Register Initializers (Weights) as INPUT nodes
+    # External audit V8: Reshape shape tensors (e.g. [2] int data) were
+    # emitted as 1D INPUT nodes, which the v2 loader rejects (INPUT is
+    # 2/3/4-D only) — every converted LeNet was unloadable. Skip them:
+    # Reshape consumes shape from resolved dims, never as a graph input.
+    shape_helper_names = set()
+    for _n in graph.node:
+        if _n.op_type == 'Reshape' and len(_n.input) >= 2 and _n.input[1]:
+            shape_helper_names.add(_n.input[1])
     for init in graph.initializer:
+        if init.name in shape_helper_names:
+            continue
         data = numpy_helper.to_array(init).astype(np.float64)
         shape = list(data.shape)
 
@@ -110,10 +120,16 @@ def convert(onnx_path, lancius_path):
             continue # Already handled in pre-pass
 
         op = OP_MAP[node.op_type]
-        missing = [i for i in node.input if i and i not in name_to_id]
-        if missing:
-            raise ValueError(f"Node '{node.op_type}' has unmapped inputs {missing}. Refusing to emit partial inputs.")
-        inputs = [name_to_id[i] for i in node.input if i in name_to_id]
+        if node.op_type == 'Reshape':
+            # Shape comes from resolved dims; the shape tensor is not data.
+            if not node.input or node.input[0] not in name_to_id:
+                raise ValueError(f"Node 'Reshape' has unmapped data input {list(node.input[:1])}. Refusing to emit partial inputs.")
+            inputs = [name_to_id[node.input[0]]]
+        else:
+            missing = [i for i in node.input if i and i not in name_to_id]
+            if missing:
+                raise ValueError(f"Node '{node.op_type}' has unmapped inputs {missing}. Refusing to emit partial inputs.")
+            inputs = [name_to_id[i] for i in node.input if i in name_to_id]
 
         out_shape = [1, 1, 1, 1]
         reshape_rank = 2
@@ -126,6 +142,18 @@ def convert(onnx_path, lancius_path):
                 target_dims = initializer_map[shape_tensor_name].tolist()
 
             if target_dims is not None:
+                # External audit V8: ONNX Reshape allowzero (default 0) selects
+                # 0-means-copy vs 0-means-explicit-zero (unsupported here).
+                allowzero = 0
+                for _attr in node.attribute:
+                    if _attr.name == 'allowzero':
+                        allowzero = int(_attr.i)
+                if allowzero not in (0, 1):
+                    raise ValueError(f"Reshape '{node.output[0]}' has illegal allowzero={allowzero}.")
+                if allowzero == 1 and any(d == 0 for d in target_dims):
+                    raise ValueError(f"Reshape '{node.output[0]}' uses allowzero=1 explicit 0 dims {target_dims}; Lancius shapes must be >0, refusing silent mis-shape.")
+                if 0 in target_dims and -1 in target_dims:
+                    raise ValueError(f"Reshape '{node.output[0]}' mixes 0 and -1 in {target_dims}; ambiguous, refusing emit.")
                 # Hostile fix: ONNX semantics — 0 means copy input dim, -1 means infer.
                 # Previous code conflated both as infer (d<=0 -> resolved_neg). Correct:
                 if node.input[0] not in name_to_id:
@@ -384,8 +412,29 @@ def convert(onnx_path, lancius_path):
         else:
             # Despot truth: Reshape ndim follows the resolved rank (was: forced
             # to 2 even for 4D targets, dropping dims in C validation).
+            # External audit V8: elementwise/Flatten/MatMul counted padded
+            # nonzeros ([1,120,1,1] -> 4) so a 2D RELU was emitted 4D and
+            # failed validation. Follow the data rank instead.
             if node.op_type == 'Reshape':
                 calc_ndim = reshape_rank
+            elif node.op_type in ('Relu', 'Add', 'Sub', 'Mul', 'Flatten', 'MatMul'):
+                _in_ndim = None
+                for _iid in inputs[:1]:
+                    for _n in nodes:
+                        if _n['id'] == _iid:
+                            _in_ndim = _n['ndim']
+                            break
+                if _in_ndim in (1, 2, 3, 4):
+                    calc_ndim = _in_ndim
+                    # shape must agree on the data dims; keep padded storage
+                    if calc_ndim == 2:
+                        out_shape = [out_shape[0], out_shape[1], 1, 1]
+                    elif calc_ndim == 4:
+                        pass
+                    else:
+                        raise ValueError(f"{node.op_type} '{node.output[0]}' input rank {_in_ndim} not 2/4 on the LeNet path; refusing emit.")
+                else:
+                    calc_ndim = len([s for s in out_shape if s > 0])
             else:
                 calc_ndim = len([s for s in out_shape if s > 0])
 

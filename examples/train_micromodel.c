@@ -18,6 +18,7 @@ int main(int argc, char **argv) {
     const char *x_path = (argc > 1) ? argv[1] : "micromodel.X.bin";
     const char *t_path = (argc > 2) ? argv[2] : "micromodel.T.bin";
     size_t nrows = 64;
+    int feat = FEAT;
     double *X = NULL, *T = NULL;
     FILE *fx = fopen(x_path, "rb");
     FILE *ft = fopen(t_path, "rb");
@@ -28,51 +29,63 @@ int main(int argc, char **argv) {
         if (xs > 0 && ts > 0 && xs % (long)sizeof(double) == 0) {
             size_t xn = (size_t)xs / sizeof(double);
             size_t tn = (size_t)ts / sizeof(double);
-            /* distill uses FEAT=8 per row; accept any multiple */
-            if (xn % FEAT == 0 && tn == xn / FEAT) {
-                nrows = tn;
-                X = (double*)malloc(xn * sizeof(double));
-                T = (double*)malloc(tn * sizeof(double));
-                if (X && T && fread(X, sizeof(double), xn, fx) == xn &&
-                    fread(T, sizeof(double), tn, ft) == tn) {
-                    printf("bridge: loaded %zu rows from %s/%s\n", nrows, x_path, t_path);
-                } else { free(X); free(T); X = T = NULL; use_files = 0; }
-            } else use_files = 0;
+            /* External audit V8: distill emits FEAT_DIM=16 rows but this
+             * bridge required FEAT=8, so vendored bins were shape-rejected
+             * yet reported as "not found". Detect feat = xn/tn (any 1..64)
+             * and train a feat->16->1 net; report rejections honestly. */
+            if (tn > 0 && xn % tn == 0) {
+                size_t fdet = xn / tn;
+                if (fdet >= 1 && fdet <= 64) {
+                    feat = (int)fdet;
+                    nrows = tn;
+                    X = (double*)malloc(xn * sizeof(double));
+                    T = (double*)malloc(tn * sizeof(double));
+                    if (X && T && fread(X, sizeof(double), xn, fx) == xn &&
+                        fread(T, sizeof(double), tn, ft) == tn) {
+                        printf("bridge: loaded %zu rows x %d from %s/%s\n", nrows, feat, x_path, t_path);
+                    } else { free(X); free(T); X = T = NULL; use_files = 0; printf("bridge: WARN read failed for %s/%s\n", x_path, t_path); }
+                } else { use_files = 0; printf("bridge: WARN shape rejected for %s/%s (xn=%zu tn=%zu, feat %zu not in 1..64)\n", x_path, t_path, xn, tn, fdet); }
+            } else { use_files = 0; printf("bridge: WARN shape rejected for %s/%s (xn=%zu tn=%zu, xn%%tn!=0)\n", x_path, t_path, xn, tn); }
         } else use_files = 0;
         if (fx) fclose(fx);
         if (ft) fclose(ft);
-    } else { if (fx) fclose(fx); if (ft) fclose(ft); }
+    } else {
+        if (fx) fclose(fx);
+        if (ft) fclose(ft);
+        printf("bridge: no .bin found at %s/%s (missing file)\n", x_path, t_path);
+    }
     if (!use_files) {
         nrows = 64;
-        X = (double*)malloc(nrows * FEAT * sizeof(double));
+        feat = FEAT;
+        X = (double*)malloc(nrows * (size_t)feat * sizeof(double));
         T = (double*)malloc(nrows * sizeof(double));
         if (!X || !T) { printf("OOM\n"); return 1; }
         /* deterministic synthetic: label = tanh(sum(first 4)-sum(last 4)) */
         unsigned long long s = 0x12345678ULL;
         for (size_t r = 0; r < nrows; r++) {
             double a = 0, b = 0;
-            for (int j = 0; j < FEAT; j++) {
+            for (int j = 0; j < feat; j++) {
                 s = s * 6364136223846793005ULL + 1442695040888963407ULL;
                 double v = ((double)(s >> 33) / (double)(1ULL << 31)) - 1.0;
-                X[r*FEAT+j] = v;
+                X[r*(size_t)feat+j] = v;
                 if (j < 4) a += v; else b += v;
             }
             T[r] = tanh(a - b);
         }
-        printf("bridge: synthetic %zu rows (no .bin found)\n", nrows);
+        printf("bridge: synthetic %zu rows x %d (fallback)\n", nrows, feat);
     }
 
-    /* Tiny MLP: 8 -> 16 (tanh) -> 1 (tanh), MSE. Master weights in double. */
-    double *w1 = (double*)calloc(FEAT*16, sizeof(double));
+    /* Tiny MLP: feat -> 16 (tanh) -> 1 (tanh), MSE. Master weights in double. */
+    double *w1 = (double*)calloc((size_t)feat*16, sizeof(double));
     double *b1 = (double*)calloc(16, sizeof(double));
     double *w2 = (double*)calloc(16, sizeof(double));
     double b2 = 0.0;
     /* deterministic He-ish init via LCG */
     {
         unsigned long long s = 0x9E3779B97F4A7C15ULL;
-        for (size_t i = 0; i < FEAT*16; i++) {
+        for (size_t i = 0; i < (size_t)feat*16; i++) {
             s = s*6364136223846793005ULL+1442695040888963407ULL;
-            w1[i] = ((double)(s>>33)/(double)(1ULL<<31)-0.5) * sqrt(2.0/8.0);
+            w1[i] = ((double)(s>>33)/(double)(1ULL<<31)-0.5) * sqrt(2.0/(double)feat);
         }
         for (int i = 0; i < 16; i++) {
             s = s*6364136223846793005ULL+1442695040888963407ULL;
@@ -84,7 +97,7 @@ int main(int argc, char **argv) {
     for (size_t r = 0; r < nrows; r++) {
         for (int j = 0; j < 16; j++) {
             double a = b1[j];
-            for (int k = 0; k < FEAT; k++) a += X[r*FEAT+k]*w1[k*16+j];
+            for (int k = 0; k < feat; k++) a += X[r*(size_t)feat+k]*w1[k*16+j];
             h[j] = tanh(a);
         }
         p = b2; for (int j = 0; j < 16; j++) p += h[j]*w2[j]; p = tanh(p);
@@ -97,7 +110,7 @@ int main(int argc, char **argv) {
         for (size_t r = 0; r < nrows; r++) {
             for (int j = 0; j < 16; j++) {
                 double a = b1[j];
-                for (int k = 0; k < FEAT; k++) a += X[r*FEAT+k]*w1[k*16+j];
+                for (int k = 0; k < feat; k++) a += X[r*(size_t)feat+k]*w1[k*16+j];
                 h[j] = tanh(a);
             }
             double pre = b2; for (int j = 0; j < 16; j++) pre += h[j]*w2[j];
@@ -110,14 +123,14 @@ int main(int argc, char **argv) {
             for (int j = 0; j < 16; j++) gw2[j] = dpre*h[j];
             double dh[16];
             for (int j = 0; j < 16; j++) dh[j] = dpre*w2[j]*(1.0-h[j]*h[j]);
-            double gw1[FEAT*16], gb1[16];
+            double gw1[64*16], gb1[16];
             for (int j = 0; j < 16; j++) {
                 gb1[j] = dh[j];
-                for (int k = 0; k < FEAT; k++) gw1[k*16+j] = dh[j]*X[r*FEAT+k];
+                for (int k = 0; k < feat; k++) gw1[k*16+j] = dh[j]*X[r*(size_t)feat+k];
             }
             lancius_sgd_step(w2, gw2, 16, 0.05);
             lancius_sgd_step(&b2, &gb2, 1, 0.05);
-            lancius_sgd_step(w1, gw1, FEAT*16, 0.05);
+            lancius_sgd_step(w1, gw1, (size_t)feat*16, 0.05);
             lancius_sgd_step(b1, gb1, 16, 0.05);
         }
     }
@@ -125,7 +138,7 @@ int main(int argc, char **argv) {
     for (size_t r = 0; r < nrows; r++) {
         for (int j = 0; j < 16; j++) {
             double a = b1[j];
-            for (int k = 0; k < FEAT; k++) a += X[r*FEAT+k]*w1[k*16+j];
+            for (int k = 0; k < feat; k++) a += X[r*(size_t)feat+k]*w1[k*16+j];
             h[j] = tanh(a);
         }
         p = b2; for (int j = 0; j < 16; j++) p += h[j]*w2[j]; p = tanh(p);
