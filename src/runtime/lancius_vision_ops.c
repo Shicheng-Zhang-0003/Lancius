@@ -229,6 +229,10 @@ void lancius_execute_vision_op(lancius_node* n) {
             size_t eW = (W_in + 2 * (size_t)n->pad - K_w) / n->stride + 1;
             if (eH != grad_node->shape[2] || eW != grad_node->shape[3]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
             if (in_node->shape[0] != grad_node->shape[0] || in_node->shape[0] != n->shape[0]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
+            /* External audit V8: grad-C vs weight C_out was unchecked
+             * (grad (1,2,3,3) with w C_out=1 executed reading channel 0
+             * only; reversed OOB-reads grad heap). Require exact match. */
+            if (grad_node->shape[1] != w_node->shape[0]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
         }
         kernel_conv2d_bwd_in(n->runtime_data, grad, w,
             in_node->shape[0], in_node->shape[1], in_node->shape[2], in_node->shape[3],
