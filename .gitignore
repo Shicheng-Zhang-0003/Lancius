@@ -39,6 +39,7 @@ eval_verifier
 # Binaries and Artifacts
 *.lancius
 *.onnx
+*.onnx.data
 *.gguf
 *.bin
 audit_known_answer
@@ -59,3 +60,4 @@ __pycache__/
 *.pyc
 *.d
 build/
+temp/

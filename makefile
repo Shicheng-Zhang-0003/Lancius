@@ -115,7 +115,7 @@ install: liblancius.a
 	@echo "📦 Installing Lancius static library to $(PREFIX)/lib..."
 	@mkdir -p $(PREFIX)/lib
 	@cp liblancius.a $(PREFIX)/lib/
-	@echo "✅ Lancius v12R1 installed successfully."
+	@echo "✅ Lancius v12R2 installed successfully."
 
 uninstall:
 	@echo "🗑️  Removing Lancius from $(PREFIX)..."
