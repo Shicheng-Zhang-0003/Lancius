@@ -1,0 +1,4 @@
+[submodule "3463-LDFD"]
+	path = 3463-LDFD
+	url = https://github.com/Shicheng-Zhang-0003/Lancius-Live-Data-Feeding-Framework.git
+	branch = main
