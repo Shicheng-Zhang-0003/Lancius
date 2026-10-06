@@ -89,6 +89,32 @@ Full per-batch record lives in `CHANGELOG.md`; essence only here
   capped fetches; distill checks; tar-slip; .d purge. See CHANGELOG §V6
   and `docs/DESPOT_TRUTH_V2.md` §12 + `probe_v6`.
 
+## 3463-LDFD integration (live dataset acquisition)
+
+Datasets are no longer fetched by hand. `manage_datasets.py` routes through
+the Lancius Live Data Feeding Framework (3463-LDFD, a submodule at
+`3463-LDFD/`, wired via `.gitmodules`) when `libsnapshot.so` is available,
+and falls back to the hardened urllib path when it is not:
+
+- `manage_datasets.py status` reports which path is live.
+- `make ldfd-test` runs the LDFD suites plus the bridge audit; SKIPs
+  honestly when the library or its headers are absent, never silently
+  passes.
+- LDFD adds streaming gzip + tar decode, an atomic file sink, a real
+  `interval_sec` scheduler, and a buffer-only C entry point
+  (`snap_fetch_to_buffer`) so the Python side needs no ctypes callbacks.
+- MNIST and CIFAR-10 now land already decompressed/extracted, which is why
+  they can use the LDFD path; the remaining sets are plain `.jsonl`
+  (GSM8K, PRM800K, SVAMP) and go through unchanged.
+- Parquet (MATH, miniF2F, ProofWriter) and the RuleTaker clone still use
+  Python (`datasets`/pyarrow) — LDFD has no parquet codec, and adding one
+  is not justified when pyarrow is already a dependency of those sets.
+
+The integration landed on top of nine defect fixes in 3463 itself; see
+`CHANGELOG.md`. LDFD is a separate component with its own makefile and its
+own dependencies (libcurl, zlib), deliberately not folded into `all` so a
+machine without libcurl headers can still build and gate the ML runtime.
+
 ## Feature freeze
 
 v11S/v11A3 historical freeze (not v12R1 scope):
@@ -102,6 +128,14 @@ v12R1 adds correctness within scope plus additive primitives only
 see `CHANGELOG.md` for deltas.
 
 ## Validation batch — v12R2
+
+3463-LDFD evidence: `make -C 3463-LDFD test` = 4 dependency-free suites,
+92 checks, 0 failures, ASan/UBSan clean. The assoc regression suite fails
+15/20 against the pre-fix code, so the fixes are pinned rather than
+asserted. `make ldfd-test` additionally runs `audit_ldfd_bridge.py`, which
+compiles against the C headers to prove the ctypes struct layout and enum
+values match, and exits 77 (skip) when the library is absent.
+
 
 Build clean under `-Wall -Wextra -Werror`; `audit_regression_13c` 49/49,
 `audit_known_answer` 73/73, `audit_transformer_known_answer` 265/265,

@@ -388,6 +388,8 @@ The following table describes the current status of major subsystems.
 
 | Area | Status | Notes |
 |---|---|---|
+| Stress testing | Available | `./run_stress.sh` sweeps `fuzz_lancius` seeds, repeats the deterministic suites to catch cross-invocation state leaks, enforces a per-case timeout, and treats "prints FAIL but exits 0" as a failure. Results under `stress-logs/` |
+| Dataset acquisition | Development | `manage_datasets.py` fetches through the 3463-LDFD submodule when `libsnapshot.so` is present (streaming gzip + tar, atomic land, HTTP>=400 as error), else the hardened urllib path. `manage_datasets.py status` reports which is live |
 | Core tensor ops | Development | Add/Sub/Mul (N-dim broadcast-correct), MatMul, ReLU, Softmax (zero-sum guarded), Sum, Broadcast, Transpose |
 | Vision ops | Development | Conv2D, MaxPool2D, Flatten, fused Conv2D+ReLU; `FLATTEN`/`RESHAPE` verify element equality |
 | Training ops | Development | N-dim broadcast reduction (`SUM_AXIS_ND`), batched-matmul/GELU/LayerNorm/RMSNorm backward incl. gamma/beta (finite-diff ~1e-9..1e-11), global-norm clip, XOR convergence + checkpoint-resume gates; attention/GQA/SwiGLU/RoPE backward staged (fail loud) |
@@ -520,6 +522,9 @@ Each document owns one thing; start here, then follow pointers:
 - `MANIFEST.md` — compatibility contract (the only compat statement)
 - `docs/DESPOT_TRUTH_V2.md` — audit proofs incl. V3/V4/V5/V6 addenda
 - `docs/ARCHITECTURE.md` — subsystem contracts and pipeline
+- `3463-LDFD/readme.md` — Live Data Feeding Framework (submodule): its own
+  status banner is the only truth about what is built there
+- `3463-LDFD/tests/` — 4 dependency-free suites plus a loopback fetch suite
 - `docs/v12R2_SCOPE.md` — current-milestone scope (binding for v12R2)
 - `docs/releases/v12R1/GITHUB_RELEASE_v12R1.md` — v12R1 release notes
 - `docs/releases/v11S/GITHUB_RELEASE_v11S.md` — v11S release notes
