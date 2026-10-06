@@ -1,5 +1,27 @@
 # Lancius Compatibility Manifest
 
+## Dataset acquisition (3463-LDFD submodule)
+
+- `3463-LDFD/` is a git submodule
+  (`Lancius-Live-Data-Feeding-Framework`, branch `main`). It is a separate
+  component with its own makefile and dependencies (libcurl, zlib); it is
+  NOT folded into `make all`, so the ML runtime still builds on a machine
+  without libcurl headers.
+- Dataset acquisition is additive and optional. With `libsnapshot.so`
+  present, `manage_datasets.py download` fetches through LDFD (streaming
+  gzip inflate, tar extraction, atomic land, HTTP >= 400 treated as an
+  error). Without it, the pre-existing hardened urllib path runs instead.
+  `manage_datasets.py status` reports which is active; behaviour of the
+  command is identical either way.
+- No model-format change, no operator change, no ABI change. `lancius_*`
+  stable API, the v2 format, and CRC32 integrity are untouched.
+- Gating: `make check` gains `ldfd-test`, which runs the four
+  dependency-free LDFD suites and the Python bridge audit. Absent
+  dependencies produce a printed SKIP, not a pass.
+- Not yet covered by LDFD: parquet (MATH, miniF2F, ProofWriter) and the
+  RuleTaker git clone remain Python-side. Kafka/S3/HTTP sinks, websocket
+  and SSE sources, checkpointing, and schema registry remain roadmap.
+
 ## v12R2 Milestone (development, current) + v12R1 baseline (2026-09-21) + despot truth V2/V3 (2026-09-28) + hardening V4 (2026-09-28) + V5 (2026-09-30) + despot audit V6 (2026-10-01) + despot audit V7 (2026-10-03)
 
 v12R2 is the second development milestone of the v12 cycle, not a stable
