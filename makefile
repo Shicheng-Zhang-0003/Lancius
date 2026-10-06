@@ -48,7 +48,7 @@ clean:
 	rm -f audit_known_answer audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_flash_attention
 	rm -f audit_despot_probe train_verifier_head distill_prm800k lancius
 	rm -f audit_train_lib audit_sandbox train_micromodel eval_verifier audit_sum_axis_nd audit_train_bwd audit_train_converge audit_train_converge audit_train_bwd
-.PHONY: all clean check check-long check-sanitizers
+.PHONY: all clean check check-long check-sanitizers ldfd-test ldfd-build
 train_cifar10: examples/train_cifar10.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 fuzz_lancius: examples/fuzz_lancius.c liblancius.a
@@ -138,6 +138,27 @@ run_trained_batch: examples/run_trained_batch.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 
 # --- v11A1 Task 13a: validation gates ---
+# ---------------------------------------------------------------- 3463-LDFD
+#
+# The Live Data Feeding Framework is a separate component with its own
+# makefile and its own dependencies (libcurl, zlib). It is wired in as a
+# target rather than folded into `all` so a machine without libcurl headers
+# can still build and gate the ML runtime. Everything here degrades to an
+# honest SKIP instead of a silent pass.
+
+LDFD_DIR = 3463-LDFD
+
+ldfd-test:
+	@echo "LDFD acquisition path: `python3 manage_datasets.py status | sed -n 's/.*LDFD (3463) *: //p'`"
+	@$(MAKE) -C $(LDFD_DIR) test
+	@# exit 77 = skipped (library not built); anything else is a failure
+	@python3 audit_ldfd_bridge.py; st=$$?; \
+	 if [ $$st -eq 77 ]; then echo "bridge audit skipped (no libsnapshot.so)"; \
+	 elif [ $$st -ne 0 ]; then echo "bridge audit FAILED"; exit $$st; fi
+
+ldfd-build:
+	$(MAKE) -C $(LDFD_DIR) all
+
 check: all
 	./stress_test
 	./test_torture
@@ -169,6 +190,8 @@ check: all
 	python3 audit_text_pipeline.py
 	python3 audit_abi.py
 	python3 audit_binding_smoke.py
+	@echo "--- LDFD bridge (3463) ---"
+	@$(MAKE) --no-print-directory ldfd-test
 	./lancius info test_model.lancius
 	./lancius run test_model.lancius --mode static --fill zero
 	./lancius eval test_model.lancius --mode static
