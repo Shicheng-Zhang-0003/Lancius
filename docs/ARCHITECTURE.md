@@ -66,7 +66,7 @@ v12R2 executes N-dimensional trailing-rank broadcast
 (`out[I]=A[bcast(I)] OP B[bcast(I)]`, `out=max(a,b)`), max-subtracted
 softmax/CE with `NUMERICAL` zero-sum guards, Flash/GQA/KV-cache attention
 with `NaN→NUMERICAL` (zero stays zeros for causal safety), tanh-approx GELU
-(documented, ~2e-3 vs erf), `LANCIUS_NORM_EPS=1e-5` norms, int64 INT8
+(measured 4.74e-04 vs erf-exact, pinned by the oracle), `LANCIUS_NORM_EPS=1e-5` norms, int64 INT8
 accumulation (`scale=1.0` for all-zero, not `1e-8`), and fail-loud autodiff
 (`broadcast_to_shape` for any 1..4-D scalar lift; `SUM/SUM_AXIS0/1/RESHAPE`
 VJPs exact; N-dim partial reduction fails loud instead of training as zero;

@@ -12,7 +12,7 @@
 - `kernel_conv2d_fwd/bwd_in/bwd_w/relu_fwd/int8_fwd`: DL cross-correlation `out[n,co,ho,wo]=Σ in[ho·s-pad+kh,wo·s-pad+kw]·w`, `Hout=(H+2p-K)/s+1`, `int64 ih/iw`, disjoint `collapse(2)`, thread-local `calloc+critical` for `dW`. Correct. `int64` accum for INT8. Correct.
 - `kernel_layernorm`: `μ=Σx/H`, `σ²=Σ(x-μ)²/H`, `y=(x-μ)/√(σ²+eps)·γ+β`, two-pass, `denom<=0||NaN→β`. `eps=LANCIUS_NORM_EPS=1e-5` pinned by scheduler. Correct.
 - `kernel_rmsnorm`: `rms=√(Σx²/H+eps)`, `y=x/rms·γ`, `rms<=0||NaN→0`. Correct.
-- `kernel_gelu`: **tanh-approx** `0.5·x·(1+tanh(√(2/π)(x+0.044715x³)))`, `x>10→x`, `x<-10→0`, NaN passthrough. Error ~2e-3 vs erf-exact. Documented as GPT-2/BERT variant, not erf-exact. Correct-as-approx.
+- `kernel_gelu`: **tanh-approx** `0.5·x·(1+tanh(√(2/π)(x+0.044715x³)))`, `x>10→x`, `x<-10→0`, NaN passthrough. Error vs erf-exact measured at **4.74e-04** (rms 1.42e-04, extremum at x=2.699); this comment previously said ~2e-3, which was never checked against anything. Documented as GPT-2/BERT variant, not erf-exact. Correct-as-approx.
 - `kernel_swiglu`: `SiLU(g)·up`, `g/(1+exp(-g))` for `g≥0`, `g·e^g/(1+e^g)` for negative, `g<-500→0`, NaN passthrough. Overflow-safe. Correct.
 - `kernel_rope`: interleaved NeoX per-pair `θ=pos/10000^(d/D)`, rejects odd `head_dim`. Correct.
 - `kernel_attention` (Flash causal): `softmax(QKᵀ/√D+M)·V`, `M=0 if j≤i else -inf`, online `m,l,o` rescaling, `O(N²D)` compute / `O(D)` mem. Max-shift, `exp(-inf)=0`. **NaN denominator is NUMERICAL** (fail loud), zero denominator stays zeros for causal safety. Previously masked NaN as zeros. Correct now.
@@ -335,7 +335,7 @@ link or import Lancius:
 | `kernel_conv2d_int8_fwd` | int64 correlation times `scale_in*scale_w` |
 | `kernel_layernorm` / `_bwd` / `_bwd_gamma` / `_bwd_beta` | closed form, then **torch autograd** |
 | `kernel_rmsnorm` / `_bwd` / `_bwd_gamma` | closed form, then **torch autograd** |
-| `kernel_gelu` | Hendrycks-Gimpel tanh form; deviation from erf-exact bounded at 2e-3 |
+| `kernel_gelu` | Hendrycks-Gimpel tanh form; deviation from erf-exact **measured and pinned** at 4.74e-04 (rms 1.42e-04) |
 | `kernel_gelu_bwd` | central difference of the forward (interior); clamp branches asserted directly |
 | `kernel_swiglu` | `silu(gate)*up` |
 | `kernel_rope` | explicit rotation at `theta=10000`, plus L2-norm preservation |
@@ -435,3 +435,91 @@ Four defects, each with the evidence that found it:
    assigning `node->runtime_data` directly instead of binding ownership, so
    `lancius_graph_destroy` correctly refused to free memory it did not own.
    Fixed with `lancius_node_bind_owned_heap` and an explicit release.
+
+## 17. V8 truth: every constant and equation checked against its primary source
+
+Sections 1-16 proved the implementation against *itself* (finite differences,
+self-consistency, mutation). This section checks the claims against the
+**published literature**, because a wrong constant is perfectly self-consistent:
+if GELU's coefficient were 0.0447 instead of 0.044715, every finite difference
+would still pass and every known-answer test would still be green.
+
+Each row names the primary source, the exact equation as published, and what
+this codebase computes.
+
+### 17.1 Constants and formulas
+
+| Quantity | Primary source | Published | Lancius | Verdict |
+|---|---|---|---|---|
+| GELU tanh-approx | Hendrycks & Gimpel 2016, arXiv:1606.08415 §2 | `0.5x(1+tanh(sqrt(2/pi)(x+0.044715x^3)))` | `kernel_gelu`, `C=0.7978845608028654`, `A=0.044715` | **exact match** |
+| GELU vs erf-exact | same, §2 (exact is `x*Phi(x)`) | max deviation | **4.74e-04** at x=2.699, rms 1.42e-04 | correct as approx; **the old "~2e-3" comment was 4x wrong and is now fixed** |
+| LayerNorm | Ba, Kiros & Hinton 2016, arXiv:1607.06450; PyTorch docs | `(x-E[x])/sqrt(Var[x]+eps)*g+b`, variance **biased (1/n)**, eps default 1e-5 | `var /= hidden_size`, `LANCIUS_NORM_EPS 1e-5` | **exact match** (agrees with `torch.nn.functional.layer_norm` to 6.7e-16) |
+| RMSNorm | Zhang & Sennrich 2019, arXiv:1910.07467 eq. 4 | `a_i/RMS(a) * g_i`, `RMS = sqrt(1/n * sum a_i^2)`, **no mean subtraction** | `kernel_rmsnorm` | **exact match** |
+| Attention scale | Vaswani et al. 2017, arXiv:1706.03762 §3.2.1 eq. 1 | `softmax(QK^T/sqrt(d_k))V` | `scale = 1.0/sqrt((double)head_dim)` | **exact match** |
+| RoPE frequencies | Su et al. 2021, arXiv:2104.09864 §3.2.2 | `theta_i = 10000^(-2(i-1)/d)`, i=1..d/2 | `freq = 1/pow(10000, d/head_dim)` with `d = 0,2,4,..` | **identical** — the code's `d` is the element index, equal to `2*(pair index)`, so `d/D == 2i/D` |
+| RoPE defining property | same, eq. 16 | `<q_m, k_n>` depends only on `n-m` | verified: `<RoPE(q,0),RoPE(k,3)> == <RoPE(q,5),RoPE(k,8)>` to 4.4e-16 | **holds** |
+| SiLU | Hendrycks & Gimpel 2016 (named SiLU); Ramachandran et al. 2017 (swish) | `silu(x) = x*sigmoid(x)` | `kernel_swiglu` = `silu(gate)*up`, three numerically-stable branches | **exact match** |
+| SwiGLU | Shazeer 2020 (GLU variants); Dauphin et al. 2017 | `Swish(w_g) * w_v` | `silu * up` | **exact match** |
+| AdamW decoupled decay | Loshchilov & Hutter 2019, arXiv:1711.05101 eq. 2 | `theta_t = (1 - lr*lambda)*theta_{t-1} - lr*g~` | `w -= lr*(m_hat/(sqrt(v_hat)+eps)) + lr*wd*w`, i.e. `w(1-lr*wd) - lr*g~` | **algebraically identical**; agrees with `torch.optim.AdamW` to 5.6e-16 over 20 steps |
+| AdamW epsilon placement | PyTorch | `denom = sqrt(v_hat) + eps` (**outside** the sqrt) | same | **match** — the common `sqrt(v_hat + eps)` bug is absent |
+| Cosine LR schedule | SGDR, Loshchilov & Hutter 2016 eq. 6 | `eta_min + 0.5(eta_max-eta_min)(1+cos(pi*T_cur/T_i))` | `lancius_lr_cosine` | **exact match**, endpoints verified |
+| Gradient norm clipping | Pascanu, Mikolov & Bengio 2013, ICML, Algorithm 1 | `if ||g|| >= threshold: g <- (threshold/||g||)*g` | `if (norm > max_norm) g *= max_norm/norm` | **equivalent**; `>` vs `>=` differs only at exact equality where the scale is 1.0 |
+| GQA grouping | Ainslie et al. 2023, EMNLP, §2.2 | query heads split into G groups, each group shares ONE kv head | `hk = hq / (n_heads_q/n_heads_kv)` | **exact match**; the H-oracle forces all kv heads equal and proves heads in a group produce identical rows |
+| He/Kaiming init | He et al. 2015, arXiv:1502.01852 §2.2; `torch.nn.init` | `std = sqrt(2/fan_in)` for ReLU | `he_init: std_dev = sqrt(2.0/fan_in)` with `fan_in = C_in*K_h*K_w` for conv | **exact match**, and `fan_in` is the conv receptive-field product torch uses |
+| INT32 accumulator width | ONNX `ConvInteger` spec; oneDNN int8 docs | int8 x int8 accumulates in **int32** | `int64_t sum` | **stricter than the spec, and correct**; the in-code threshold "132104 terms" verified exactly: int8 range [-128,127] gives max product 16256, and `2147483647/16256 = 132104.06` |
+| INT8 symmetric quantization | TFLite quantization spec; TensorRT | `q = clamp(roundWithTiesToEven(x/s), -128, 127)`, `s = max_abs/127`, zero-point 0 | `scale = max/127`, `round`, clamp to [-128,127] | **matches the scheme**; see §17.2 for the one divergence |
+| CRC-32 | IEEE 802.3 / PKZIP | reflected poly `0xEDB88320`, init/final `~0`, check value `crc32("123456789") = 0xCBF43926` | `lancius_crc32` | **byte-identical to `zlib.crc32`** on both real model files |
+| Online (streaming) softmax | Milakov & Gimelshein 2018; FlashAttention-2 | running max `m`, rescale `exp(m_old-m_new)` applied to both numerator and denominator | `kernel_attention` | **exact**, verified numerically identical to direct softmax to 2.2e-16 |
+| CIFAR-10 record layout | Krizhevsky, `cs.toronto.edu/~kriz/cifar.html` | binary = 1 label byte + 3072 pixel bytes = **3073**; 5x10000 train + 10000 test; test set exactly 1000 per class | all 6 batch files are 30,730,000 bytes; test balance is exactly `[1000]*10` | **exact match** |
+| MNIST IDX layout | LeCun; `torchvision.datasets.mnist` | images magic 2051, 60000/10000 records, 28x28; labels magic 2049, values 0-9 | all four headers and counts correct; class balance `[5923,6742,5958,...]` matches the published train balance exactly | **exact match** |
+
+### 17.2 The one divergence, stated plainly
+
+Lancius's INT8 quantizer clamps to **[-128, 127]**. The TFLite spec and
+TensorRT both specify **[-127, 127]** for symmetric weight quantization, using
+`-127` precisely so that negation is exact and `-128` is never relied upon.
+
+This is not a correctness bug: the clamp is inert, because `scale = max_abs/127`
+guarantees `x/scale` never exceeds 127 in magnitude, so -128 is unreachable.
+It is verified: the H5 oracle asserts both `+127` and `-127` saturation are
+reached and never `-128`.
+
+It is recorded here rather than "fixed", because changing the clamp to -127 would
+be a no-op numerically and would alter a format whose round-trip is already
+pinned. If a future consumer ever writes -128 through another path, the clamp
+must become -127.
+
+### 17.3 Claims that were WRONG and are now corrected
+
+1. **GELU max error vs erf-exact.** The comment in `lancius_kernels.c` claimed
+   `~2e-3`. Measured over a dense scan of `[-12,12]` the true maximum is
+   **4.74e-04**, at x = 2.699. The bound was never checked against anything --
+   the external oracle even asserted a loose `2.1e-3`, inheriting the same
+   unverified number. The oracle now **measures and pins** 4.732e-04 (and the
+   1.4239e-04 rms), so the next drift is caught rather than inherited.
+
+This is the general lesson the V8 pass exists to record: **a self-consistent
+implementation of a wrong constant passes every internal test.** Finite
+differences prove the derivative of whatever function you implemented, not that
+you implemented the intended function. Only reading the paper distinguishes the
+two, which is why the citation table above is a deliverable and not a footnote.
+
+### 17.4 What remains unchecked
+
+- The GELU clamps at `+-10` are **not** from the paper; they are a local
+  numerical guard. Verified exact in the limit: `|GELU(x)-x| < 1e-9` for
+  `x > 10` and `GELU(x) < 1e-9` for `x < -10`, so they do not change any
+  representable result the oracle compares.
+- CIFAR-10 normalisation here is `(x/255 - 0.5)/0.5`, i.e. `[-1,1]`, **not**
+  PyTorch's default per-channel `(0.4914,0.4822,0.4465)/(0.2470,0.2435,0.2616)`.
+  This is a deliberate, documented choice in the code and is a legitimate
+  alternative, but it means CIFAR-10 numbers here are not directly comparable to
+  torchvision-trained baselines without accounting for the scaling.
+- The `MD5` of a `.tar.gz` cannot be compared across mirrors because gzip output
+  is not byte-reproducible; dataset verification is therefore by **content**
+  invariants (magic numbers, record counts, class balance) rather than digest.
+  The one digest the tree does carry, `c32a1d4a...` for `cifar-10-binary.tar.gz`,
+  was wrongly compared here against `c58f3010...`, which is
+  `cifar-10-python.tar.gz` -- a different file entirely. The binary tarball's own
+  published digest is not asserted by any authoritative source this pass could
+  find, so it is left unverified by digest and verified by content instead.

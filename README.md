@@ -418,6 +418,26 @@ each of those 7 became a permanent check in `audit_v7_hardening`. The current
 tally is 18/18 caught, 1 verified behaviourally neutral, 0 holes. Details and the
 per-mutation record are in `docs/DESPOT_TRUTH_V2.md` §16.
 
+### Primary-source verification
+
+A finite difference proves the derivative of whatever function you implemented.
+It does not prove you implemented the intended function — a wrong constant is
+perfectly self-consistent and passes every internal test. So every constant and
+equation is also checked against its published source: Hendrycks & Gimpel for
+GELU, Ba/Kiros/Hinton for LayerNorm, Zhang & Sennrich for RMSNorm,
+Vaswani for the `1/sqrt(d)` scale, Su et al. for RoPE, Loshchilov & Hutter for
+AdamW and the cosine schedule, Pascanu et al. for gradient clipping, Ainslie
+et al. for GQA grouping, He et al. for init, the TFLite spec for INT8
+quantization, IEEE 802.3 for CRC-32, and the datasets' own specifications for
+MNIST and CIFAR-10.
+
+That pass found one real error: the GELU comment claimed a max deviation from
+erf-exact GELU of `~2e-3`, when the true value is **4.74e-04**. The bound had
+never been checked against anything — and the oracle had inherited the same
+unverified number. Both are now measured and pinned. The full citation table,
+including the one deliberate divergence from the TFLite spec and the claims that
+remain unchecked, is `docs/DESPOT_TRUTH_V2.md` §17.
+
 All five gates run on every push (`.github/workflows/gate.yml`).
 <!-- /SECTION:VALIDATION -->
 

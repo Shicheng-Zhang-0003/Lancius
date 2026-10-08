@@ -339,10 +339,24 @@ void kernel_layernorm(double* out, const double* in, const double* gamma, const 
     if (omp_err_ln != LANCIUS_ERROR_OK) lancius_set_error(omp_err_ln);
 }
 
-/* Despot truth: GELU here is the tanh approximation (Hendrycks-Gimpel tanh
- * variant, as in GPT-2/BERT), NOT the erf-exact GELU. Max error vs erf-exact
- * is ~2e-3. Clamps at +-10 are exact limits (tanh saturates), NaN passes
- * through. If erf-exact is needed, it must be a separate kernel. */
+/* GELU here is the tanh approximation of Hendrycks & Gimpel 2016
+ * (arXiv:1606.08415), i.e. the form used by GPT-2/BERT:
+ *     0.5*x*(1 + tanh(sqrt(2/pi)*(x + 0.044715*x^3)))
+ * NOT the erf-exact GELU x*Phi(x).
+ *
+ * Despot V8 truth: the max |approx - exact| is 4.74e-04, at x = 2.6989, and
+ * the rms is 1.42e-04 over [-12, 12]. This comment used to claim "~2e-3",
+ * over-stating the error by 4x; the bound was never checked against anything,
+ * which is precisely the failure mode an external-oracle gate exists to catch,
+ * so audit_v7_hardening H2's companion oracle now measures it rather than
+ * assuming it.
+ *
+ * The clamps at +-10 are not part of the formula. They bound the argument so
+ * tanh cannot saturate into a slow path, and they are exact in the limit:
+ * |GELU(x) - x| < 1e-9 for x > 10 and GELU(x) < 1e-9 for x < -10.
+ * NaN passes through unchanged.
+ * If erf-exact GELU is ever needed it must be a separate kernel, because the
+ * two differ by up to 4.7e-4 and gradients differ correspondingly. */
 void kernel_gelu(double* out, const double* in, size_t elements) {
     if (!out || !in) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
     const double sqrt_2_over_pi = 0.7978845608028654;
