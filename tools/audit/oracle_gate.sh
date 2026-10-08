@@ -38,6 +38,10 @@ rc=0
 python3 "$ROOT/tools/audit/kernel_oracle.py" "$OUT/dumps" || rc=1
 python3 "$ROOT/tools/audit/graph_oracle.py"  "$OUT/dumps" || rc=1
 python3 "$ROOT/tools/audit/trainlib_oracle.py" "$OUT/dumps/trainlib" || rc=1
+# conv2d and the reduction/softmax conventions, against torch specifically:
+# a self-authored NumPy reference shares the author with the kernel.
+python3 "$ROOT/tools/audit/conv_oracle.py"  "$OUT/dumps" || rc=1
+python3 "$ROOT/tools/audit/math_oracle.py"  "$OUT/dumps" || rc=1
 
 if [ "$rc" -ne 0 ]; then
   echo "EXTERNAL ORACLE GATE FAILED: the library disagrees with NumPy/PyTorch/closed form."

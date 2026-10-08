@@ -825,3 +825,62 @@ the sixth consecutive occurrence of the pattern in this document: **the
 instrument fails silently and looks like a finding.** The discipline that
 follows from it is not "trust the check" but "when a check fires, establish which
 side is wrong before believing either."
+
+### 19.5 Layer 2: conv2d, reductions and softmax against PyTorch
+
+Layer 1 closed the train-lib gap. Layer 2 takes the ops whose existing checks
+were *self-authored* — a reference written by the same person as the kernel is
+correlated, not independent — plus the ops nothing checked numerically at all.
+
+**conv2d — 11/11 against `torch.nn.functional.conv2d`.** The existing
+`kernel_oracle.py` reference is a hand-written NCHW cross-correlation by the same
+author. Replaced (not discarded) with a torch comparison of the same dumps.
+Bottom-up, the questions that matter:
+
+- **Convention.** Deep-learning `conv2d` is **cross-correlation, kernel not
+  flipped**; the mathematical convolution of LeCun 1998 / MATLAB flips it. This
+  is verified against torch, and the oracle additionally asserts that the
+  flipped convention would give a *different* answer on this data, so a future
+  edit that flips the kernel cannot pass by symmetry. This class of error is
+  invisible to finite differences, because a flipped forward with a flipped
+  backward is self-consistent.
+- **Output shape** `floor((H + 2p - K)/s) + 1`, checked, not assumed.
+- **Padding is zero-only.** PyTorch also offers reflect/replicate/circular;
+  those are not supported here and the oracle records that as a stated
+  limitation rather than leaving it implied by an absent test.
+- **No bias in the forward signature**; bias is a separate `ADD`.
+- **Backward** `d/din` and `d/dw` match torch autograd.
+
+**Reductions and softmax — 13/13 against torch.** Previously the reductions
+were checked structurally and softmax was checked only for sum-to-one and shift
+invariance. **Both properties are satisfied by a wrong implementation**: a
+reduction along the transposed axis still reduces something, and a softmax
+normalising over columns instead of rows still sums to one per row. Now compared
+numerically:
+
+- `SUM_AXIS0/1` and `SUM_AXIS_ND` on 2-D/3-D/4-D tensors match
+  `torch.sum(dim=k, keepdim=True)` to 1e-12, and each case additionally asserts
+  the *transposed* axis would differ, so a wrong-axis implementation cannot pass
+  by luck on symmetric data.
+- `softmax` matches `torch.softmax(dim=-1)`; shift invariance is verified
+  numerically against torch on **both** the original and the `+7.5` logits, and
+  the oracle asserts that column-normalisation would differ, making the axis
+  question decidable.
+
+### 19.6 An unchecked path, found by looking for what is absent
+
+There is **no softmax backward check anywhere**. `softmax_out2.bin` looks like a
+gradient by name; it is in fact the *shifted forward output* for the
+shift-invariance probe. My first version of this oracle read it as a backward
+gradient and compared it against torch under a random upstream gradient I
+invented — a comparison meaningless in both directions. Recorded here as an
+open path rather than quietly dropped: softmax backward is reachable through
+`lancius_softmax_bwd` and is exercised indirectly wherever an MLP trains, but no
+external oracle compares it against torch autograd.
+
+This is the seventh occurrence of the same species. The pattern is now
+unmistakable enough to state as a rule for this project: **when a dump's name
+implies a quantity, confirm what the probe actually wrote before trusting it,
+and when an oracle fires, establish which side is wrong before believing
+either.** Six of the seven were harness defects that would have been reported as
+library defects had the harness not been fixed first.
