@@ -523,3 +523,165 @@ two, which is why the citation table above is a deliverable and not a footnote.
   `cifar-10-python.tar.gz` -- a different file entirely. The binary tarball's own
   published digest is not asserted by any authoritative source this pass could
   find, so it is left unverified by digest and verified by content instead.
+
+## 18. PRM800K verifier stack (2026-10-07) — what the model can and cannot read
+
+A verifier built on `Lancius` autodiff, and an honest account of its reach.
+
+### 18.1 The shipped distiller is not a verifier task
+
+`examples/distill_prm800k.c` trains on `chosen_completion` alone. `chosen` carries
+rating `+1` in **12961/12961** train rows and **1603/1603** test rows, so the
+task as shipped is a constant label and the best achievable "accuracy" is
+reproducing a prior. Parsing every completion instead gives 48,672 train and
+5,082 test steps with real spread (train `-1/0/+1` = 19656/10234/18782, test =
+1970/867/2245). The test majority-class baseline is `2245/5082 = 0.4418`, and
+that — not 1.0000 — is the number a model must clear to have shown anything.
+
+### 18.2 The 3-class verifier, and four defects that would each have printed a plausible number
+
+`examples/train_prm_verifier.c`: `logits = X@W1 + b1 -> tanh -> @W2 + b2`,
+minimising `mean((logits - onehot)^2)`. Final held-out result **acc 0.4957,
+macro-F1 0.3932, CE 1.0432**.
+
+1. Multiplying logits by `rows/2` "to make MSE `0.5*||.||^2`". MSE is a
+   *mean*, so `d/dz mean((s*z - T)^2) = (2/pe)*s^2*(z-T)`: the multiplier enters
+   twice, scaling the gradient by `s^2 = 1024`, not `s`. Diverged to NaN.
+2. `softmax_ce` returned `mean log p`, i.e. **negative** cross-entropy, so a
+   working run reported `-1.04`.
+3. The graph's MSE VJP is `(2/pe)*(z-T)`; softmax CE gives `(1/rows)*(z-T)`.
+   The relationship is the constant `2/NCLASS`, not `2/pe`.
+4. The held-out baseline evaluated `(model_t){0}`, whose `W1/b1/W2/b2` are all
+   NULL — segfault. Separately, one `metrics_t` was reused for both splits, so
+   the `train-acc` column printed test accuracy.
+
+### 18.3 Gradients verified independently, not asserted
+
+`tools/prm/ref_prm.c` is a pure-C trainer with hand-derived softmax-CE backprop
+and no framework in it, mirroring every hyperparameter, the RNG stream, the He
+init and the effective step. It reaches **test acc 0.4959** against the
+framework's **0.4957**, trajectories tracking. The graph path trains correctly.
+
+The self-contained gradient check finite-differences the **graph's own
+mean-MSE objective**, not cross-entropy, and pins at **9.5e-09**. Three false
+alarms preceded it, two of which were my harness rather than the framework:
+`MSE_BWD` was exact to `0e+00` in isolation and a hand-derived CE gradient
+matched central differences to all printed digits, so the residual came from
+converting mean-MSE to CE with the wrong prefactor (twice) and from a metric
+that divides by gradients at the `1e-12` level where a central difference is
+pure float noise. An RMS-relative denominator was required.
+
+### 18.4 What this model cannot do: a proof, not a measurement
+
+`tools/prm/bench_complexity.py` scores the trained model across ten complexity
+levels, integer addition through matrix products. **Balanced accuracy is
+0.5000 at every level**, with `P(+1|correct) = P(+1|wrong)` to four decimals.
+
+The decisive result: **1150 minimal pairs whose 16-dim feature vectors are
+bit-identical** — e.g. `2 + 2 = 4` vs `2 + 2 = 7` — receive **bit-identical
+predictions in 1150/1150 cases**. Same length, same digit count, same
+everything the featurizer sees. The capability is **absent, not weak**.
+
+The control trains the same architecture directly on this data and reaches
+**0.5215 on the training half** — it cannot fit what it is shown. The failure is
+in the representation, not the optimisation.
+
+This does not contradict 0.4957 on real PRM data; it explains it. PRM800K
+ratings correlate with the *surface shape* of the writing (length, digit
+density, position), which is the entire content of this model.
+
+### 18.5 The 5-level scale, and why disjointness is the whole ballgame
+
+`{-1, -0.5, 0, +0.5, +1}`, separated on `(structure, final answer)`:
+
+| level | meaning | rule |
+|---|---|---|
+| `+1.0` | plain true | structure ok, final ok, every step exact |
+| `+0.5` | mostly true, something wrong | structure ok, final ok, a working step off |
+| `0.0` | 50/50 | a step is omitted — unjudgeable either way |
+| `-0.5` | probably false, something right | structure ok, **final answer wrong** |
+| `-1.0` | plain false | structure wrong **and** final wrong |
+
+An earlier version made `-0.5` by corrupting an *intermediate* step while
+leaving structure and final intact — indistinguishable from `+0.5` by
+construction. The model responded correctly and sent **74% of true `-0.5` to
+`+1`**, i.e. "probably false" read as "plain true". Making the classes disjoint:
+**0.7097 -> 0.8428** exact, MAE **0.347 -> 0.145**.
+
+Label provenance: ground truth is the **injected defect type**, decided at
+generation time, and is **never re-derived by the checker**. If it were, labels
+and features would both be functions of the checker and the network would only
+re-encode the checker's output — success that validates nothing. The checker
+supplies measurements; the defect supplies truth.
+
+Two further defects of mine, both silent rather than crashing:
+
+- `_bump` computed `x + int(x*scale)`, a **no-op whenever `|x*scale| < 1`**, so
+  answers below ~3 were never corrupted and whole `-0.5`/`-1` samples were
+  relabelled `+1`.
+- Per-step feature rows carried **no step index**, so the net could not tell
+  which step it was judging and collapsed to `+1` — **99% of true `-0.5` steps
+  became `+1`**.
+
+With both fixed and a 5% floor on defect magnitude: **overall 0.9370 exact,
+MAE 0.046**.
+
+### 18.6 Trained from scratch, and the two failed improvements
+
+`examples/train_verifier5.c`: 65 -> 96 -> 5, tanh, softmax CE, SGDM with L2
+into the gradient, He init via Box-Muller (the PRM trainer multiplied a
+*uniform* variate by sigma, drawing std of `sigma/sqrt(3)`).
+
+```
+gradient check: 20 probes on W1, worst scale-relative err = 8.891e-08  OK
+overall    n=1574  exact=0.9377  within1=0.9752  macroF1=0.6385  MAE=0.0562  kappa=0.9218
+per-step   n=6764  exact=0.9808  within1=0.9871  macroF1=0.6499  MAE=0.0203  kappa=0.9708
+```
+
+Model selection uses a validation split carved from **train**; test is touched
+once. A validation forward that indexed the shuffled rows as contiguous read
+wrong and partly out-of-bounds data, reporting **0.28** while the same model
+scored **0.70** on test — every epoch-selection decision was being made on that
+noise, which is how a split present in the code but not in the arithmetic
+launders test into the loop.
+
+Both attempts to improve the weak algorithms by rescaling features **failed**:
+log-transforming the error features scored **0.9320** and clipping at 10 scored
+**0.9346**, both below the 0.9377 baseline. The *magnitude* of the error is
+what separates `+0.5` from `-1.0`; monotone compression destroys the signal, and
+the 1e6 outliers were never the problem. Reverted, with the reasoning left in
+`verifier5.py` so the dead ends are not re-derived.
+
+### 18.7 2,000 runtime tests, and what the residual error is
+
+`tools/prm/run_tests.py`: 20 algorithms x 100 parameter sets, cycling all five
+levels. **1869/2000 overall (93.45%)**, **8230/8380 per-step (98.21%)**, 6.1s.
+
+| level | accuracy |
+|---|---|
+| `-1.0` | 0.9725 |
+| `-0.5` | 0.9050 |
+| `0.0` | 0.9950 |
+| `+0.5` | **0.8075** |
+| `+1.0` | 0.9925 |
+
+Dominant error: **`+0.5` predicted `+1` in 71 cases**, then `-0.5 -> +1` in 31.
+Both certify something wrong as true. Weakest algorithms `euclid_gcd` 0.62 and
+`mod_pow_fast` 0.80 — variable-length derivations dilute a single-step defect so
+`frac_exact` barely moves, which is an aggregation problem (worst step, not
+count), not a scaling one.
+
+### 18.8 What this stack does not establish
+
+- **No real data.** Every label is an injected defect. No human-written
+  derivation has ever been scored. This validates the machinery and the scale,
+  not real-world accuracy.
+- **`+0.5` is a judgement call.** "Slightly off" is a continuum; the 5% floor
+  is a choice, not ground truth.
+- **No algebraic equivalence.** A candidate reaching the right answer by a
+  different route scores badly — the checker compares against *this*
+  algorithm's step list.
+- **20 algorithms**, integer-friendly coefficients, no radicals, no matrices
+  above 2x2, no systems beyond 2 unknowns.
+- **Edge cases are out of scope** for the sweep by explicit request, and are
+  not trained for.
