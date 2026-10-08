@@ -26,7 +26,7 @@ OBJS = $(SRCS:.c=.o)
 # Default goal must precede any -include: depfiles define %-targets that
 # would otherwise hijack the default goal (bare `make` built only arena.o).
 .DEFAULT_GOAL := all
-all: liblancius.a lancius audit_internals stress_test test_torture train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_despot_probe train_verifier_head distill_prm800k audit_train_lib audit_sandbox train_micromodel eval_verifier audit_sum_axis_nd audit_train_bwd audit_train_converge
+all: liblancius.a lancius audit_internals stress_test test_torture train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_despot_probe train_verifier_head distill_prm800k audit_train_lib audit_sandbox train_micromodel eval_verifier audit_sum_axis_nd audit_train_bwd audit_train_converge audit_v7_hardening
 lancius: examples/lancius_cli.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 liblancius.a: $(OBJS)
@@ -48,7 +48,8 @@ clean:
 	rm -f audit_known_answer audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_flash_attention
 	rm -f audit_despot_probe train_verifier_head distill_prm800k lancius
 	rm -f audit_train_lib audit_sandbox train_micromodel eval_verifier audit_sum_axis_nd audit_train_bwd audit_train_converge audit_train_converge audit_train_bwd
-.PHONY: all clean check check-long check-sanitizers ldfd-test ldfd-build
+.PHONY: all clean check check-long check-sanitizers ldfd-test ldfd-build \
+        check-oracle check-mutation check-ubstrict
 train_cifar10: examples/train_cifar10.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 fuzz_lancius: examples/fuzz_lancius.c liblancius.a
@@ -185,6 +186,7 @@ check: all
 	./audit_train_bwd
 	./audit_train_converge
 	./audit_sandbox
+	./audit_v7_hardening
 	./train_micromodel
 	./eval_verifier
 	python3 audit_text_pipeline.py
@@ -210,20 +212,70 @@ audit_known_answer: examples/audit_known_answer.c liblancius.a
 audit_regression_13c: examples/audit_regression_13c.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 
-# --- v11A1 Task 13c: sanitizer gate ---
+# --- v13A1 Task 13c: sanitizer gate ---
+# V7 truth: this gate used to rebuild exactly three binaries
+# (stress_test, test_torture, fuzz_lancius) against a liblancius.a that was
+# NOT instrumented, so nothing inside the library was ever checked, and 25 of
+# the gate's 28 audits never ran under a sanitizer at all. audit_fault_injection
+# (which leaks 72 bytes on its GQA fail-loud path) was one of the 25.
+# check-sanitizers now instruments the LIBRARY and every audit in the gate and
+# runs them all under ASan + UBSan + LeakSanitizer.
+SAN_FLAGS = -fsanitize=address,undefined -fno-omit-frame-pointer
+SAN_CFLAGS = -Wall -Wextra -g -O1 $(SAN_FLAGS) -fopenmp -std=c11 -I./include -fPIC
+SAN_LDFLAGS = $(SAN_FLAGS) -fopenmp -lm -lpthread
+SAN_DIR = temp/sanitized
+SAN_AUDITS = stress_test test_torture fuzz_lancius test_path_bg test_grad_check \
+             audit_internals audit_ffi audit_threadpool_parity audit_nan_injection \
+             audit_memory_pool audit_flash_attention audit_modern_llm \
+             audit_known_answer audit_regression_13c \
+             audit_transformer_known_answer audit_fp32_path \
+             audit_fault_injection audit_despot_probe audit_train_lib \
+             audit_sum_axis_nd audit_train_bwd audit_train_converge \
+             audit_sandbox audit_v7_hardening train_micromodel eval_verifier
+
 check-sanitizers:
-	$(MAKE) -B test_asan
-	./stress_test
-	./test_torture
-	./fuzz_lancius 12345
-	$(MAKE) -B test_ubsan
-	./stress_test
-	./test_torture
-	./fuzz_lancius 12345
-	@echo "v12R2 sanitizer gate complete."
+	@mkdir -p $(SAN_DIR)/obj $(SAN_DIR)/logs
+	@echo "--- instrumenting the library (this is the part the old gate skipped) ---"
+	@for f in src/*/*.c; do \
+	    $(CC) $(SAN_CFLAGS) -c $$f -o $(SAN_DIR)/obj/`basename $$f .c`.o || exit 1; \
+	 done
+	@ar rcs $(SAN_DIR)/liblancius_san.a $(SAN_DIR)/obj/*.o
+	@echo "--- building every audit against the instrumented library ---"
+	@for a in $(SAN_AUDITS); do \
+	    $(CC) $(SAN_CFLAGS) -o $(SAN_DIR)/$$a examples/$$a.c $(SAN_DIR)/liblancius_san.a $(SAN_LDFLAGS) \
+	      || { echo "BUILD FAILED: $$a"; exit 1; }; \
+	 done
+	@echo "--- running every audit under ASan+UBSan+LSan ---"
+	@fails=0; for a in $(SAN_AUDITS); do \
+	    ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1 \
+	      ./$(SAN_DIR)/$$a > $(SAN_DIR)/logs/$$a.run 2>&1; rc=$$?; \
+	    if grep -qE "runtime error:|ERROR: (AddressSanitizer|LeakSanitizer)" $(SAN_DIR)/logs/$$a.run; then \
+	      echo "SANITIZER FINDING in $$a:"; \
+	      grep -E "runtime error:|ERROR: (AddressSanitizer|LeakSanitizer)" $(SAN_DIR)/logs/$$a.run | head -4; \
+	      fails=$$((fails+1)); \
+	    fi; \
+	    if [ $$rc -ne 0 ]; then echo "EXIT NONZERO: $$a (rc=$$rc)"; fails=$$((fails+1)); fi; \
+	 done; \
+	 if [ $$fails -ne 0 ]; then echo "sanitizer gate FAILED ($$fails findings) in $(SAN_DIR)/logs"; exit 1; fi
+	@echo "Sanitizer gate: all $(words $(SAN_AUDITS)) audits clean under ASan+UBSan+LSan."
 	@echo "Restoring normal build (removing sanitizer instrumentation)..."
 	$(MAKE) -B all
 	@echo "Normal build restored. Safe to run 'make check' now."
+
+# --- V7: strict UBSan pass (aborts on the first UB, incl. signed overflow
+# and float-cast-overflow, which the combined gate does not fail on) ---
+check-ubstrict:
+	@./tools/audit/ubstrict_sweep.sh
+
+# --- V7: external-oracle gate. Recomputes every kernel and graph-level op in
+# NumPy/PyTorch/closed form and compares. Fails nonzero on any divergence. ---
+check-oracle:
+	@./tools/audit/oracle_gate.sh
+
+# --- V7: mutation gate. Injects real defects and requires the gate to go red.
+# A gate that cannot fail is decoration; this proves it can. ---
+check-mutation:
+	@./tools/audit/mutation_test.sh
 
 audit_transformer_known_answer: examples/audit_transformer_known_answer.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
@@ -261,6 +313,10 @@ audit_fault_injection: examples/audit_fault_injection.c liblancius.a
 
 # --- R3: N-dim reduction training gate ---
 audit_sum_axis_nd: examples/audit_sum_axis_nd.c liblancius.a
+	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
+
+# --- V7: mutation-test closures (see docs/DESPOT_TRUTH_V2.md section 16) ---
+audit_v7_hardening: examples/audit_v7_hardening.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 
 # --- R3: norm/activation/batched backward gate ---
