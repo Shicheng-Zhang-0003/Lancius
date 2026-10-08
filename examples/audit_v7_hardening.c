@@ -338,22 +338,58 @@ static void h3_arena_alignment(void) {
         CHECK(p != NULL, "H3 arena_alloc succeeded");
         if (p) CHECK(((uintptr_t)p % al) == 0, "H3 arena honours requested alignment");
     }
-    /* The default path must satisfy the 32B AVX2 contract for EVERY arena, not
-     * merely for the one whose malloc block happened to start 32-aligned.
-     * glibc only guarantees 16B, so a single-arena check passes by luck half the
-     * time against a library that defaults to 16 -- which is exactly what
-     * mutation testing did: 64 fresh arenas catch it every time. */
-    for (int arena_i = 0; arena_i < 64; arena_i++) {
-        lancius_arena* d = lancius_arena_create(1u << 20);
-        CHECK(d != NULL, "H3 fresh arena created");
-        if (!d) break;
-        for (int i = 0; i < 8; i++) {
-            void* p = lancius_arena_alloc(d, 8 + (size_t)i, 0);
-            CHECK(p != NULL, "H3 default-align alloc succeeded");
-            if (p) CHECK(((uintptr_t)p % 32) == 0,
-                         "H3 default allocation is 32B aligned (AVX2 contract)");
+    /* The default path must satisfy the 32B AVX2 contract -- deterministically,
+     * not by luck.
+     *
+     * The previous version of this check created 64 fresh arenas and allocated
+     * from each, on the theory that "a single-arena check passes by luck half
+     * the time". It bought nothing at all. The alignment argument to
+     * lancius_arena_alloc only affects ALIGN_UP(ptr, alignment); if the arena's
+     * BASE is already 32-aligned then any alignment >= 32 yields the same
+     * address, so `if (alignment == 0) alignment = 32` can be mutated to 16 and
+     * remain completely invisible. And every one of those 64 arenas was created
+     * with the SAME 1 MB size, so all 64 took the same allocator path: 1 MB is
+     * above glibc's mmap threshold, so each base came from mmap and was
+     * page-aligned -- identically 32-aligned, 64 times. The defence sampled the
+     * one thing that could not vary.
+     *
+     * What actually determines the residue is WHICH allocator path serves the
+     * request, and that is decided by the requested SIZE. Sweeping arena sizes
+     * across the mmap/heap boundary therefore varies the base residue for real:
+     * small arenas come from the heap (brk) and their bases are 16-aligned, so
+     * with a mutated default of 16 the returned pointers are NOT 32-aligned and
+     * the defect is caught on every run instead of on whichever machine's
+     * allocator happened to cooperate. */
+    {
+        static const size_t arena_sizes[] = {
+            4096, 8192, 12288, 16384, 24576, 32768, 49152, 65536,
+            98304, 131072, 196608, 262144, 393216, 524288, 786432, 1048576
+        };
+        int saw_heap_base = 0;
+        for (size_t si = 0; si < sizeof arena_sizes / sizeof arena_sizes[0]; si++) {
+            lancius_arena* d = lancius_arena_create(arena_sizes[si]);
+            CHECK(d != NULL, "H3 sized arena created");
+            if (!d) break;
+            for (int i = 0; i < 12; i++) {
+                /* vary the request size too, so `used` walks across the 32B
+                 * footprint boundary and not just its first multiple */
+                void* p = lancius_arena_alloc(d, 8 + (size_t)i * 7, 0);
+                CHECK(p != NULL, "H3 default-align alloc succeeded");
+                if (p && ((uintptr_t)p % 32) != 0) {
+                    saw_heap_base = 1;
+                    CHECK(false, "H3 default allocation is 32B aligned (AVX2 contract)");
+                }
+            }
+            lancius_arena_destroy(d);
         }
-        lancius_arena_destroy(d);
+        /* Record whether the sweep actually exercised a non-mmap base. This is
+         * informational, not a pass/fail: if every size landed on the mmap path
+         * the sweep would be vacuous and the mutation invisible again, which the
+         * reader deserves to know rather than infer. */
+        if (!saw_heap_base)
+            printf("  NOTE: no non-32-aligned base was observed; this platform's "
+                   "allocator served every arena size from mmap, so the "
+                   "default-alignment defect is not observable here.\n");
     }
     /* sizes that straddle the 32B rounding must not overlap */
     {
