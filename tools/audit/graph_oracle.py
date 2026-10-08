@@ -29,11 +29,21 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DUMPS = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "..", "dumps")
 
 results = []
+skipped = []
 
 
 def check(name, ok, detail=""):
     results.append((name, bool(ok), detail))
     return bool(ok)
+
+
+def skip(name, detail=""):
+    """Record a check that could not run. Deliberately NOT a pass and NOT a
+    failure: the oracle's documented contract is that it falls back to NumPy +
+    closed form when PyTorch is absent, so torch-only checks are skipped rather
+    than scored, but they are reported loudly because a skipped check is a check
+    that did not happen and must never be mistaken for one that passed."""
+    skipped.append((name, detail))
 
 
 def close(name, got, want, tol=1e-12):
@@ -259,6 +269,11 @@ except FileNotFoundError:
 # 2-layer tanh MLP, Lancius MSE = mean((p-y)^2), so the torch loss must be .mean()
 # and every gradient follows from that same scalar objective.
 try:
+    # Must import HERE. This block used to reference `torch` while relying on a
+    # name bound by an earlier block, so on a torch-less machine it raised
+    # NameError, which `except (FileNotFoundError, ImportError)` does not catch,
+    # and the oracle died with a traceback instead of degrading.
+    import torch
     Bn, In, H1, Out = 4, 3, 5, 2
     x = torch.tensor(rd("ad_x.bin").reshape(Bn, In), dtype=torch.float64, requires_grad=True)
     w1 = torch.tensor(rd("ad_w1.bin").reshape(In, H1), dtype=torch.float64, requires_grad=True)
@@ -297,8 +312,11 @@ try:
             fd.ravel()[i] = (lp - lm) / (2 * hstep)
         close(f"autodiff {nm} vs central differences of the same loss",
               rd(f"ad_{nm}.bin"), fd.ravel(), tol=1e-7)
-except (FileNotFoundError, ImportError) as e:
-    check("autodiff vs torch dumps", False, str(e))
+except FileNotFoundError as e:
+    check("autodiff dumps present", False, str(e))
+except ImportError as e:
+    skip("autodiff vs torch autograd", str(e))
+    skip("autodiff vs central differences (mlp)", str(e))
 
 # --------------------------------------------------------------- summary
 print()
@@ -307,7 +325,13 @@ nfail = len(results) - npass
 for name, ok, detail in results:
     if not ok:
         print(f"  FAIL  {name}  [{detail}]")
-print(f"\nGRAPH-LEVEL ORACLE: {npass}/{len(results)} passed, {nfail} failed")
+for name, detail in skipped:
+    print(f"  SKIP  {name}  [{detail}]")
+if skipped:
+    print(f"  ** {len(skipped)} check(s) DID NOT RUN -- torch absent. The "
+          f"oracle ran on NumPy + closed form only, which is weaker evidence. **")
+print(f"\nGRAPH-LEVEL ORACLE: {npass}/{len(results)} passed, {nfail} failed, "
+      f"{len(skipped)} skipped")
 json.dump([{"name": n, "ok": o, "detail": d} for n, o, d in results],
           open(os.path.join(os.path.dirname(os.path.abspath(DUMPS)), "graph_oracle.json"), "w"),
           indent=1)

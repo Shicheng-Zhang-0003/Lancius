@@ -22,6 +22,7 @@ DUMPS = sys.argv[1] if len(sys.argv) > 1 else os.environ.get(
 TOL = float(os.environ.get("ORACLE_TOL", "1e-11"))
 
 results = []
+skipped = []
 
 
 def meta(name):
@@ -35,6 +36,13 @@ def din(name):
 
 def dout(name):
     return np.fromfile(os.path.join(DUMPS, name + ".out.bin"), dtype=np.float64)
+
+
+def skip(name, detail=""):
+    """See graph_oracle.skip(): absent PyTorch is a skip, not a failure. These
+    layernorm/rmsnorm backward checks have no NumPy fallback, so a skip means
+    those two kernels went unverified and that must be reported, not hidden."""
+    skipped.append((name, detail))
 
 
 def check(name, ok, detail=""):
@@ -156,7 +164,7 @@ try:
     close("kernel_layernorm_bwd_beta vs torch autograd",
           dout("layernorm_bwd_db"), bt.grad.numpy())
 except ImportError:
-    check("torch available for layernorm bwd oracle", False, "torch missing")
+    skip("layernorm backward vs torch autograd", "torch missing")
 
 # ---------------------------------------------------------------- rmsnorm
 B, Hd = meta("rmsnorm")
@@ -179,7 +187,7 @@ try:
     close("kernel_rmsnorm_bwd_gamma vs torch autograd",
           dout("rmsnorm_dg"), gt.grad.numpy())
 except ImportError:
-    check("torch available for rmsnorm bwd oracle", False, "torch missing")
+    skip("rmsnorm backward vs torch autograd", "torch missing")
 
 # ---------------------------------------------------------------- gelu
 def kernel_gelu_at(vals):
@@ -453,7 +461,13 @@ nfail = len(results) - npass
 for name, ok, detail in results:
     if not ok:
         print(f"  FAIL  {name}  [{detail}]")
-print(f"\nEXTERNAL ORACLE: {npass}/{len(results)} passed, {nfail} failed")
+for name, detail in skipped:
+    print(f"  SKIP  {name}  [{detail}]")
+if skipped:
+    print(f"  ** {len(skipped)} check(s) DID NOT RUN -- torch absent. The "
+          f"oracle ran on NumPy + closed form only, which is weaker evidence. **")
+print(f"\nEXTERNAL ORACLE: {npass}/{len(results)} passed, {nfail} failed, "
+      f"{len(skipped)} skipped")
 
 # persist machine-readable result
 with open(os.path.join(os.path.dirname(DUMPS.rstrip("/")), "kernel_oracle.json"), "w") as f:
