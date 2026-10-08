@@ -141,7 +141,9 @@ and do NOT abort.
     boundaries.
 -   V6 (2026-10-01): no scope change; 45 correctness fixes. Notable
     boundaries tightened: VM is 2D-only (`ndim!=2` rejected); broadcast
-    backward exact for 2D/4D else `UNSUPPORTED_OP` (still no `SUM_AXIS_ND`);
+    backward exact at every rank via `SUM_AXIS_ND` (the "still no
+    `SUM_AXIS_ND`" note here was stale: R3-1 added the op and V7 §16.4 made
+    its VJP reachable and proved it against central differences);
     `CE_BWD` requires 2D + scalar grad; v2 per-channel save refused
     (format unchanged); static plan path requires 32B-aligned base
     (bump path aligns internally); `CONST` 1..4-D and `ROPE` now persist.
@@ -150,3 +152,49 @@ and do NOT abort.
 
 Limitations are documented intentionally to prevent unsupported
 assumptions.
+
+
+## Gate scope (V7)
+
+These are the boundaries of the *evidence*, not of the code. A property not
+listed as proven here is not proven; the honest default is "unchecked".
+
+Proven by `make check-oracle` against NumPy / torch autograd / hand-derived
+closed form / central differences:
+
+- Every pure kernel: matmul, FP32 matmul, conv2d (two stride/pad settings),
+  INT8 conv, LayerNorm and RMSNorm forward and all backwards, GELU forward and
+  backward, SwiGLU, RoPE, causal attention, GQA, KV-cache attention
+- Every graph-level op: softmax, cross-entropy, MSE, `ADD`/`SUB`/`MUL`
+  broadcast at 2-D/3-D/4-D, `SUM_AXIS_ND` on every axis of every rank,
+  `MATMUL_BATCHED`, permute, `CONV2D_BWD`, `CONV2D_BWD_W`, `MAXPOOL2D` and its
+  backward, fused conv+relu
+- The trainers: SGD, SGDM, AdamW (against `torch.optim.AdamW`), global-norm
+  clip, both LR schedules
+- The full autodiff VJP set of a two-layer tanh MLP, against torch autograd and
+  against central differences on the same objective
+
+Proven by `make check-sanitizers` (ASan + UBSan + LeakSanitizer over the
+**instrumented library**, every audit):
+
+- No heap or stack error, no undefined behaviour, no leak in any gate binary
+
+Proven by `make check-ubstrict` (UBSan alone, `-fno-sanitize-recover=all`):
+
+- No signed-integer overflow, shift error, bad float-to-int conversion,
+  misaligned or out-of-bounds access in any gate binary
+
+Proven by `make check-mutation`:
+
+- The gate catches 18 of 18 injected defects; 1 further mutation was verified
+  behaviourally equivalent and is reported as neutral, not as a pass
+
+**Not proven, and therefore not claimed:**
+
+- The 3463-LDFD submodule's own gates are its responsibility; this repo runs
+  `make ldfd-test` as a gate member and reports an honest SKIP when the library
+  is absent
+- ONNX conversion beyond LeNet-class graphs, dynamic shapes, GPU paths,
+  multi-process or multi-threaded *user* code, and the FP32 path beyond matmul
+- Performance. Nothing here measures throughput; the oracles measure
+  correctness only

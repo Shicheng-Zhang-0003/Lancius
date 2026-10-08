@@ -119,8 +119,74 @@ per-tensor quantization.
 
 v12 development may expand:
 
--   `SUM_AXIS_ND` for per-axis N-dim broadcast grad reduction (currently
-    fails loud, honestly)
+-   ~~`SUM_AXIS_ND` for per-axis N-dim broadcast grad reduction~~ — shipped in
+    R3-1 and made reachable in V7 (`docs/DESPOT_TRUTH_V2.md` §16.4); the op
+    trains and its VJP is exact to ~1e-9 by central difference
 -   FP32 operator expansion + FP32 KV-cache
 -   broader ONNX coverage + dynamic shape exploration
 -   backend support, optimization passes, ecosystem integration
+
+
+## V7: invariants the runtime now guarantees
+
+These are contracts, not implementation notes. Each is enforced by a check in
+`examples/audit_v7_hardening.c` and each was found by breaking it first.
+
+### The sticky-error contract
+
+`lancius_set_error` writes `_Thread_local` state. The runtime therefore
+guarantees:
+
+1. **A successful op leaves `lancius_get_error()` at `OK`.** Every branch in
+   `execute_node_math` that computes a result terminates with `return`.
+   `SUM_AXIS_ND` (opcode 42) once did not: it fell through to the
+   `op >= LANCIUS_OP_CONV2D` router, which rejected it with `UNSUPPORTED_OP`
+   after the values were already correct.
+2. **An error raised inside an OpenMP worker is invisible to the caller.**
+   Every parallel kernel that can fail propagates through an explicit shared
+   flag that the master re-sets after the region (`omp_err_*` in
+   `lancius_kernels.c`, `omp_alloc_failed` in `lancius_vision_ops.c`).
+3. **A sticky error aborts the whole training graph.**
+   `lancius_ir_autodiff` clears at entry and returns `NULL` on any error, so a
+   NULL grad can never train as zero.
+
+Together these mean an error check after a successful call is a *meaningful*
+assertion, which is what makes them testable.
+
+### Builder and executor must agree
+
+A builder is a proof that a node is executable. When they disagree, the op is
+either unbuildable or unloadable, and the executor's capability is a lie.
+
+`lancius_broadcast`, `lancius_broadcast_4d` and the BROADCAST executor all
+implement one rule: trailing-rank alignment with per-dim `da == 1 || da ==
+out[i]`. `lancius_broadcast_to_shape` implemented a stricter one (exact shape
+equality), which silently disabled `SUM_AXIS_ND`'s documented VJP and made
+1-D/3-D expanding broadcasts unbuildable while their 2-D/4-D twins worked.
+
+Any new builder is expected to accept exactly what its executor accepts, and
+`H8` of the V7 audit pins that at every rank with a v2 save/load round-trip.
+
+### Arena contract
+
+- Every allocation is 32-byte aligned (AVX2), whether the caller asks for it or
+  takes the default. Verified across 64 independent arenas, because glibc only
+  guarantees 16 and a single-arena check passes by luck half the time.
+- Requested alignment must be a power of two and at most 1 MiB. An uncapped
+  alignment wraps `ALIGN_UP` and forces a gigantic grow — an OOM-DoS.
+- `size == 0` allocates one byte, so two zero-size allocations never alias.
+
+### Autodiff teardown
+
+`lancius_ir_autodiff` has one allocation of `grad_nodes` and roughly fifty ways
+to fail. All fifty route through `autodiff_abort()`, which frees `grad_nodes`,
+`fwd_to_full`, `grad_map`, the cloned graph and the struct. A new failure
+branch that rolls its own free list is a review failure, because that is exactly
+how 45 branches leaked the same buffer.
+
+### Gate integrity
+
+The gates are themselves audited. `make check-mutation` injects real defects
+and requires the gate to go red; `make check-oracle` recomputes every kernel and
+graph op from a source that does not link Lancius. See
+`docs/DESPOT_TRUTH_V2.md` §16 for the per-mutation record.

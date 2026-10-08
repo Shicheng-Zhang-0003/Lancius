@@ -47,7 +47,9 @@ release. Public github tag: `V1.2RC2`. It inherits the v11S contract and the v12
   saves no longer leave truncated files); duplicate NOP ids are rejected.
 - Autodiff: `broadcast_to_shape` for any 1..4-D scalar lift; `SUM`
   (any ndim), `SUM_AXIS0/1`, `RESHAPE` VJPs exact; N-dim partial broadcast
-  reduction fails loud (no `SUM_AXIS_ND` yet); every unhandled forward op
+  reduction is trainable via `SUM_AXIS_ND` (R3-1) with an exact VJP (V7
+  §16.4 — it was unreachable until `broadcast_to_shape` was corrected to the
+  same NumPy rule its 4-D sibling already used); every unhandled forward op
   fails loud; sticky shape errors abort the whole training graph.
 - Kernels: `LANCIUS_NORM_EPS=1e-5` pinned; GELU documented as tanh-approx;
   INT8 `scale=1.0` for all-zero (consistent with quantizer skip).

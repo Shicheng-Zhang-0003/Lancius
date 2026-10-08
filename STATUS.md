@@ -127,6 +127,39 @@ v12R1 adds correctness within scope plus additive primitives only
 (`broadcast_to_shape`, TANH/MSE, per-channel quant/dequant, pool timeout);
 see `CHANGELOG.md` for deltas.
 
+## V7 truth batch (this pass): the gate audited against itself
+
+Four defects found and fixed, each by a method that does not trust the author:
+
+- **`SUM_AXIS_ND` fell through to the vision router.** The branch computed
+  correct values, had no terminating `return`, reached
+  `if (n->op >= LANCIUS_OP_CONV2D)`, and `lancius_execute_vision_op` rejected
+  opcode 42 with `UNSUPPORTED_OP`. Correct answer, then a false failure in the
+  thread-local error that autodiff reads as "abort the whole graph".
+- **45 autodiff abort paths leaked `tg->grad_nodes`** (72 bytes per failing
+  call; ASan proved it; `audit_fault_injection` hit it on every run). Every
+  abort now funnels through one `autodiff_abort()` helper.
+- **`lancius_broadcast_to_shape` was stricter than the op it builds.** It
+  demanded exact shape equality while its 4-D sibling and the executor accept
+  NumPy trailing-rank with per-dim 1-or-equal. Consequence: the documented
+  `SUM_AXIS_ND` VJP could never build, so R3-1's headline feature was not
+  trainable end to end. Now exact against central differences at ~1e-9.
+- **`test_path_bg` (960 B) and `audit_modern_llm` (640+ B) leaked their own
+  buffers** by assigning `runtime_data` instead of binding ownership.
+
+Four gates added, because the first three could be green while the library was
+wrong:
+
+| Gate | What it proves | Tally |
+|---|---|---|
+| `make check-oracle` | every kernel and graph op recomputed in NumPy / PyTorch autograd / closed form / central differences | 41/41 kernels + 37/37 graph ops |
+| `make check-sanitizers` | ASan + UBSan + LSan over the **instrumented library** and every audit (the old gate ran 3 binaries against an uninstrumented archive) | 26/26 clean |
+| `make check-ubstrict` | UBSan alone, `-fno-sanitize-recover=all`, so signed overflow / shift / float-cast abort instead of warn | 25/25 clean |
+| `make check-mutation` | real defects injected; the gate must go red | **18/18 caught, 1 verified-neutral, 0 holes** (first run: 8 caught, 7 holes) |
+
+All of them run on every push via `.github/workflows/gate.yml`, which did not
+exist before this pass. Full record: `docs/DESPOT_TRUTH_V2.md` §16.
+
 ## Validation batch — v12R2
 
 3463-LDFD evidence: `make -C 3463-LDFD test` = 4 dependency-free suites,
@@ -137,7 +170,11 @@ compiles against the C headers to prove the ctypes struct layout and enum
 values match, and exits 77 (skip) when the library is absent.
 
 
-Build clean under `-Wall -Wextra -Werror`; `audit_regression_13c` 49/49,
+Build clean under `-Wall -Wextra -Werror`; `audit_v7_hardening` 1226/1226
+(H1-H9: sticky-error contract, softmax/attention stability at |z|=1e5, arena
+32B alignment across 64 fresh arenas, alignment cap, quantizer exactness and
+error bound, fusion shape guard, full op table, `broadcast_to_shape` contract at
+every rank, INT8 64-bit accumulation proven at 204800 taps); `audit_regression_13c` 49/49,
 `audit_known_answer` 73/73, `audit_transformer_known_answer` 265/265,
 `audit_fp32_path` 19/19, `audit_fault_injection` 12/12,
 `audit_sum_axis_nd` 21/21, `audit_train_bwd` 24/24,
