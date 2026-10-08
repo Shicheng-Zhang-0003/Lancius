@@ -172,6 +172,27 @@ static int accum_grad(lancius_graph* g, lancius_node** grad_map, uint32_t fwd_in
     return 1;
 }
 
+/* Despot V7 truth: one teardown for every autodiff abort path.
+ *
+ * lancius_ir_autodiff allocates tg->grad_nodes (line ~186) plus tg->graph and
+ * tg itself. 45 of the abort paths below freed grad_map and fwd_to_full and
+ * then called lancius_graph_destroy(tg->graph); free(tg); -- leaking
+ * grad_nodes every time an unsupported forward op made autodiff fail loud.
+ * ASan proved it: 72 bytes per failing lancius_ir_autodiff call.
+ *
+ * Routing every abort through this one function means the next op added
+ * cannot reintroduce the leak: the compiler sees one free per allocation. */
+static void autodiff_abort(lancius_training_graph* tg, lancius_node** fwd_to_full,
+                           lancius_node** grad_map) {
+    free(fwd_to_full);
+    free(grad_map);
+    if (tg) {
+        free(tg->grad_nodes);
+        lancius_graph_destroy(tg->graph);
+        free(tg);
+    }
+}
+
 lancius_training_graph* lancius_ir_autodiff(lancius_graph* fwd_g, lancius_node* loss_node) {
     if (!loss_node) return NULL; // Prevent segfault on malformed graphs
     if (!fwd_g || fwd_g->next_id == 0) return NULL;
@@ -184,10 +205,10 @@ lancius_training_graph* lancius_ir_autodiff(lancius_graph* fwd_g, lancius_node* 
     if (!tg->graph) { free(tg); return NULL; }
     tg->max_id = fwd_g->next_id;
     tg->grad_nodes = (lancius_node**)calloc(fwd_g->next_id, sizeof(lancius_node*));
-    if (!tg->grad_nodes) { lancius_graph_destroy(tg->graph); free(tg); return NULL; }
+    if (!tg->grad_nodes) { autodiff_abort(tg, NULL, NULL); return NULL; }
 
     lancius_node** fwd_to_full = (lancius_node**)calloc(fwd_g->next_id, sizeof(lancius_node*));
-    if (!fwd_to_full) { free(tg->grad_nodes); lancius_graph_destroy(tg->graph); free(tg); return NULL; }
+    if (!fwd_to_full) { autodiff_abort(tg, NULL, NULL); return NULL; }
     for(uint32_t i=0; i<fwd_g->node_count; i++) {
         lancius_node* old = fwd_g->nodes[i];
         if (!old) continue;
@@ -300,20 +321,14 @@ break;
             case LANCIUS_OP_RMSNORM_BWD_GAMMA:
             case LANCIUS_OP_GELU_BWD:
                 lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
-                free(fwd_to_full);
-                free(tg->grad_nodes);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, NULL);return NULL;
             case LANCIUS_OP_CONV2D_RELU_FUSED:
                 // V10S FIX: Manually allocate to preserve the FUSED opcode!
                 // Despot truth: rt attach checked (was NULL), output NOT aliased
                 // (was shared with fwd graph: UAF + cross-execution overwrite).
                 if (tg->graph->next_id == UINT32_MAX) {
                     lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                    free(fwd_to_full);
-                    free(tg->grad_nodes);
-                    lancius_graph_destroy(tg->graph); free(tg);
-                    return NULL;
+                    autodiff_abort(tg, fwd_to_full, NULL);return NULL;
                 }
                 n = (lancius_node*)lancius_arena_alloc(tg->graph->arena, sizeof(lancius_node), 8);
                 if (n) {
@@ -321,10 +336,7 @@ break;
                     n->id = tg->graph->next_id++;
                     if (!lancius_node_attach_runtime(tg->graph, n)) {
                         lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                        free(fwd_to_full);
-                        free(tg->grad_nodes);
-                        lancius_graph_destroy(tg->graph); free(tg);
-                        return NULL;
+                        autodiff_abort(tg, fwd_to_full, NULL);return NULL;
                     }
                     n->op = LANCIUS_OP_CONV2D_RELU_FUSED; // Crucial: Keep the fused opcode
                     n->ndim = 4;
@@ -332,10 +344,7 @@ break;
                     n->inputs = (const lancius_node**)lancius_arena_alloc(tg->graph->arena, sizeof(lancius_node*) * 2, 8);
                     if (!n->inputs) {
                         lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                        free(fwd_to_full);
-                        free(tg->grad_nodes);
-                        lancius_graph_destroy(tg->graph); free(tg);
-                        return NULL;
+                        autodiff_abort(tg, fwd_to_full, NULL);return NULL;
                     }
                     n->inputs[0] = in0; n->inputs[1] = in1;
                     /* Pad shape to 4D to avoid OOB reads when ndim < 4 */
@@ -352,18 +361,12 @@ break;
                         size_t new_cap = tg->graph->node_cap == 0 ? 1024 : (size_t)tg->graph->node_cap * 2;
                         if (new_cap >= (size_t)UINT32_MAX + 1) {
                             lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                            free(fwd_to_full);
-                            free(tg->grad_nodes);
-                            lancius_graph_destroy(tg->graph); free(tg);
-                            return NULL;
+                            autodiff_abort(tg, fwd_to_full, NULL);return NULL;
                         }
                         lancius_node** nn = (lancius_node**)realloc(tg->graph->nodes, sizeof(lancius_node*) * new_cap);
                         if (!nn) {
                             lancius_set_error(LANCIUS_ERROR_OOM);
-                            free(fwd_to_full);
-                            free(tg->grad_nodes);
-                            lancius_graph_destroy(tg->graph); free(tg);
-                            return NULL;
+                            autodiff_abort(tg, fwd_to_full, NULL);return NULL;
                         }
                         tg->graph->nodes = nn;
                         tg->graph->node_cap = (uint32_t)new_cap;
@@ -375,10 +378,7 @@ break;
                 /* Despot truth: storing NULL and continuing builds a broken
                  * graph (was: silent). Fail loud. */
                 lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
-                free(fwd_to_full);
-                free(tg->grad_nodes);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, NULL);return NULL;
         }
         fwd_to_full[old->id] = n;
     }
@@ -386,9 +386,7 @@ break;
     /* Despot truth: foreign loss_node id OOB-read/wrote grad_map (was unchecked). */
     if (loss_node->id >= fwd_g->next_id) {
         lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
-        free(fwd_to_full); free(tg->grad_nodes);
-        lancius_graph_destroy(tg->graph); free(tg);
-        return NULL;
+        autodiff_abort(tg, fwd_to_full, NULL);return NULL;
     }
     {
         bool member = false;
@@ -397,22 +395,18 @@ break;
         }
         if (!member) {
             lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
-            free(fwd_to_full); free(tg->grad_nodes);
-            lancius_graph_destroy(tg->graph); free(tg);
-            return NULL;
+            autodiff_abort(tg, fwd_to_full, NULL);return NULL;
         }
     }
 
     lancius_node** grad_map = (lancius_node**)calloc(fwd_g->next_id, sizeof(lancius_node*));
-    if (!grad_map) { free(fwd_to_full); free(tg->grad_nodes); lancius_graph_destroy(tg->graph); free(tg); return NULL; }
+    if (!grad_map) { autodiff_abort(tg, fwd_to_full, NULL);return NULL; }
     grad_map[loss_node->id] = lancius_const(tg->graph, 1.0, 1, 1);
     if (!grad_map[loss_node->id]) {
         /* Despot truth: NULL seed (OOM) made the whole loop skip and return
          * an empty grad graph as success (was unchecked). */
         lancius_set_error(LANCIUS_ERROR_OOM);
-        free(grad_map); free(fwd_to_full); free(tg->grad_nodes);
-        lancius_graph_destroy(tg->graph); free(tg);
-        return NULL;
+        autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
     }
 
     for (int i = fwd_g->node_count - 1; i >= 0; i--) {
@@ -426,9 +420,7 @@ break;
          * Validate inputs exist before dereferencing. */
         if (!fwd_n->inputs) {
             lancius_set_error(LANCIUS_ERROR_INTERNAL);
-            free(grad_map); free(fwd_to_full);
-            lancius_graph_destroy(tg->graph); free(tg);
-            return NULL;
+            autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
         }
 
         if (fwd_n->op == LANCIUS_OP_ADD) {
@@ -481,9 +473,7 @@ break;
              * fail-loud (no wrong grads). GELU/LayerNorm/RMSNorm train via
              * the dedicated _BWD VJPs below. */
             lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
-            free(grad_map); free(fwd_to_full); 
-            lancius_graph_destroy(tg->graph); free(tg); 
-            return NULL;
+            autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
         } else if (fwd_n->op == LANCIUS_OP_GELU_BWD ||
                    fwd_n->op == LANCIUS_OP_LAYERNORM_BWD ||
                    fwd_n->op == LANCIUS_OP_LAYERNORM_BWD_GAMMA ||
@@ -494,9 +484,7 @@ break;
              * forward graph being differentiated. Reaching here means the
              * caller passed a training graph as forward: fail loud. */
             lancius_set_error(LANCIUS_ERROR_INVALID_MODEL);
-            free(grad_map); free(fwd_to_full);
-            lancius_graph_destroy(tg->graph); free(tg);
-            return NULL;
+            autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
         } else if (fwd_n->op == LANCIUS_OP_GELU) {
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_gelu_bwd(tg->graph, grad_out, fwd_to_full[fwd_n->inputs[0]->id]), fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_LAYERNORM) {
@@ -539,9 +527,7 @@ break;
                 }
                 if (!bcast) {
                     lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                    free(grad_map); free(fwd_to_full);
-                    lancius_graph_destroy(tg->graph); free(tg);
-                    return NULL;
+                    autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                 }
                 accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, bcast, fwd_to_full);
             } else {
@@ -553,16 +539,12 @@ break;
              * dimensions where input_dim == 1 and output_dim > 1. */
             if (!fwd_n->inputs || !fwd_n->inputs[0]) {
                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
             if (!full_input) {
                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             /* Pad input shape to 4D */
             size_t in_shape[4] = {1,1,1,1};
@@ -584,9 +566,7 @@ break;
                     if (fwd_n->ndim == 2) {
                         if (!grad || grad->ndim != 2) {
                             lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
-                            free(grad_map); free(fwd_to_full);
-                            lancius_graph_destroy(tg->graph); free(tg);
-                            return NULL;
+                            autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                         }
                         if (d == 0) {
                             grad = lancius_sum_axis0(tg->graph, grad);
@@ -598,38 +578,28 @@ break;
                     } else if (fwd_n->ndim == 4) {
                         if (!grad || grad->ndim != 4) {
                             lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
-                            free(grad_map); free(fwd_to_full);
-                            lancius_graph_destroy(tg->graph); free(tg);
-                            return NULL;
+                            autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                         }
                         if (grad->shape[0] != cur_shape[0] || grad->shape[1] != cur_shape[1] ||
                             grad->shape[2] != cur_shape[2] || grad->shape[3] != cur_shape[3]) {
                             lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                            free(grad_map); free(fwd_to_full);
-                            lancius_graph_destroy(tg->graph); free(tg);
-                            return NULL;
+                            autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                         }
                         if (d == 0) {
                             size_t rest = 0;
                             if (!lancius_checked_product_shape(&cur_shape[1], 3, &rest) || rest == 0) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             lancius_node* reshaped = lancius_reshape(tg->graph, grad, 2, cur_shape[0], rest, 1, 1);
                             if (!reshaped) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             lancius_node* summed = lancius_sum_axis0(tg->graph, reshaped);
                             if (!summed) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             grad = lancius_reshape(tg->graph, summed, 4, 1, cur_shape[1], cur_shape[2], cur_shape[3]);
                             cur_shape[0] = 1;
@@ -637,23 +607,17 @@ break;
                             size_t pre = 0;
                             if (!lancius_checked_product_shape(cur_shape, 3, &pre) || pre == 0) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             lancius_node* reshaped = lancius_reshape(tg->graph, grad, 2, pre, cur_shape[3], 1, 1);
                             if (!reshaped) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             lancius_node* summed = lancius_sum_axis1(tg->graph, reshaped);
                             if (!summed) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             grad = lancius_reshape(tg->graph, summed, 4, cur_shape[0], cur_shape[1], cur_shape[2], 1);
                             cur_shape[3] = 1;
@@ -661,9 +625,7 @@ break;
                             lancius_node* perm = lancius_permute(tg->graph, grad, 1, 0, 2, 3);
                             if (!perm) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             size_t rest = cur_shape[0] * cur_shape[2] * cur_shape[3];
                             if (cur_shape[0] != 0 && cur_shape[2] != 0 && cur_shape[3] != 0) {
@@ -672,30 +634,22 @@ break;
                             }
                             if (rest == 0) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             lancius_node* reshaped = lancius_reshape(tg->graph, perm, 2, cur_shape[1], rest, 1, 1);
                             if (!reshaped) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             lancius_node* summed = lancius_sum_axis0(tg->graph, reshaped);
                             if (!summed) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             lancius_node* tmp = lancius_reshape(tg->graph, summed, 4, 1, cur_shape[0], cur_shape[2], cur_shape[3]);
                             if (!tmp) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             grad = lancius_permute(tg->graph, tmp, 1, 0, 2, 3);
                             cur_shape[1] = 1;
@@ -703,9 +657,7 @@ break;
                             lancius_node* perm = lancius_permute(tg->graph, grad, 2, 0, 1, 3);
                             if (!perm) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             size_t rest = cur_shape[0] * cur_shape[1] * cur_shape[3];
                             if (cur_shape[0] != 0 && cur_shape[1] != 0 && cur_shape[3] != 0) {
@@ -714,30 +666,22 @@ break;
                             }
                             if (rest == 0) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             lancius_node* reshaped = lancius_reshape(tg->graph, perm, 2, cur_shape[2], rest, 1, 1);
                             if (!reshaped) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             lancius_node* summed = lancius_sum_axis0(tg->graph, reshaped);
                             if (!summed) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             lancius_node* tmp = lancius_reshape(tg->graph, summed, 4, 1, cur_shape[0], cur_shape[1], cur_shape[3]);
                             if (!tmp) {
                                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                free(grad_map); free(fwd_to_full);
-                                lancius_graph_destroy(tg->graph); free(tg);
-                                return NULL;
+                                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                             }
                             grad = lancius_permute(tg->graph, tmp, 1, 2, 0, 3);
                             cur_shape[2] = 1;
@@ -747,18 +691,14 @@ break;
                          * rank): reduce each broadcast axis directly. */
                         if (!grad || grad->ndim != fwd_n->ndim) {
                             lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
-                            free(grad_map); free(fwd_to_full);
-                            lancius_graph_destroy(tg->graph); free(tg);
-                            return NULL;
+                            autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                         }
                         for (int d = (int)fwd_n->ndim - 1; d >= 0; d--) {
                             if (in_shape[d] == 1 && out_shape[d] > 1) {
                                 lancius_node* r = lancius_sum_axis_nd(tg->graph, grad, (uint32_t)d);
                                 if (!r) {
                                     lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                                    free(grad_map); free(fwd_to_full);
-                                    lancius_graph_destroy(tg->graph); free(tg);
-                                    return NULL;
+                                    autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                                 }
                                 grad = r;
                                 cur_shape[d] = 1;
@@ -767,9 +707,7 @@ break;
                     }
                     if (!grad) {
                         lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                        free(grad_map); free(fwd_to_full);
-                        lancius_graph_destroy(tg->graph); free(tg);
-                        return NULL;
+                        autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                     }
                 }
             }
@@ -786,9 +724,7 @@ break;
             lancius_node* At = lancius_transpose_batched(tg->graph, A);
             if (!Bt || !At) {
                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, lancius_matmul_batched(tg->graph, grad_out, Bt), fwd_to_full);
             accum_grad(tg->graph, grad_map, fwd_n->inputs[1]->id, lancius_matmul_batched(tg->graph, At, grad_out), fwd_to_full);
@@ -797,9 +733,7 @@ break;
             lancius_node* tb = lancius_transpose_batched(tg->graph, grad_out);
             if (!tb) {
                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, tb, fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_PERMUTE) {
@@ -807,18 +741,14 @@ break;
             uint32_t inv_axes[4] = {0,0,0,0};
             if (lancius_validate_permutation(fwd_n->axes, 4) != LANCIUS_ERROR_OK) {
                 lancius_set_error(LANCIUS_ERROR_INVALID_PERMUTATION);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             for(int i=0; i<4; i++) inv_axes[fwd_n->axes[i]] = i;
             {
                 lancius_node* pg = lancius_permute(tg->graph, grad_out, inv_axes[0], inv_axes[1], inv_axes[2], inv_axes[3]);
                 if (!pg || !accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, pg, fwd_to_full)) {
                     lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                    free(grad_map); free(fwd_to_full);
-                    lancius_graph_destroy(tg->graph); free(tg);
-                    return NULL;
+                    autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
                 }
             }
         } else if (fwd_n->op == LANCIUS_OP_CROSS_ENTROPY) {
@@ -836,16 +766,12 @@ break;
         } else if (fwd_n->op == LANCIUS_OP_FLATTEN) {
             if (!fwd_n->inputs || !fwd_n->inputs[0]) {
                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             lancius_node* A = fwd_to_full[fwd_n->inputs[0]->id];
             if (!A) {
                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             /* Pad shape to 4D to avoid OOB reads */
             size_t s[4] = {1,1,1,1};
@@ -872,16 +798,12 @@ break;
             lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
             if (!full_input || full_input->ndim != 2) {
                 lancius_set_error(LANCIUS_ERROR_INVALID_RANK);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             lancius_node* b = lancius_broadcast(tg->graph, grad_out, full_input->shape[0], full_input->shape[1]);
             if (!b) {
                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, b, fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_SUM_AXIS1) {
@@ -890,16 +812,12 @@ break;
             lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
             if (!full_input || full_input->ndim != 2) {
                 lancius_set_error(LANCIUS_ERROR_INVALID_RANK);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             lancius_node* b = lancius_broadcast(tg->graph, grad_out, full_input->shape[0], full_input->shape[1]);
             if (!b) {
                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, b, fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_SUM_AXIS_ND) {
@@ -908,16 +826,12 @@ break;
             lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
             if (!full_input || full_input->ndim < 1 || full_input->ndim > 4) {
                 lancius_set_error(LANCIUS_ERROR_INVALID_RANK);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             lancius_node* b = lancius_broadcast_to_shape(tg->graph, grad_out, full_input->shape, full_input->ndim);
             if (!b) {
                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, b, fwd_to_full);
         } else if (fwd_n->op == LANCIUS_OP_RESHAPE) {
@@ -925,16 +839,12 @@ break;
              * input shape. Element counts already validated at build. */
             if (!fwd_n->inputs || !fwd_n->inputs[0]) {
                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             lancius_node* full_input = fwd_to_full[fwd_n->inputs[0]->id];
             if (!full_input) {
                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             /* Pad shape to 4D to avoid OOB reads */
             size_t s[4] = {1,1,1,1};
@@ -943,26 +853,20 @@ break;
                 s[0], s[1], s[2], s[3]);
             if (!rg) {
                 lancius_set_error(LANCIUS_ERROR_INTERNAL);
-                free(grad_map); free(fwd_to_full);
-                lancius_graph_destroy(tg->graph); free(tg);
-                return NULL;
+                autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
             }
             accum_grad(tg->graph, grad_map, fwd_n->inputs[0]->id, rg, fwd_to_full);
         } else {
             /* Despot truth: every forward op reaching backward must have an
              * explicit VJP above. Silent drop is a mathematical lie. */
             lancius_set_error(LANCIUS_ERROR_UNSUPPORTED_OP);
-            free(grad_map); free(fwd_to_full);
-            lancius_graph_destroy(tg->graph); free(tg);
-            return NULL;
+            autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
         }
         /* Despot truth: any sticky shape error from accum_grad or builders
          * aborts the whole training graph. A NULL grad must never train as zero. */
         if (lancius_get_error() != LANCIUS_ERROR_OK) {
             lancius_set_error(LANCIUS_ERROR_INTERNAL);
-            free(grad_map); free(fwd_to_full);
-            lancius_graph_destroy(tg->graph); free(tg);
-            return NULL;
+            autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
         }
     }
 
