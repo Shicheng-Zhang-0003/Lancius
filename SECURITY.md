@@ -40,3 +40,26 @@ pool UAF/leak/drop, arena wrap, 32B align, mkstemp/fsync, per-channel refuse,
 ndim==0/CONST/ROPE/scale, quantizer/optimizer/vision, capped fetches,
 distill I/O, tar-slip member validation. See `CHANGELOG.md` and
 `docs/DESPOT_TRUTH_V2.md` §12.
+
+
+## Trust model as enforced (V7)
+
+- **Model files are untrusted input.** CRC32 is integrity, not trust: it
+  detects corruption and accidental edits, not a hostile writer. The loader
+  validates ranks, shapes, element counts and per-node budgets before allocating,
+  and `LANCIUS_MAX_TENSOR_BYTES` bounds the total.
+- **The arena will not be talked into an OOM.** Alignment must be a power of two
+  and at most 1 MiB, element counts are checked with overflow-guarded
+  multiplication, and every absurd request returns `OVERFLOW` rather than
+  wrapping into a multi-gigabyte grow. `H4` of the V7 audit pins the cap from
+  both sides (`1<<60` refused, `1<<20` still honoured).
+- **Extraction is contained.** 3463-LDFD's tar reader rejects `../` members and
+  absolute-path members, and both the C and Python paths verify that nothing was
+  written outside the destination.
+- **No shell, ever.** User-supplied paths reach external programs through
+  `fork` + `execvp`; `os.system` is not used. `LANCIUS_DATA_DIR` cannot be used
+  to inject a command or to point a destructive operation at `/`.
+- **Library code never aborts.** A malformed graph, a corrupt model or a
+  degenerate tensor produces an error code, not a signal — so a caller can
+  always recover and no remote input can terminate the host process through the
+  runtime.

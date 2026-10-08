@@ -45,7 +45,10 @@ Truth machinery:
 
 Proven: `test_grad_check` (Conv/CE/MatMul VJPs incl. `1/R`), `probe_v2` (SUM 3D→`BROADCAST ndim3 [2,3,4]`, RESHAPE, SUM_AXIS, `broadcast_to_shape`, N-D partial fails loud, attention NaN→NUMERICAL).
 
-Deferred (honest, not silent): per-axis N-dim broadcast grad reduction needs new `SUM_AXIS_ND` ops; currently fails loud. Documented in `KNOWN_LIMITATIONS.md`.
+Historical (superseded by section 15, then corrected in section 16): per-axis
+N-dim broadcast grad reduction needed new `SUM_AXIS_ND` ops and failed loud until
+R3-1. It now trains, and section 16 records that its VJP was unreachable until
+V7 fixed `lancius_broadcast_to_shape`.
 
 ## 4. Memory / checked / planner / threadpool
 
@@ -77,7 +80,7 @@ Real gates (`return fails?1:0`, in `make check` without `||true`): `test_grad_ch
 
 ## 8. Remaining honest deferrals (not lies)
 
-- N-dim partial broadcast grad reduction needs `SUM_AXIS_ND`; currently fails loud.
+- N-dim partial broadcast grad reduction needs `SUM_AXIS_ND`; failed loud until R3-1 landed. See sections 15 and 16.
 - FP32 operator coverage matmul-scoped; no FP32 LLM path; KV-cache FP64-only.
 - ONNX LeNet-class only; N-D MatMul batch collapses; `Sub/Mul` mirror Add.
 - Dynamic shapes, GPU, distributed, production LLM serving: not supported.
@@ -279,7 +282,12 @@ Closed VJPs (all re-proven by independent execution + finite differences;
 oracles in `temp/proofs/r3_probe_nd.c`, `temp/proofs/r3_probe_bwd.c`):
 
 - `SUM_AXIS_ND` (id 42): `y[i]=sum_{k} x[i,k]` along one axis, rank kept.
-  VJP: `dx=broadcast_to_shape(dy)`. N-dim partial broadcast backward:
+  VJP: `dx=broadcast_to_shape(dy)`. **This VJP was unreachable until V7**:
+  `broadcast_to_shape` then demanded exact shape equality, so the `[R,1] ->
+  [R,C]` expansion it is defined in terms of could not build and any training
+  graph containing a `SUM_AXIS_ND` forward node aborted with `INTERNAL`.
+  Section 16.4 fixes it and pins the gradient against central differences at
+  ~1e-9. N-dim partial broadcast backward:
   align trailing ranks; per axis with input-dim 1 sum via `SUM_AXIS_ND`;
   drop reduced leading dims by exact reshape. Old ([2,1,4] vs [2,3,4])
   fail-loud now trains with grads `-0.0625` exact by hand.
@@ -307,3 +315,123 @@ oracles in `temp/proofs/r3_probe_nd.c`, `temp/proofs/r3_probe_bwd.c`):
   contract; weights persist via v2).
 - Scope held: attention/GQA/SwiGLU/RoPE backward stays fail-loud;
   per-channel INT8 still refuses execution (dequantize first).
+
+## 16. V7 truth: the gate audited against itself (mutation + external oracle)
+
+Everything above was written by the same person who wrote the code, which is
+the standing weakness of an external-oracle discipline: the oracle can share
+the author's blind spot. V7 closes that with two gates that do not ask the
+author to be right.
+
+### 16.1 External oracle (`make check-oracle`)
+
+Every kernel and every graph-level op is recomputed from a source that does not
+link or import Lancius:
+
+| Quantity | Independent source |
+|---|---|
+| `kernel_matmul`, `kernel_matmul_f32` | NumPy `@`, FP64-accumulate reference cast to FP32 |
+| `kernel_conv2d_fwd` (stride 1/2, pad 0/1) | explicit NCHW zero-padded correlation |
+| `kernel_conv2d_int8_fwd` | int64 correlation times `scale_in*scale_w` |
+| `kernel_layernorm` / `_bwd` / `_bwd_gamma` / `_bwd_beta` | closed form, then **torch autograd** |
+| `kernel_rmsnorm` / `_bwd` / `_bwd_gamma` | closed form, then **torch autograd** |
+| `kernel_gelu` | Hendrycks-Gimpel tanh form; deviation from erf-exact bounded at 2e-3 |
+| `kernel_gelu_bwd` | central difference of the forward (interior); clamp branches asserted directly |
+| `kernel_swiglu` | `silu(gate)*up` |
+| `kernel_rope` | explicit rotation at `theta=10000`, plus L2-norm preservation |
+| `kernel_attention` | explicit causal softmax, then a second torch pass |
+| `kernel_gqa` | grouped causal attention; group mapping forced by construction (all kv heads equal) |
+| `kernel_attention_kv_cache` | `softmax(qK^T/sqrt d)V`, and equality with the last causal row of full attention |
+| `lancius_sgd/sgdm/adamw_step` | hand-derived recurrence, then **torch.optim.AdamW** |
+| `lancius_clip_global_norm` | post-clip global norm is exactly `max_norm`; directions preserved |
+| `lancius_lr_cosine`, `_warmup_cosine` | closed form incl. endpoints and the zero-warmup identity |
+| `SOFTMAX`, `CROSS_ENTROPY`, `MSE` | NumPy, then **torch.nn.functional** |
+| `ADD/SUB/MUL` N-dim broadcast | NumPy trailing-rank broadcast at 2-D, 3-D and 4-D |
+| `SUM_AXIS_ND` axes 0..3 over 2-D/3-D/4-D | `numpy.sum(axis, keepdims)` |
+| `CONV2D_BWD`, `CONV2D_BWD_W` | central differences on the forward definition (~1e-9) |
+| `MAXPOOL2D`, `MAXPOOL2D_BWD` | NumPy block max; gradient routed to the argmax only |
+| `CONV2D_RELU_FUSED` | `max(numpy conv, 0)`, and bit-identity with separate conv->relu |
+| whole MLP autodiff | **torch autograd** on the identical objective, plus central differences |
+
+Tally: **41/41** kernel checks, **37/37** graph-level checks. `torch` is a
+second independent engine where present; the oracle degrades to NumPy plus
+closed form rather than skipping.
+
+### 16.2 Mutation gate (`make check-mutation`)
+
+A gate that cannot fail is decoration. `temp/audit/mutation_test.sh` injects
+real defects into a pristine tree, rebuilds, and records which audit goes red.
+Baseline must be green or the run is meaningless.
+
+**First run: 8 caught, 7 survived.** Those 7 survivors were holes in the gate,
+not decoration, and each became a check in `examples/audit_v7_hardening.c`:
+
+| Mutation | Why the old gate missed it | Closure |
+|---|---|---|
+| `SUM_AXIS_ND` loses its terminating `return` | correct values, then a false `UNSUPPORTED_OP` nobody asserted against | H1 sticky-error contract |
+| softmax drops the max-subtraction | every test logit was in `[-3,3]`, where `exp` cannot overflow | H2 logits at `1e5`, CE at `900`, attention at 200 |
+| arena default alignment `32 -> 16` | one arena; glibc's block happened to be 32-aligned | H3 over 64 fresh arenas |
+| arena alignment cap removed | no check on absurd alignment | H4 `1<<60` and `1<<40` refused, `1<<20` still allowed |
+| autodiff abort path stops freeing `grad_nodes` | `make check` has no sanitizer in it | LeakSanitizer arm in the mutation harness + instrumented `check-sanitizers` |
+| quantizer scale `max/128` | no assertion on the exact scale or the error bound | H5 `scale == max/127` exactly, round-trip `<= max/254` |
+| fusion ignores the shape mismatch | the memcmp guard had no test | H6 shape-mismatched RELU refused, shape left intact |
+
+**Second run: 18/18 caught, 1 behaviourally neutral, 0 holes.** The neutral one
+(`arena` size rounding `32B -> 8B`) was verified equivalent rather than assumed
+so: `ALIGN_UP(ptr, 32)` already separates consecutive allocations, and 4096
+allocations of varying sizes cross no 32-byte boundary under either rounding.
+It is reported as NEUTRAL, not counted as a pass.
+
+### 16.3 Sanitizer gate (`make check-sanitizers`)
+
+The old gate rebuilt three binaries (`stress_test`, `test_torture`,
+`fuzz_lancius`) against a `liblancius.a` that was **not instrumented**, so
+nothing inside the library was ever checked, and 25 of the 28 audits never ran
+under a sanitizer at all. `test_diamond_memory` linked `-fsanitize=address`
+against an uninstrumented archive: ASan intercepts `malloc` globally, so it
+caught heap errors at allocation boundaries, but saw nothing inside the library.
+
+V7 instruments the **library** and every audit, and adds a standalone
+`-fno-sanitize-recover=all` UBSan pass (`make check-ubstrict`) for the checks
+that only exist outside the combined mode: signed-integer-overflow, shift,
+bool, enum, float-cast-overflow, integer-divide-by-zero, object-size, bounds.
+
+### 16.4 V7 defects found and fixed
+
+Four defects, each with the evidence that found it:
+
+1. **`SUM_AXIS_ND` fell through to the vision router.** The branch at
+   `lancius_scheduler.c:529` computed correct values and had no terminating
+   `return`, so control reached `if (n->op >= LANCIUS_OP_CONV2D)` and
+   `lancius_execute_vision_op` rejected opcode 42 with `UNSUPPORTED_OP`. The op
+   computed the right answer and then poisoned the thread-local error, which
+   autodiff reads as "any sticky error aborts the whole training graph".
+   Found by executing the op through the public API and checking the error
+   state, which no existing audit did.
+
+2. **45 autodiff abort paths leaked `tg->grad_nodes`.** `lancius_ir_autodiff`
+   allocates `grad_nodes` once; 45 of its abort paths freed `grad_map` and
+   `fwd_to_full` and then called `lancius_graph_destroy(tg->graph); free(tg);`.
+   ASan: `Direct leak of 40000 byte(s) in 1000 object(s)`, 72 bytes per failing
+   call, and `audit_fault_injection` — a gate member — hit it on every run.
+   Fixed by routing every abort through one `autodiff_abort()` helper, so the
+   next op cannot reintroduce it.
+
+3. **`lancius_broadcast_to_shape` was stricter than the operation it builds.**
+   Its 4-D sibling `lancius_broadcast_4d` and the BROADCAST executor both
+   accept trailing-rank alignment with per-dim `da == 1 || da == out[i]`;
+   `broadcast_to_shape` demanded exact shape equality. Consequences:
+   the documented `SUM_AXIS_ND` VJP (`dx = broadcast_to_shape(dy)`, with `dy`
+   of shape `[R,1]` and `x` of shape `[R,C]`) **could never build**, so every
+   training graph containing a `SUM_AXIS_ND` forward node aborted with
+   `INTERNAL` — the R3-1 headline feature was not trainable end to end; and
+   1-D and 3-D expanding broadcasts were unbuildable while their 2-D and 4-D
+   equivalents worked, so the v2 loader's `ndim >= 1` branch could only ever see
+   exact-match shapes. Fixed to the NumPy rule; `SUM_AXIS_ND` gradients are now
+   exact against central differences at `~1e-9` on both axes (H1).
+
+4. **Two gate members leaked their own buffers.** `test_path_bg` leaked 960
+   bytes per run and `audit_modern_llm` leaked 640+ bytes per run, both by
+   assigning `node->runtime_data` directly instead of binding ownership, so
+   `lancius_graph_destroy` correctly refused to free memory it did not own.
+   Fixed with `lancius_node_bind_owned_heap` and an explicit release.

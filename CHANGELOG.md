@@ -1,5 +1,110 @@
 # Lancius Changelog
 
+## V7 truth batch — the gate audited against itself, and four defects it found
+
+The external-oracle discipline has a standing weakness: the oracle is written
+by the same person who wrote the code, so it can share their blind spot. This
+batch adds two gates that do not ask the author to be right, and they found
+four real defects — including one where a headline documented feature could not
+run at all.
+
+### Defects found and fixed
+
+- **`SUM_AXIS_ND` fell through to the vision router and poisoned the error
+  channel.** The branch computed correct values, had no terminating `return`,
+  so control reached `if (n->op >= LANCIUS_OP_CONV2D)` and
+  `lancius_execute_vision_op` rejected opcode 42 with `UNSUPPORTED_OP`. The op
+  produced the right answer and then set a sticky failure that
+  `lancius_ir_autodiff` reads as "abort the whole training graph" — so any
+  downstream error check in the same thread inherited a false failure. Found by
+  driving the op through the public API and asserting the post-execution error
+  state, which no existing audit did.
+- **45 autodiff abort paths leaked `tg->grad_nodes`.** `lancius_ir_autodiff`
+  allocates it once; 45 failure branches freed `grad_map` and `fwd_to_full` and
+  then called `lancius_graph_destroy(tg->graph); free(tg);` without it. ASan:
+  `Direct leak of 40000 byte(s) in 1000 object(s)` at
+  `lancius_autodiff.c:186` — and `audit_fault_injection`, a standing gate
+  member, leaked 72 bytes on every run, exiting ASan-clean-tree red. Every
+  abort now routes through one `autodiff_abort()` helper, so the next op cannot
+  reintroduce the leak: the compiler sees one free per allocation.
+- **`lancius_broadcast_to_shape` was stricter than the operation it builds.**
+  Its 4-D sibling `lancius_broadcast_4d` and the BROADCAST executor both
+  accept trailing-rank alignment with per-dim `da == 1 || da == out[i]`;
+  `broadcast_to_shape` demanded exact shape equality for every non-scalar. Two
+  consequences, both real: the documented `SUM_AXIS_ND` VJP
+  (`dx = broadcast_to_shape(dy)`, where `dy` is `[R,1]` and `x` is `[R,C]`)
+  **could never build**, so every training graph containing a `SUM_AXIS_ND`
+  forward node aborted with `INTERNAL` — R3-1's headline feature was not
+  trainable end to end; and 1-D and 3-D expanding broadcasts were unbuildable
+  while their 2-D and 4-D equivalents worked, so the v2 loader's `ndim >= 1`
+  branch could only ever see exact-match shapes. Fixed to the NumPy rule;
+  `SUM_AXIS_ND` gradients are now exact against central differences at ~1e-9
+  on both axes.
+- **Two gate members leaked their own buffers.** `test_path_bg` leaked 960
+  bytes per run and `audit_modern_llm` 640+ bytes, both by assigning
+  `node->runtime_data` directly rather than binding ownership, so
+  `lancius_graph_destroy` correctly refused to free memory it did not own.
+  Fixed with `lancius_node_bind_owned_heap` and an explicit release.
+
+### New gates
+
+- **`make check-oracle`** — every kernel and every graph-level op recomputed
+  from a source that does not link or import Lancius: NumPy, torch autograd,
+  hand-derived closed form, and central differences on the definition of the
+  forward op. **41/41** kernel checks, **37/37** graph-level checks, covering
+  matmul/FP32-matmul, conv2d at two stride/pad settings, INT8 conv, LayerNorm
+  and RMSNorm forward + all three backwards, GELU forward + backward,
+  SwiGLU, RoPE, causal attention, GQA (group mapping forced by construction),
+  KV-cache (and its equality with the last causal row of full attention), SGD /
+  SGDM / AdamW (against `torch.optim.AdamW`), global-norm clip, both LR
+  schedules, softmax (sum-to-one and shift-invariance), cross-entropy, MSE,
+  N-dim broadcast at 2/3/4-D, `SUM_AXIS_ND` on every axis, conv dgrad/dw by
+  central differences, maxpool forward + argmax-routed backward, fused
+  conv+relu bit-identity, and a whole MLP against torch autograd.
+- **`make check-mutation`** — injects real defects into a pristine tree and
+  requires the gate to go red. **First run: 8 caught, 7 survived.** Those 7
+  were holes in the gate; each became a check in the new
+  `examples/audit_v7_hardening.c`. **Second run: 18/18 caught, 1 verified
+  behaviourally neutral, 0 holes.** The neutral mutation (arena size rounding
+  32B -> 8B) was proven equivalent rather than assumed: `ALIGN_UP(ptr, 32)`
+  already separates consecutive allocations, and 4096 allocations of varying
+  sizes cross no 32-byte boundary under either rounding.
+- **`make check-sanitizers` rewritten.** It used to rebuild three binaries
+  against a `liblancius.a` that was **not instrumented**, so nothing inside the
+  library was ever checked, and 25 of the 28 audits never ran under a
+  sanitizer at all. It now instruments the library and every audit and runs all
+  of them under ASan + UBSan + LeakSanitizer: **26/26 clean**.
+- **`make check-ubstrict`** — UBSan alone with `-fno-sanitize-recover=all`, for
+  the checks that only exist outside the combined mode (signed-integer-overflow,
+  shift, bool, enum, float-cast-overflow, integer-divide-by-zero, object-size,
+  bounds): **25/25 clean**.
+- **`examples/audit_v7_hardening.c`** — 1226 checks (H1-H9): the sticky-error
+  contract per op, softmax/CE/attention stability at |z| up to 1e5, arena 32B
+  alignment across 64 fresh arenas, the alignment cap, quantizer scale
+  exactness and round-trip bound, the fusion shape guard, a representative op
+  table, the `broadcast_to_shape` contract at every rank with a v2 round-trip,
+  and INT8 64-bit accumulation proven at 204800 taps (past the 132104-term
+  int32 threshold).
+- **`.github/workflows/gate.yml`** — the gates ran only when a human typed them.
+  Every gate now runs on every push and every pull request, with logs uploaded
+  as artifacts.
+
+### Documentation reconciled
+
+`SUM_AXIS_ND` was still described as deferred and "currently fails loud" in
+`README.md`, `MANIFEST.md`, `KNOWN_LIMITATIONS.md`, `docs/ARCHITECTURE.md` and
+`docs/DESPOT_TRUTH_V2.md`, five documents contradicting `docs/v12R2_SCOPE.md`
+and the code — including the README contradicting its own feature table 240
+lines apart. All reconciled; the historical v12R1 release notes and the v12R1
+CHANGELOG entry keep their own framing, which is correct.
+
+`CONTRIBUTING.md` described a style the code does not use in any respect
+(`int *ptr` vs the uniformly-actual `(double*)`, a 100-column limit that 1,287
+source lines exceed, `//` for single-line comments vs the uniformly-actual
+`/* */`). A `.clang-format` now encodes the style the code actually follows and
+the document describes it accurately.
+
+
 ## 3463-LDFD integration — dataset acquisition stops being manual
 
 Lancius can now acquire its own datasets. `manage_datasets.py download`
