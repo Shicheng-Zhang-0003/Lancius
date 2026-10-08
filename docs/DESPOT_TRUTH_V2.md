@@ -685,3 +685,61 @@ count), not a scaling one.
   above 2x2, no systems beyond 2 unknowns.
 - **Edge cases are out of scope** for the sweep by explicit request, and are
   not trained for.
+
+### 18.9 `.lancius` export, and efficacy/stability across nine configurations
+
+**Export.** The v2 format serialises node structure for every node, but node
+*values* only for `LANCIUS_OP_INPUT` nodes that have `runtime_data` bound
+(`lancius_serialize.c` sets `has_weights` on exactly that condition); a
+`LANCIUS_OP_CONST` node carries only a scalar `attr_val`. A frozen inference
+model therefore has to hold its weights as bound INPUT nodes and its features
+as an unbound INPUT, which is what `export_lancius()` builds. The stable C API
+cannot express this graph at all — `lancius_graph_handle` is a wrapper struct
+rather than a `lancius_graph*`, and its builders expose only
+input/matmul/relu with no tanh and no bias add. `lancius_graph_save()` is what
+`lancius_graph_save_stable()` delegates to internally, so calling it directly is
+the same code path without the ABI detour.
+
+The **batch dimension is fixed in the file**: node shapes are written and
+restored, so patching `Xn->shape[0]` after load does not propagate downstream.
+The row count is declared at export time (`--lancius-rows`, default 256) and the
+round-trip is verified at that size. An earlier attempt patched the shape after
+loading and silently compared against a graph still locked to one row.
+
+**Round-trip, 9/9 exact.** Every configuration reloads and reproduces the
+in-memory logits to **≤ 1.55e-15**. Getting there cost two wrong answers in the
+*check*, neither of them a defect in the export: matching the output node on
+`shape[1] == NCLASS` first matched `W2`, which is `[H, NCLASS]`, giving a
+max |diff| of 4.04; then "first computed match" matched the intermediate matmul,
+giving 0.217. Selecting the **sink** — a computed `[n, NCLASS]` node that no
+other node consumes — gives 1.3e-15. A save path that is never read back is an
+untested claim, and a reader that picks the wrong node reports a failure that
+does not exist.
+
+**Nine configurations, 3 widths x 3 seeds** (`tools/prm/sweep_configs.py`):
+
+| H | test exact (mean ± sd) | range | MAE | kappa |
+|---|---|---|---|---|
+| 64 | 0.9070 ± 0.0388 | [0.8793, 0.9619] | 0.0664 | 0.8815 |
+| **96** | **0.9290 ± 0.0170** | [0.9053, 0.9441] | **0.0613** | **0.9107** |
+| 128 | 0.9183 ± 0.0280 | [0.8793, 0.9435] | 0.0649 | 0.8973 |
+
+All nine: exact **0.9181 ± 0.0306**, kappa 0.8965 ± 0.0394. **H=96 is the
+configuration to ship** — highest mean *and* lowest variance; H=64 is both the
+worst mean and the least stable.
+
+Two honest corrections follow from this, and the first is the reason the 3x3 was
+worth running over the cheaper 1+3 design:
+
+1. **The width effect in the first pass was a seed artifact.** Varying width at
+   one seed and seed at one width independently made H=64 look best (0.9619) and
+   would have shipped a 37 KB model on that basis. The 3x3 shows H=64's mean is
+   the *worst* of the three and its spread the *widest*; 0.9619 was the lucky
+   end of its range. Separating factors one at a time cannot detect an
+   interaction, and a configuration chosen from one draw is not a result.
+2. **The headline number reported earlier in this stack was a favourable draw.**
+   §18.6 quotes 0.9377 at H=96 seed 20261007. Across seeds, H=96 is
+   **0.9290 ± 0.0170**, so that figure sits about +0.65 sd above its own
+   configuration's mean. The defensible statement is the mean with its spread,
+   not the single best draw. Chance is 0.200, so the conclusion is unchanged,
+   but the precision claimed for it was not earned.
