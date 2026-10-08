@@ -25,10 +25,25 @@
 static const char* lancius_scratch_dir(void) {
     const char* s = getenv("LANCIUS_SCRATCH");
     if (!s || !*s) s = "temp/scratch";
-    mkdir(s, 0777);              /* EEXIST is the normal case and is fine */
+    /* mkdir(2) does NOT create parent directories, and a fresh checkout has no
+     * temp/ at all, so creating only the leaf is not enough -- the first fix
+     * here passed locally precisely because temp/ already existed here and
+     * failed on the runner for exactly that reason. Walk the chain instead. */
+    char buf[512];
+    size_t n = strlen(s);
+    if (n >= sizeof buf) n = sizeof buf - 1;
+    memcpy(buf, s, n);
+    buf[n] = '\0';
+    for (size_t i = 1; i <= n; i++) {
+        if (buf[i] == '/' || buf[i] == '\0') {
+            char save = buf[i];
+            buf[i] = '\0';
+            mkdir(buf, 0777);          /* EEXIST is the normal case */
+            buf[i] = save;
+        }
+    }
     return s;
 }
-
 static int checks = 0;
 static int failures = 0;
 static lancius_arena* scratch = NULL;
