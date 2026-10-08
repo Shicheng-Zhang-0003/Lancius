@@ -1,0 +1,83 @@
+name: Lancius gate
+
+# Every claim this project makes about correctness is a claim about a gate.
+# If the gate is not run on every push, it is decoration. This workflow runs
+# all of them, in increasing cost order, and fails the build on any finding.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: make check + long + sanitizers + oracle + ubstrict
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends build-essential clang libcurl4-openssl-dev zlib1g-dev
+          gcc --version | head -1
+          python3 -c "import numpy; print('numpy', numpy.__version__)"
+          python3 -c "import torch; print('torch', torch.__version__)" 2>/dev/null || echo "torch absent: oracle falls back to NumPy + closed form"
+
+      # The build is -Werror; a warning must break the build, not scroll past.
+      - name: build
+        run: make -j"$(nproc)"
+
+      # The standing gate: every audit, every exit code propagated.
+      - name: make check
+        run: make check
+
+      - name: make check-long
+        run: make check-long
+
+      # ASan + UBSan + LeakSanitizer over the LIBRARY and every audit.
+      # The old gate rebuilt three binaries against an uninstrumented
+      # library, so nothing inside the library was ever checked.
+      - name: make check-sanitizers
+        run: make check-sanitizers
+
+      # Independent recomputation in NumPy / PyTorch / closed form.
+      - name: make check-oracle
+        run: make check-oracle
+
+      # UBSan alone with -fno-sanitize-recover=all: signed overflow, shift,
+      # float-cast-overflow and integer-divide-by-zero must ABORT, not warn.
+      - name: make check-ubstrict
+        run: make check-ubstrict
+
+      # A gate that cannot fail is decoration. Inject real defects and require
+      # the gate to go red. Scheduled rather than per-push: it rebuilds the
+      # library once per mutation.
+      - name: mutation gate (sampled)
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+        run: make check-mutation
+
+      - name: restore a clean non-instrumented build
+        if: always()
+        run: make -B all
+
+      - name: upload sanitizer + mutation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-logs
+          path: |
+            temp/sanitized/logs/
+            temp/ubstrict/logs/
+            temp/mutation/logs/
+            temp/oracle/
+          retention-days: 14
+          if-no-files-found: ignore
