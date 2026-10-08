@@ -16,7 +16,21 @@ Run: python3 tools/audit/trainlib_oracle.py <dumpdir>
 """
 import sys, os, math
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError:
+    # Unlike kernel_oracle and graph_oracle, which fall back to NumPy plus
+    # closed form, this layer compares against torch AS the independent engine
+    # and has no fallback that would not be circular. So absence of torch is a
+    # hard failure here, stated plainly rather than as a bare traceback -- and
+    # it is exactly the mistake I made by leaving a bare `import torch` in this
+    # file after fixing the identical bare import in the other two.
+    sys.stderr.write(
+        "FATAL: tools/audit/trainlib_oracle.py requires torch. This layer has no\n"
+        "non-circular fallback -- the whole point is an independent engine.\n"
+        "CI installs it from the CPU wheel index; see .github/workflows/gate.yml.\n")
+    raise SystemExit(2)
 
 DUMPS = sys.argv[1] if len(sys.argv) > 1 else "temp/scratch/trainlib"
 TOL = 1e-12
