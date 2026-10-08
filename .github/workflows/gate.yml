@@ -36,7 +36,14 @@ jobs:
           # of this workflow and the oracle gate never once executed in CI --
           # a green-looking gate that had in fact never checked anything.
           python3 -c "import numpy; print('numpy', numpy.__version__)"
-          python3 -c "import torch; print('torch', torch.__version__)" 2>/dev/null || echo "torch absent: oracle falls back to NumPy + closed form"
+          # torch is REQUIRED, not optional. kernel_oracle and graph_oracle fall
+          # back to NumPy + closed form, but tools/audit/trainlib_oracle.py
+          # compares against torch as the independent engine and has no
+          # non-circular fallback, so an absent torch now fails the gate loudly
+          # instead of silently skipping a whole layer. CPU-only wheel: the
+          # default index pulls CUDA and costs several GB for no benefit here.
+          pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch
+          python3 -c "import torch; print('torch', torch.__version__)"
 
       # The build is -Werror; a warning must break the build, not scroll past.
       - name: build
