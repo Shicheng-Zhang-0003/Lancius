@@ -574,6 +574,14 @@ static void execute_node_math(lancius_node* n) {
             for (size_t k = 0; k < ax_extent; k++) s += a[base + k * in_str[axis]];
             n->runtime_data[o] = s;
         }
+        /* Despot V7 truth: this branch MUST return. SUM_AXIS_ND is opcode 42,
+         * so without the return it falls through to the `n->op >= LANCIUS_OP_CONV2D`
+         * vision router below, which rejects it with UNSUPPORTED_OP. The values
+         * were already correct, so the op used to compute the right answer and
+         * then poison the sticky thread-local error with a false failure --
+         * which propagated into every later error check in the same thread,
+         * including autodiff's "any sticky error aborts the graph" rule. */
+        return;
     }
     else if (n->op == LANCIUS_OP_TRANSPOSE_BATCHED) {
         /* R3-2: 3D batched transpose [B,M,K] -> [B,K,M]. */
