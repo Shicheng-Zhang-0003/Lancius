@@ -1,5 +1,76 @@
 # Lancius Changelog
 
+## V8 truth batch: every constant and equation checked against its primary source
+
+Finite differences prove the derivative of whatever function was implemented.
+They do not prove the intended function was implemented — a wrong constant is
+perfectly self-consistent and passes every internal test, which is exactly the
+failure mode V7's external-oracle gate cannot see. So every constant, equation
+and dataset fact was checked against the source that defines it. Full table with
+the published equation beside the computed one:
+`docs/DESPOT_TRUTH_V2.md` §17.
+
+**One real error, found and fixed.** The GELU comment in `lancius_kernels.c`
+claimed max deviation from erf-exact GELU of `~2e-3`. Measured over a dense scan
+of `[-12,12]` the true maximum is **4.74e-04** at x = 2.699 (rms 1.42e-04), so
+the claim overstated the error fourfold — and worse, the external oracle had
+inherited that same unverified figure as its own acceptance bound, so the oracle
+was rubber-stamping the comment instead of checking it. The comment is corrected
+and `kernel_oracle.py` now measures the deviation and pins both the maximum and
+the rms, which is the difference between a bound that is checked and a bound
+that is assumed.
+
+**Verified exact against the primary source:**
+
+- **GELU** `0.5x(1+tanh(sqrt(2/pi)(x+0.044715x^3)))` — Hendrycks & Gimpel 2016
+- **LayerNorm** biased `1/n` variance, eps inside the sqrt, default 1e-5 — Ba,
+  Kiros & Hinton 2016; agrees with `torch.nn.functional.layer_norm` to 6.7e-16
+- **RMSNorm** `a_i/RMS(a)*g_i`, mean statistic deliberately removed — Zhang &
+  Sennrich 2019 eq. 4
+- **Attention** `softmax(QK^T/sqrt(d_k))V` — Vaswani et al. 2017 eq. 1
+- **RoPE** `theta_i = 10000^(-2(i-1)/d)` — Su et al. 2021 §3.2.2; the code's
+  element index equals `2*(pair index)` so the schedules are identical, and the
+  defining relative-position property was verified numerically (4.4e-16)
+- **SiLU / SwiGLU** `silu(gate)*up` with three numerically stable branches —
+  Hendrycks & Gimpel, Ramachandran et al. 2017, Shazeer 2020
+- **AdamW** `theta_t = (1-lr*lambda)theta_{t-1} - lr*g~` — Loshchilov & Hutter
+  2019 eq. 2; epsilon outside the sqrt as PyTorch does; 5.6e-16 from
+  `torch.optim.AdamW` over 20 steps
+- **Cosine schedule** — SGDR eq. 6, endpoints exact
+- **Gradient clipping** `if ||g|| >= t: g *= t/||g||` — Pascanu et al. 2013
+  Algorithm 1; `>` vs `>=` differs only at exact equality where the scale is 1.0
+- **GQA** `hk = hq / (n_heads_q/n_heads_kv)` — Ainslie et al. 2023 §2.2
+- **He init** `std = sqrt(2/fan_in)`, conv `fan_in = C_in*K_h*K_w` — He et al.
+  2015 §2.2
+- **INT32 accumulation** the in-comment threshold "132104 terms" verified
+  exactly: int8 spans [-128,127] so max |product| = 16256, and
+  `2147483647/16256 = 132104.06`. The code's `int64_t` is stricter than the
+  ONNX `ConvInteger` spec, which requires int32
+- **CRC-32** byte-identical to `zlib.crc32` on both real model files
+  (0xde62d723, 0x3084e45b)
+- **Online softmax** the `exp(m_old-m_new)` rescaling is exact, not approximate:
+  numerically identical to direct softmax to 2.2e-16, and causal row 0 provably
+  attends only to itself
+- **MNIST / CIFAR-10** verified by content invariants because a `.tar.gz`
+  digest is not comparable across mirrors: IDX magic 2051/2049, 60000/10000
+  records, 28x28, and the published class balances — CIFAR-10's test split is
+  exactly 1000 per class, MNIST's train balance matches to the digit
+
+**One divergence recorded rather than changed.** The INT8 quantizer clamps to
+`[-128,127]`; the TFLite spec and TensorRT both specify `[-127,127]`. The clamp
+is numerically inert because `scale = max_abs/127` makes -128 unreachable — the
+H5 oracle asserts `±127` are both reached and `-128` never is — but the reason
+is recorded in §17.2 so that a future code path which *could* produce -128 knows
+the clamp has to change first.
+
+**And two self-corrections worth recording, because both were my error rather
+than the code's:** comparing the CIFAR *binary* tarball against the published
+MD5 of the CIFAR *python* tarball, which are different files, and testing the
+online-softmax causal mask as `j > last_row` instead of `j > i`. In both cases
+the artefact was wrong and the implementation was right; the oracle gate had
+already caught the real behaviour independently.
+
+
 ## V7 truth batch — the gate audited against itself, and four defects it found
 
 The external-oracle discipline has a standing weakness: the oracle is written
