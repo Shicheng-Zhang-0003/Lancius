@@ -743,3 +743,85 @@ worth running over the cheaper 1+3 design:
    configuration's mean. The defensible statement is the mean with its spread,
    not the single best draw. Chance is 0.200, so the conclusion is unchanged,
    but the precision claimed for it was not earned.
+
+## 19. V9 bottom-up audit, layer 1: the train-lib against primary sources
+
+§17 verified `adamw_step`, `clip_global_norm`, `lr_cosine` and `he_init` against
+their published sources. It did **not** verify the other four public train-lib
+entry points: `sgd_step`, `sgdm_step`, `clip_grad_norm`, `lr_warmup_cosine`. Four
+of seven checked is not a bottom-up audit. This layer closes that gap.
+
+### 19.1 Results — 169/169 against PyTorch and HuggingFace
+
+`tools/audit/trainlib_oracle.py` + `tools/audit/trainlib_dump.c`, wired into
+`oracle_gate.sh`. Nothing on the oracle side links or imports Lancius.
+
+| Quantity | Primary source | Verdict |
+|---|---|---|
+| `lancius_sgd_step` | `torch.optim.SGD` (lr, no momentum) | **exact**, ~1e-16 over 8 steps x 9 configs x 6 coordinates |
+| `lancius_sgdm_step` | `torch.optim.SGD` (momentum) | **exact** in the stable regime; PyTorch's first-step buffer init (`buf = grad`) is identical to a zero buffer under `m = mom*m + g` |
+| `lancius_clip_grad_norm` | `torch.nn.utils.clip_grad_norm_` | same scheme, **one characterised divergence** (§19.2) |
+| `lancius_lr_warmup_cosine` | `transformers.get_cosine_with_min_lr_schedule_with_warmup` | **exact** on `[0, total]`; **one characterised divergence** (§19.2) |
+
+### 19.2 Two divergences, stated rather than hidden
+
+**`clip_grad_norm` epsilon convention.** PyTorch computes
+`clip_coef = max_norm / (total_norm + 1e-6)` and multiplies when
+`clip_coef < 1`, so its post-clip norm is **strictly below** `max_norm` by
+about `1e-6/norm` — measured `0.99999939338657817` where `max_norm = 1`.
+Lancius uses the exact ratio `max_norm / norm` and lands **exactly** on
+`max_norm` (`0.99999999999999989`, i.e. 1 to 1e-16). The oracle asserts the
+exact property `post == min(pre, max_norm)` and separately bounds the torch
+difference by 1e-6. Lancius is the more accurate of the two; this is a
+convention difference, not a defect.
+
+**`lr_warmup_cosine` past `total`.** Lancius clamps to `lr_min` once
+`step >= total`. HuggingFace's cosine keeps evaluating past `progress = 1`, and
+because `cos` has period 2 the learning rate **climbs back up** — at
+`step = 22`, `warmup = 5`, `total = 20`, HF yields `4.3e-05` where Lancius
+returns `lr_min = 1e-05`. HF's callers stop stepping at `num_training_steps` so
+this is never observed in practice. Lancius's clamp is the defensible choice;
+recorded because the two genuinely disagree and the assertion pins the
+Lancius behaviour rather than assuming agreement.
+
+**SGD at `lr >= 1` with momentum is chaotic.** The update is a linear recurrence
+whose error grows by roughly `1/(1-momentum)` per step; at `lr = 1`,
+`momentum = 0.99` a single ulp of ordering difference is amplified ~100x per
+step. Bit-agreement is not a meaningful requirement in that regime and the
+oracle characterises it instead of asserting it. The stable regime agrees to
+~1e-16, which is the claim that carries information.
+
+### 19.3 A hole in the external oracle itself
+
+Wiring this layer in exposed a defect in the harness rather than the library:
+`oracle_gate.sh` built its probe programs in an unguarded `for` loop with no
+failure aggregation, so a probe that failed to compile printed `cc1: fatal
+error`, was skipped, and **the gate still exited 0**. A green external oracle
+that had verified nothing is precisely the failure this gate exists to prevent,
+and it survived every prior run because no probe had ever failed to build. The
+loop now fails loudly on any compile or link error, verified by deliberately
+breaking `trainlib_dump.c` and confirming the gate exits 1, then restoring it
+and confirming 0.
+
+### 19.4 Four more harness defects, same species as §18.4
+
+Every failure found while building this layer was in the **oracle or the dump**,
+not in Lancius:
+
+1. `clip_grad_norm_` operates on `.grad`, not on the parameter. Passing the
+   parameter clipped nothing and returned nonsense — five large fake failures.
+2. `lancius_clip_grad_norm` clips **in place**, so the dump reported pre-clip
+   norms next to post-clip gradients; the oracle then handed torch already
+   clipped inputs and compared the wrong quantity — four more fake failures.
+3. The dump wrote all six weight elements without their index while the oracle
+   compared every row against element 5 — the largest "failures", at exactly the
+   configs whose weights diverge fastest.
+4. The clip assertion demanded `post == max_norm` for cases where nothing was
+   clipped; the exact property is `post == min(pre, max_norm)`.
+
+None of these were visible locally, and three of the four would have been
+reported as Lancius defects had the oracle not been fixed first. This is now
+the sixth consecutive occurrence of the pattern in this document: **the
+instrument fails silently and looks like a finding.** The discipline that
+follows from it is not "trust the check" but "when a check fires, establish which
+side is wrong before believing either."
