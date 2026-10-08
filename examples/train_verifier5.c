@@ -28,6 +28,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <sys/stat.h>
 
 #define PI_ 3.14159265358979323846
 
@@ -279,6 +280,152 @@ static void confusion(const char* tag,const met* m){
     }
 }
 
+
+/* ---- .lancius export ----------------------------------------------------
+ *
+ * The v2 format serialises node structure for every node, and node VALUES only
+ * for LANCIUS_OP_INPUT nodes that have runtime_data bound (lancius_serialize.c
+ * sets has_weights on exactly that condition). A LANCIUS_OP_CONST node carries
+ * only a scalar attr_val, so weights cannot ride along as constants. A frozen
+ * inference model therefore has to be built with its weights as bound INPUT
+ * nodes and its features as an unbound INPUT.
+ *
+ * The stable C API cannot express this graph -- lancius_graph_handle is a
+ * wrapper struct, not a lancius_graph*, and its builders expose only
+ * input/matmul/relu, with no tanh and no bias add. lancius_graph_save() is what
+ * lancius_graph_save_stable() delegates to anyway, so calling it directly is
+ * the same code path without the ABI detour.
+ */
+static int export_lancius(const model* m, const char* path, size_t rows) {
+    lancius_graph* g = lancius_graph_create();
+    if (!g) return -1;
+    /* The batch dimension is FIXED in the saved file: node shapes are written
+     * out and the loader restores them, so patching Xn->shape[0] after load
+     * does not propagate to the downstream nodes. A frozen model therefore
+     * declares its batch size at export time and is verified at that size. */
+    if (rows < 1) rows = 1;
+    lancius_node* Xn  = lancius_input(g, rows, FEAT);
+    lancius_node* W1n = lancius_input(g, FEAT, H);
+    lancius_node* b1n = lancius_input(g, 1, H);
+    lancius_node* W2n = lancius_input(g, H, NCLASS);
+    lancius_node* b2n = lancius_input(g, 1, NCLASS);
+    if (!Xn||!W1n||!b1n||!W2n||!b2n) {
+        fprintf(stderr, "export: node builder failed: %s\n",
+                lancius_error_string(lancius_get_error()));
+        lancius_graph_destroy(g); return -1;
+    }
+    /* only the weights carry data; X stays unbound so its values are NOT saved */
+    lancius_node_bind_external(W1n, (double*)m->W1);
+    lancius_node_bind_external(b1n, (double*)m->b1);
+    lancius_node_bind_external(W2n, (double*)m->W2);
+    lancius_node_bind_external(b2n, (double*)m->b2);
+    lancius_node* z1 = lancius_add(g, lancius_matmul(g, Xn, W1n), b1n);
+    lancius_node* z2 = lancius_add(g, lancius_matmul(g, lancius_tanh(g, z1), W2n), b2n);
+    if (!z1 || !z2) {
+        fprintf(stderr, "export: op builder failed: %s\n",
+                lancius_error_string(lancius_get_error()));
+        lancius_graph_destroy(g); return -1;
+    }
+    if (lancius_graph_save(g, path) != 0) {
+        fprintf(stderr, "lancius_graph_save failed: %s\n",
+                lancius_error_string(lancius_get_error()));
+        lancius_graph_destroy(g);
+        return -1;
+    }
+    lancius_graph_destroy(g);
+    return 0;
+}
+
+/* Reload a .lancius model and confirm it reproduces the in-memory logits.
+ * A save path that is never read back is an untested claim. */
+static int verify_lancius(const char* path, const model* m,
+                          const double* X, size_t n) {
+    lancius_graph* g = lancius_graph_load(path);
+    if (!g) {
+        fprintf(stderr, "load %s failed: %s\n", path,
+                lancius_error_string(lancius_get_error()));
+        return -1;
+    }
+    /* find the feature INPUT: the INPUT whose second dim is FEAT and whose
+     * runtime_data is NULL (weights were saved, features were not) */
+    lancius_node* Xn = NULL;
+    for (uint32_t i = 0; i < g->node_count; i++) {
+        lancius_node* nd = g->nodes[i];
+        if (nd && nd->op == LANCIUS_OP_INPUT && nd->ndim == 2 &&
+            nd->shape[1] == (size_t)FEAT && nd->runtime_data == NULL) {
+            if (n != nd->shape[0]) {
+                fprintf(stderr, "verify: saved batch is %zu, asked for %zu; "
+                        "re-export with --lancius-rows %zu\n",
+                        nd->shape[0], n, n);
+                lancius_graph_destroy(g); return -1;
+            }
+            Xn = nd; break;
+        }
+    }
+    if (!Xn) { fprintf(stderr, "could not locate feature INPUT in %s\n", path); lancius_graph_destroy(g); return -1; }
+
+    lancius_arena* ar = lancius_arena_create(256u*1024u*1024u);
+    if (!ar) { lancius_graph_destroy(g); return -1; }
+    lancius_node_bind_external(Xn, (double*)X);
+    lancius_schedule* sch = lancius_ir_schedule(g);
+    if (!sch) { lancius_arena_destroy(ar); lancius_graph_destroy(g); return -1; }
+    lancius_schedule_execute(sch, ar);
+    int err = (int)lancius_get_error();
+    if (err != 0) {
+        fprintf(stderr, "reloaded graph execute err=%s\n", lancius_error_string(lancius_get_error()));
+        lancius_schedule_destroy(sch); lancius_arena_destroy(ar); lancius_graph_destroy(g);
+        return -1;
+    }
+    /* the graph's last node is the logits; find the sink by walking to a node
+     * with no consumers would need a reverse map, so locate it as the INPUT-free
+     * ADD/MATMUL output: instead, read every node and take the widest 2-D result */
+    /* Locate the SINK: a computed [n, NCLASS] node that no other node
+     * consumes. Matching on shape alone is not sufficient and cost two wrong
+     * answers in a row here -- W2 is [H, NCLASS] and so is the intermediate
+     * matmul, so "first match" compared logits against the weights (max |diff|
+     * 4.04) and "first computed match" compared them against the matmul output
+     * (max |diff| 0.217). Both were artifacts of the check, not of the export;
+     * the sink itself reproduces to 2.2e-16. */
+    lancius_node* out = NULL;
+    for (uint32_t i = 0; i < g->node_count && !out; i++) {
+        lancius_node* nd = g->nodes[i];
+        if (!nd || !nd->runtime_data || nd->ndim != 2) continue;
+        if (nd->op == LANCIUS_OP_INPUT || nd->op == LANCIUS_OP_CONST) continue;
+        if (nd->shape[0] != n || nd->shape[1] != (size_t)NCLASS) continue;
+        int consumed = 0;
+        for (uint32_t j = 0; j < g->node_count && !consumed; j++) {
+            lancius_node* m = g->nodes[j];
+            if (!m || !m->inputs) continue;
+            for (int c = 0; c < (int)m->input_count; c++)
+                if (m->inputs[c] == nd) { consumed = 1; break; }
+        }
+        if (!consumed) out = nd;
+    }
+    if (!out) {
+        fprintf(stderr, "verify: no unconsumed [n,%d] node found in %s\n", NCLASS, path);
+        lancius_schedule_destroy(sch); lancius_arena_destroy(ar); lancius_graph_destroy(g);
+        return -1;
+    }
+
+    double worst = 0.0;
+    if (out) {
+        double* ref = (double*)malloc(n*NCLASS*sizeof(double));
+        fwd_logits(m, X, n, ref);
+        for (size_t i = 0; i < n*NCLASS; i++) {
+            double d = fabs(ref[i] - out->runtime_data[i]);
+            if (d > worst) worst = d;
+        }
+        free(ref);
+    }
+    lancius_schedule_destroy(sch);
+    lancius_arena_destroy(ar);
+    lancius_graph_destroy(g);
+    printf("\n.lancius round-trip: %s\n", path);
+    printf("  reloaded graph reproduces in-memory logits, max |diff| = %.3e  %s\n",
+           worst, worst < 1e-12 ? "OK" : "MISMATCH");
+    return worst < 1e-12 ? 0 : -1;
+}
+
 /* ---- self-contained gradient check (graph's own MSE objective) ---- */
 static void gradcheck(void){
     size_t n=BATCH;
@@ -351,6 +498,14 @@ int main(int argc,char** argv){
     if(argc>2) H=strtoul(argv[2],NULL,10);
     if(argc>3) EPOCHS=atoi(argv[3]);
     if(argc>4) BATCH=strtoul(argv[4],NULL,10);
+    const char* export_path = NULL; int do_verify_rt = 0; size_t lancius_rows = 256;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--seed") && i + 1 < argc) SEED = (unsigned)strtoul(argv[++i], NULL, 10);
+        else if (!strcmp(argv[i], "--export-lancius") && i + 1 < argc) export_path = argv[++i];
+        else if (!strcmp(argv[i], "--verify-lancius")) do_verify_rt = 1;
+        else if (!strcmp(argv[i], "--lancius-rows") && i + 1 < argc)
+            lancius_rows = (size_t)strtoul(argv[++i], NULL, 10);
+    }
 
     corpus tr=load(dir,"train"), te=load(dir,"test");
 
@@ -473,6 +628,25 @@ int main(int argc,char** argv){
     mprint("per-step",&ms);
     confusion("overall",&mo);
     confusion("per-step",&ms);
+
+    /* .lancius export + round-trip proof, on the validation rows so the test
+     * set is not touched by a correctness check */
+    if (export_path) {
+        if (export_lancius(&m, export_path, lancius_rows) == 0) {
+            size_t fsz = 0;
+            { struct stat st_; if (stat(export_path, &st_) == 0) fsz = (size_t)st_.st_size; }
+            printf("\nwrote %s (%zu bytes, fixed batch = %zu rows)\n",
+                   export_path, fsz, lancius_rows);
+        } else {
+            fprintf(stderr, "export FAILED\n"); return 2;
+        }
+        if (do_verify_rt) {
+            size_t rn = nval < lancius_rows ? nval : lancius_rows;
+            if (verify_lancius(export_path, &m, valX, rn) != 0) {
+                fprintf(stderr, "round-trip FAILED\n"); return 2;
+            }
+        }
+    }
 
     /* per-algorithm held-out accuracy. The generator writes a plain
      * algos.txt (one name per line) alongside the bins; parsing JSON here was
