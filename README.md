@@ -152,7 +152,9 @@ refuse, quantizer/optimizer/vision checks, capped fetches, tar-slip).
 
 The following remain intentionally deferred:
 
-- per-axis N-dim broadcast grad reduction (`SUM_AXIS_ND`; currently fails loud)
+- ~~per-axis N-dim broadcast grad reduction~~ — **closed in R3-1 and verified in
+  V7**: `SUM_AXIS_ND` is trainable, its VJP is exact against central differences
+  at ~1e-9, and it runs through every rank (see `docs/DESPOT_TRUTH_V2.md` §16)
 - full FP32 operator coverage (transformer math ops are FP64-only; no generation path by design)
 - FP32 KV-cache storage
 - general ONNX converter usability beyond LeNet-class graphs
@@ -301,6 +303,12 @@ This runs the primary regression and correctness suite, including:
 - N-dim reduction audit (per-axis sums 1..4-D, broadcast training exactness)
 - norm/activation/batched backward audit (finite-diff ~1e-9..1e-11)
 - training convergence audit (XOR solve, determinism, checkpoint resume)
+- V7 hardening audit (1226 checks): sticky-error contract per op, softmax /
+  cross-entropy / attention stability at |logit| up to 1e5, arena 32B alignment
+  across 64 fresh arenas, the alignment cap, INT8 quantizer scale exactness and
+  round-trip error bound, conv+relu fusion shape guard, a representative op
+  table, the `broadcast_to_shape` contract at every rank plus its v2 round-trip,
+  and INT8 64-bit accumulation proven at 204800 taps
 
 Every audit in the gate propagates failures through its exit code: a green
 `make check` means every check passed, not just that binaries ran.
@@ -327,8 +335,22 @@ This rebuilds selected stress binaries with sanitizer instrumentation and runs:
 - AddressSanitizer
 - UndefinedBehaviorSanitizer
 
-The gate restores a clean non-instrumented build afterwards
+**V7 change:** this gate used to rebuild three binaries (`stress_test`,
+`test_torture`, `fuzz_lancius`) against a `liblancius.a` that was **not
+instrumented**, so nothing inside the library was ever checked, and 25 of the 28
+audits never ran under a sanitizer at all. It now instruments the library and
+every audit in the gate and runs all of them under ASan + UBSan +
+LeakSanitizer. It still restores a clean non-instrumented build afterwards
 (`make -B all`), so a stale sanitized binary can never leak into `make check`.
+
+A standalone UBSan pass runs the checks that only exist outside the combined
+mode (signed-integer-overflow, shift, bool, enum, float-cast-overflow,
+integer-divide-by-zero, object-size, bounds) with `-fno-sanitize-recover=all`,
+so a finding aborts instead of warning:
+
+```bash
+make check-ubstrict
+```
 
 ### Targeted Audits
 
@@ -377,6 +399,26 @@ python3 audit_pytorch_parity.py
 > Passing `make check` is the minimum development gate.
 > Passing `make check-long` and `make check-sanitizers` is expected before
 > release-candidate hardening.
+
+### Gate Integrity Gates
+
+These exist because the gates above were written by the same person who wrote
+the code, and a gate nobody checked for its own ability to fail is decoration.
+
+```bash
+make check-oracle     # recompute every kernel and graph op in NumPy/PyTorch/closed form
+make check-sanitizers # ASan + UBSan + LeakSanitizer over the INSTRUMENTED library and every audit
+make check-ubstrict   # UBSan alone with -fno-sanitize-recover=all (signed overflow, shift, casts)
+make check-mutation   # inject real defects and require this gate to go red
+```
+
+`make check-mutation` is the one that matters most: it took 18 injected defects
+and required the gate to catch every one. The first run caught 8 and **missed 7**;
+each of those 7 became a permanent check in `audit_v7_hardening`. The current
+tally is 18/18 caught, 1 verified behaviourally neutral, 0 holes. Details and the
+per-mutation record are in `docs/DESPOT_TRUTH_V2.md` §16.
+
+All five gates run on every push (`.github/workflows/gate.yml`).
 <!-- /SECTION:VALIDATION -->
 
 <!-- SECTION:FEATURE_STATUS -->
@@ -392,7 +434,7 @@ The following table describes the current status of major subsystems.
 | Dataset acquisition | Development | `manage_datasets.py` fetches through the 3463-LDFD submodule when `libsnapshot.so` is present (streaming gzip + tar, atomic land, HTTP>=400 as error), else the hardened urllib path. `manage_datasets.py status` reports which is live |
 | Core tensor ops | Development | Add/Sub/Mul (N-dim broadcast-correct), MatMul, ReLU, Softmax (zero-sum guarded), Sum, Broadcast, Transpose |
 | Vision ops | Development | Conv2D, MaxPool2D, Flatten, fused Conv2D+ReLU; `FLATTEN`/`RESHAPE` verify element equality |
-| Training ops | Development | N-dim broadcast reduction (`SUM_AXIS_ND`), batched-matmul/GELU/LayerNorm/RMSNorm backward incl. gamma/beta (finite-diff ~1e-9..1e-11), global-norm clip, XOR convergence + checkpoint-resume gates; attention/GQA/SwiGLU/RoPE backward staged (fail loud) |
+| Training ops | Development | N-dim broadcast reduction (`SUM_AXIS_ND`) with an exact VJP proven against central differences, batched-matmul/GELU/LayerNorm/RMSNorm backward incl. gamma/beta (finite-diff ~1e-9..1e-11), global-norm clip, XOR convergence + checkpoint-resume gates; attention/GQA/SwiGLU/RoPE backward staged (fail loud) |
 | Transformer kernels | Experimental | LayerNorm, RMSNorm, GELU, RoPE, Attention, KV-cache attention, SwiGLU, GQA (validated shapes; math primitives only, no generation flows) |
 | KV-cache runtime | Experimental | Stateful cache object, FP64-only for now; step parity audited, generation demos scrapped |
 | Language generation | Scrapped | No prefill/generation demos, no streaming generation, no `generate` verb (`lancius generate` fails loud → use `lancius eval`) |

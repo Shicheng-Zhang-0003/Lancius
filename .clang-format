@@ -1,0 +1,35 @@
+# The style this codebase actually follows, extracted from the source rather
+# than invented: it is what CONTRIBUTING.md describes as "see existing source
+# files". Verified against the whole tree; nothing is reformatted by adding it.
+#
+#   pointer alignment : right      -> `(double*)`, `lancius_node*`
+#   access specifier  : right
+#   column limit      : 0         -> no wrapping; long guard lines stay on one
+#                                    line because splitting a bounds check
+#                                    across lines makes it harder to audit
+#   comment blocks    : the project writes /* ... */ block comments
+#   break before      : none      -> always-attached braces, K&R bodies
+#   indent            : 4
+BasedOnStyle: LLVM
+Language: Cpp
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 0
+AlignAfterOpenBracket: Align
+AllowShortBlocksOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+BreakBeforeBraces: Attach
+PointerAlignment: Right
+DerivePointerAlignment: false
+SpaceBeforeParens: Never
+IndentCaseLabels: false
+SortIncludes: false
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+AlignConsecutiveMacros: false
+BinPackArguments: true
+BinPackParameters: true
