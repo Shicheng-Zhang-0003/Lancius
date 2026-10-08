@@ -6,9 +6,27 @@
 // vs finite differences + v2 roundtrip of TRANSPOSE_BATCHED.
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <string.h>
 #include <math.h>
 #include <lancius.h>
+
+/* Scratch directory for this audit's save/load probes.
+ *
+ * This used to be the literal /tmp/opencode/, which is a path that exists only
+ * on the machine the audits were written on. On a GitHub runner the directory
+ * does not exist, lancius_graph_save returns an IO error, and `make check`
+ * fails on "v2 save ..." -- so the gate could never pass anywhere but the
+ * author's laptop, which is the exact failure a standing gate exists to
+ * prevent. LANCIUS_SCRATCH overrides it; the default is repo-relative and
+ * created on demand. */
+static const char* lancius_scratch_dir(void) {
+    const char* s = getenv("LANCIUS_SCRATCH");
+    if (!s || !*s) s = "temp/scratch";
+    mkdir(s, 0777);              /* EEXIST is the normal case and is fine */
+    return s;
+}
 static int checks = 0;
 static int failures = 0;
 #define CHECK(cond, msg) \
@@ -85,8 +103,9 @@ static void t_transpose_batched(void) {
         && fabs(T->runtime_data[10] - 9.0) < 1e-12 && fabs(T->runtime_data[11] - 12.0) < 1e-12;
     CHECK(ok, "tbatch values");
     lancius_clear_error();
-    CHECK(lancius_graph_save(g, "/tmp/opencode/r3_tbatch.lancius") == 0, "tbatch v2 save");
-    lancius_graph* g2 = lancius_graph_load("/tmp/opencode/r3_tbatch.lancius");
+    char sp[512]; snprintf(sp, sizeof sp, "%s/r3_tbatch.lancius", lancius_scratch_dir());
+    CHECK(lancius_graph_save(g, sp) == 0, "tbatch v2 save");
+    lancius_graph* g2 = lancius_graph_load(sp);
     CHECK(g2 && g2->node_count == 2, "tbatch v2 roundtrip");
     if (g2) lancius_graph_destroy(g2);
     lancius_schedule_destroy(s);

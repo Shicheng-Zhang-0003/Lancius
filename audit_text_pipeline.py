@@ -12,7 +12,12 @@ from text_tokenizer import CharTokenizer, verify_manifest, write_manifest
 
 ASCII_STR = "Solve 2+2=4 (easy)?"
 ASTRAL_STR = "hello \U0001D11E\U0001F30D\U0001F600\U00010448"
-OPENCOD_TMP = Path("/tmp/opencode")
+import os
+# Repo-relative and created on demand. This was the literal
+# "/tmp/opencode", a path that exists only on the machine it was written on,
+# so `make check` failed on any runner that lacks it.
+OPENCOD_TMP = Path(os.environ.get("LANCIUS_SCRATCH", "temp/scratch"))
+OPENCOD_TMP.mkdir(parents=True, exist_ok=True)
 
 failures: list[str] = []
 

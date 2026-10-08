@@ -8,8 +8,26 @@
 #include <lancius.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <string.h>
 #include <math.h>
+
+/* Scratch directory for this audit's save/load probes.
+ *
+ * This used to be the literal /tmp/opencode/, which is a path that exists only
+ * on the machine the audits were written on. On a GitHub runner the directory
+ * does not exist, lancius_graph_save returns an IO error, and `make check`
+ * fails on "v2 save ..." -- so the gate could never pass anywhere but the
+ * author's laptop, which is the exact failure a standing gate exists to
+ * prevent. LANCIUS_SCRATCH overrides it; the default is repo-relative and
+ * created on demand. */
+static const char* lancius_scratch_dir(void) {
+    const char* s = getenv("LANCIUS_SCRATCH");
+    if (!s || !*s) s = "temp/scratch";
+    mkdir(s, 0777);              /* EEXIST is the normal case and is fine */
+    return s;
+}
 
 static int checks = 0;
 static int failures = 0;
@@ -200,8 +218,9 @@ static void test_roundtrip(void) {
     lancius_node* S = lancius_sum_axis_nd(g, X, 2);
     CHECK(S != NULL, "roundtrip graph builds");
     lancius_clear_error();
-    CHECK(lancius_graph_save(g, "/tmp/opencode/r3_audit_nd.lancius") == 0, "v2 save SUM_AXIS_ND");
-    lancius_graph* g2 = lancius_graph_load("/tmp/opencode/r3_audit_nd.lancius");
+    char sp[512]; snprintf(sp, sizeof sp, "%s/r3_audit_nd.lancius", lancius_scratch_dir());
+    CHECK(lancius_graph_save(g, sp) == 0, "v2 save SUM_AXIS_ND");
+    lancius_graph* g2 = lancius_graph_load(sp);
     CHECK(g2 && g2->node_count == g->node_count, "v2 load roundtrip node count");
     if (g2) {
         lancius_node* s2 = NULL;
