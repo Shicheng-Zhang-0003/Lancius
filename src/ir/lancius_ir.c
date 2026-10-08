@@ -167,11 +167,28 @@ lancius_node* lancius_broadcast_to_shape(lancius_graph* g, const lancius_node* a
     if (!lancius_node_elements_checked(a, &ae)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
     if (!lancius_checked_product_shape(shape, ndim, &oe)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return NULL; }
     if (ae != 1) {
-        /* Non-scalar must already match exactly; partial N-dim reductions are
-         * expressed via SUM_AXIS ops in accum_grad, not here. */
-        if (a->ndim != ndim) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+        /* Despot V7 truth: this builder was STRICTER than the operation it
+         * builds. It demanded exact shape equality for every non-scalar, while
+         * lancius_broadcast_4d (its own 4-D sibling) and the BROADCAST
+         * executor both accept trailing-rank alignment with per-dim
+         * `da == 1 || da == out[i]`. The consequence was concrete: the
+         * SUM_AXIS_ND VJP is documented as `dx = broadcast_to_shape(dy)` but
+         * dy is [.., 1, ..] and x is [.., C, ..], so the documented VJP could
+         * never build and every training graph containing a SUM_AXIS_ND
+         * forward node aborted with INTERNAL. It also made 1-D and 3-D
+         * expanding broadcasts unbuildable while their 2-D and 4-D
+         * equivalents worked, so the v2 loader's `ndim >= 1` branch could only
+         * ever see exact-match shapes.
+         *
+         * Use the same rule everywhere: align trailing ranks (leading missing
+         * dims are 1) and require each aligned source dim to be 1 or equal to
+         * the target. Anything else is not executable and is refused here,
+         * before a node exists, rather than miscomputed later. */
+        if (a->ndim == 0 || a->ndim > ndim) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+        int lead = (int)ndim - (int)a->ndim;   /* missing leading dims are 1 */
         for (uint8_t i = 0; i < ndim; i++) {
-            if (a->shape[i] != shape[i]) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
+            size_t da = ((int)i < lead) ? 1u : a->shape[i - lead];
+            if (!(da == 1 || da == shape[i])) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return NULL; }
         }
     }
     lancius_node* n = alloc_node(g, LANCIUS_OP_BROADCAST, ndim, 1);
