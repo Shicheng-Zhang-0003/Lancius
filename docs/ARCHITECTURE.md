@@ -1,5 +1,11 @@
 # Lancius v12R2 Architecture Overview
 
+> **For the mechanics, read [`HOW_IT_WORKS.md`](HOW_IT_WORKS.md).** This page
+> gives the shape of the system. `HOW_IT_WORKS.md` gives the pipeline stage by
+> stage with the actual API names and files, the operation set and its
+> conventions, the training path, the verification discipline, the procedure
+> for adding an operation, and the honest limits.
+
 ## High Level Pipeline
 
     Model Input

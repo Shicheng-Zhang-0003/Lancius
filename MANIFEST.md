@@ -25,7 +25,8 @@
 ## v12R2 Milestone (development, current) + v12R1 baseline (2026-09-21) + despot truth V2/V3 (2026-09-28) + hardening V4 (2026-09-28) + V5 (2026-09-30) + despot audit V6 (2026-10-01) + despot audit V7 (2026-10-03)
 
 v12R2 is the second development milestone of the v12 cycle, not a stable
-release. Public github tag: `V1.2RC2`. It inherits the v11S contract and the v12R1/V1.2RC1 additions below, plus R2-1..R2-6 (train-lib, char-v1, micromodel, eval_verifier, sandbox, CLI eval) and despot audit V7 error-channel + grad-shape + per-channel honesty fixes. Enumeration in `CHANGELOG.md`; proofs in `docs/DESPOT_TRUTH_V2.md` §12-13:
+release. Public github tag: `V1.2RC2`. It inherits the v11S contract and the v12R1/V1.2RC1 additions below, plus R2-1..R2-6 (train-lib, char-v1, micromodel, eval_verifier, sandbox, CLI eval) and despot audit V7 error-channel + grad-shape + per-channel honesty fixes. Enumeration in `CHANGELOG.md`; proofs in `docs/HOW_IT_WORKS.md          # concrete mechanics: pipeline, ops, training, verification
+docs/DESPOT_TRUTH_V2.md` §12-13:
 
 - v2 model format unchanged: files written by v11S+ load with mandatory
   CRC32 body integrity (`LANCIUS_ALLOW_LEGACY_UNVERIFIED=1` opts into

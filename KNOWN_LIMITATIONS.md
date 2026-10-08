@@ -198,3 +198,17 @@ Proven by `make check-mutation`:
   multi-process or multi-threaded *user* code, and the FP32 path beyond matmul
 - Performance. Nothing here measures throughput; the oracles measure
   correctness only
+
+## Softmax backward has no external oracle
+
+`lancius_softmax_bwd` is reachable through autodiff and is exercised
+indirectly wherever an MLP trains, but no external oracle compares it against
+torch autograd. No probe dumps a softmax backward: `softmax_out2.bin` looks
+like a gradient by name and is in fact the *shifted forward output* written for
+the shift-invariance probe. Recorded here rather than left implied by an absent
+test. See `docs/DESPOT_TRUTH_V2.md` section 19.6.
+
+`conv_oracle.py`, `math_oracle.py` and `trainlib_oracle.py` additionally require
+PyTorch and have no NumPy fallback, because torch is the independent engine for
+those layers; a NumPy reimplementation of SGD checked against a NumPy
+reimplementation of SGD would agree with itself.
