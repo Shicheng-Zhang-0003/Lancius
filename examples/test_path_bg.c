@@ -138,6 +138,12 @@ int main() {
         if (g_load) lancius_graph_destroy(g_load);
     }
 
+    /* Despot V7 truth: dummy_in is attached by bare assignment, so the graph
+     * does not own it and lancius_graph_destroy(g_perm) will not free it.
+     * LeakSanitizer reported 960 bytes leaked on every run of this gate member
+     * until the success path released it too. */
+    free(dummy_in);
+
     lancius_arena_destroy(scratch);
     printf("\n================================================================\n");
     printf("  PATH B & G VERIFICATION COMPLETE.\n");

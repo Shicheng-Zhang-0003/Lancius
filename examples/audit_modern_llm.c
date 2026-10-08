@@ -17,8 +17,14 @@ int main() {
     lancius_node* gamma = lancius_input(g, 1, 8);
     lancius_node* rms = lancius_rmsnorm(g, x, gamma);
 
+    /* Despot V7 truth: bind_owned_heap, not a bare runtime_data assignment.
+     * A bare assignment leaks: lancius_graph_destroy only frees buffers it
+     * owns, and LeakSanitizer reported 256+256 bytes per run of this audit. */
     x->runtime_data = (double*)calloc(32, sizeof(double));
     gamma->runtime_data = (double*)malloc(8 * sizeof(double));
+    if (!x->runtime_data || !gamma->runtime_data) { printf("  ❌ OOM\n"); return 1; }
+    lancius_node_bind_owned_heap(x, x->runtime_data);
+    lancius_node_bind_owned_heap(gamma, gamma->runtime_data);
     for(int i=0; i<32; i++) x->runtime_data[i] = 1.0;
     for(int i=0; i<8; i++) gamma->runtime_data[i] = 2.0;
 
@@ -46,6 +52,9 @@ int main() {
 
     gate->runtime_data = (double*)calloc(8, sizeof(double));
     up->runtime_data = (double*)calloc(8, sizeof(double));
+    if (!gate->runtime_data || !up->runtime_data) { printf("  ❌ OOM\n"); return 1; }
+    lancius_node_bind_owned_heap(gate, gate->runtime_data);
+    lancius_node_bind_owned_heap(up, up->runtime_data);
     for(int i=0; i<8; i++) { gate->runtime_data[i] = 0.0; up->runtime_data[i] = 5.0; }
 
     lancius_schedule* sched2 = lancius_ir_schedule(g2);
@@ -79,6 +88,10 @@ int main() {
     Q->runtime_data = (double*)calloc(seq * hq * dim, sizeof(double));
     K->runtime_data = (double*)calloc(seq * hk * dim, sizeof(double));
     V->runtime_data = (double*)calloc(seq * hk * dim, sizeof(double));
+    if (!Q->runtime_data || !K->runtime_data || !V->runtime_data) { printf("  ❌ OOM\n"); return 1; }
+    lancius_node_bind_owned_heap(Q, Q->runtime_data);
+    lancius_node_bind_owned_heap(K, K->runtime_data);
+    lancius_node_bind_owned_heap(V, V->runtime_data);
 
     for(size_t i=0; i<seq*hq*dim; i++) Q->runtime_data[i] = 1.0;
     for(size_t i=0; i<seq*hk*dim; i++) K->runtime_data[i] = 1.0;
