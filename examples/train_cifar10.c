@@ -1,7 +1,15 @@
 #include <lancius.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <stdlib.h>
 #include <string.h>
+
+/* mkdir -p equivalent for the repo-relative scratch path. This used to be the
+ * literal /tmp/opencode, a directory that exists only on the machine this was
+ * written on, so the tar-slip audit could not run anywhere else. */
+static void mk_scratch_dir(void){ mkdir("temp", 0777); mkdir("temp/scratch", 0777); }
+
 #include <math.h>
 #include <time.h>
 #include <unistd.h>
@@ -35,9 +43,10 @@ void download_cifar10() {
     printf("[1/5] Downloading CIFAR-10 Binary Dataset...\n");
     if (!cifar_step("curl -s -L https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz -o cifar.tar.gz")) exit(1);
     /* Despot V6 truth: tar-slip validated (was blind extract of MITM archive). */
-    if (!cifar_step("tar -tzf cifar.tar.gz > /tmp/opencode/tarlist.txt")) exit(1);
+    mk_scratch_dir();
+    if (!cifar_step("tar -tzf cifar.tar.gz > temp/scratch/tarlist.txt")) exit(1);
     {
-        FILE* lf = fopen("/tmp/opencode/tarlist.txt", "r");
+        FILE* lf = fopen("temp/scratch/tarlist.txt", "r");
         if (!lf) { fprintf(stderr, "FATAL: cannot list archive\n"); exit(1); }
         char line[1024];
         while (fgets(line, sizeof(line), lf)) {

@@ -17,7 +17,8 @@ import sys
 
 import numpy as np
 
-DUMPS = sys.argv[1] if len(sys.argv) > 1 else "/tmp/opencode/v12R2-audit/dumps"
+DUMPS = sys.argv[1] if len(sys.argv) > 1 else os.environ.get(
+    "LANCIUS_DUMPS", "temp/scratch/v12R2-audit/dumps")
 TOL = float(os.environ.get("ORACLE_TOL", "1e-11"))
 
 results = []

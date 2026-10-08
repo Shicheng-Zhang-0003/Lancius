@@ -7,9 +7,27 @@
 #include <lancius.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <string.h>
 #include <math.h>
 #include "lancius/lancius_train.h"
+
+/* Scratch directory for this audit's save/load probes.
+ *
+ * This used to be the literal /tmp/opencode/, which is a path that exists only
+ * on the machine the audits were written on. On a GitHub runner the directory
+ * does not exist, lancius_graph_save returns an IO error, and `make check`
+ * fails on "v2 save ..." -- so the gate could never pass anywhere but the
+ * author's laptop, which is the exact failure a standing gate exists to
+ * prevent. LANCIUS_SCRATCH overrides it; the default is repo-relative and
+ * created on demand. */
+static const char* lancius_scratch_dir(void) {
+    const char* s = getenv("LANCIUS_SCRATCH");
+    if (!s || !*s) s = "temp/scratch";
+    mkdir(s, 0777);              /* EEXIST is the normal case and is fine */
+    return s;
+}
 
 static int checks = 0;
 static int failures = 0;
@@ -182,9 +200,10 @@ int main(void) {
     CHECK(xor_build(&c, 0x12345ULL), "third net builds");
     double half = xor_train(&c, CKPT_AT);
     CHECK(half >= 0.0, "half run completes");
-    CHECK(lancius_graph_save(c.g, "/tmp/opencode/xor_ckpt.lancius") == 0, "checkpoint saves");
+    char sp[512]; snprintf(sp, sizeof sp, "%s/xor_ckpt.lancius", lancius_scratch_dir());
+    CHECK(lancius_graph_save(c.g, sp) == 0, "checkpoint saves");
     /* Reload into a fresh graph; remap weight nodes by id. */
-    lancius_graph* g2 = lancius_graph_load("/tmp/opencode/xor_ckpt.lancius");
+    lancius_graph* g2 = lancius_graph_load(sp);
     CHECK(g2 != NULL, "checkpoint reloads");
     xor_net d;
     memset(&d, 0, sizeof(d));
