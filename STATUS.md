@@ -160,6 +160,49 @@ wrong:
 All of them run on every push via `.github/workflows/gate.yml`, which did not
 exist before this pass. Full record: `docs/DESPOT_TRUTH_V2.md` §16.
 
+## V8 truth batch: every constant checked against its primary source
+
+A finite difference proves the derivative of whatever function was implemented,
+not that the intended function was implemented. If GELU's coefficient were
+0.0447 rather than 0.044715, every finite difference and every known-answer test
+would still pass. So §17 of `docs/DESPOT_TRUTH_V2.md` checks each constant,
+equation and dataset fact against its published source.
+
+**Verified exact:** GELU tanh form (Hendrycks & Gimpel 2016); LayerNorm biased
+`1/n` variance and eps 1e-5 (Ba, Kiros & Hinton 2016); RMSNorm with no mean
+subtraction (Zhang & Sennrich 2019); the `1/sqrt(d)` attention scale (Vaswani
+2017); RoPE's `10000^(-2i/d)` schedule and its relative-position property (Su
+et al. 2021); SiLU and SwiGLU (Hendrycks & Gimpel, Shazeer 2020); AdamW
+decoupled decay and `sqrt(v_hat)+eps` placement (Loshchilov & Hutter 2019,
+matching `torch.optim.AdamW` to 5.6e-16 over 20 steps); the SGDR cosine
+schedule; gradient-norm clipping (Pascanu et al. 2013); GQA head grouping
+(Ainslie et al. 2023); He init `sqrt(2/fan_in)` with conv `fan_in =
+C_in*K_h*K_w` (He et al. 2015); the INT32 accumulator threshold, verified
+arithmetically as `2147483647/(128*127) = 132104` exactly as the comment claims;
+CRC-32 byte-identical to `zlib.crc32`; the online-softmax rescaling exact to
+2.2e-16 against direct softmax; and the MNIST and CIFAR-10 container formats by
+content invariants (IDX magic numbers, record counts, and the published class
+balances — CIFAR-10's test split is exactly 1000 per class).
+
+**One real error found and fixed:** the GELU comment claimed max deviation from
+erf-exact GELU of `~2e-3`. Measured over a dense scan the true maximum is
+**4.74e-04** at x = 2.699 (rms 1.42e-04) — the claim overstated the error 4x,
+and the external oracle had inherited the same unverified number as its
+acceptance bound. The comment is corrected and the oracle now **measures and
+pins** both figures, so the next drift is caught rather than passed along.
+
+**One divergence recorded, not changed:** the INT8 quantizer clamps to
+`[-128,127]` where the TFLite spec and TensorRT both specify `[-127,127]`. It is
+numerically inert, because `scale = max_abs/127` makes -128 unreachable, and
+§17.2 explains why it is recorded rather than silently altered.
+
+**Still unchecked, and said so:** the GELU `±10` clamps are a local guard rather
+than part of the paper (verified exact in the limit); CIFAR-10 is normalised to
+`[-1,1]` rather than PyTorch's per-channel statistics, a deliberate choice that
+makes local numbers non-comparable to torchvision baselines without adjustment;
+and `.tar.gz` digests cannot be compared across mirrors because gzip is not
+byte-reproducible, so datasets are verified by content rather than digest.
+
 ## Validation batch — v12R2
 
 3463-LDFD evidence: `make -C 3463-LDFD test` = 4 dependency-free suites,
