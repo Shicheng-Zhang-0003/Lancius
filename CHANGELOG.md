@@ -897,3 +897,35 @@ Despot truth batch (every remaining lie found and implemented):
 -   Dynamic execution
 -   Expanded training support
 -   Additional deployment targets
+
+## Unreleased -- V9 bottom-up audit, layers 1 and 2, and the mechanics guide
+
+- **Bottom-up audit, layer 1 (train-lib).** Four of seven public train-lib entry
+  points had never been checked against a primary source. `sgd_step`,
+  `sgdm_step`, `clip_grad_norm`, and `lr_warmup_cosine` are now compared against
+  `torch.optim.SGD`, `torch.nn.utils.clip_grad_norm_`, and HuggingFace's
+  `get_cosine_with_min_lr_schedule_with_warmup`: **169/169**. Two divergences
+  are characterised rather than hidden -- torch's `max_norm/(norm+1e-6)` lands
+  strictly below `max_norm` where Lancius's exact ratio lands on it, and
+  Lancius clamps the learning rate to `lr_min` past `total` where HuggingFace's
+  cosine climbs back up.
+- **A hole in the oracle harness.** `oracle_gate.sh` built its probes in an
+  unguarded loop with no failure aggregation, so a probe that failed to compile
+  was skipped and **the gate still exited 0**. Now guarded and verified by
+  deliberately breaking a probe.
+- **Bottom-up audit, layer 2 (conv2d, reductions, softmax).** conv2d was checked
+  against a NumPy reference written by the same author as the kernel; reductions
+  were checked structurally only; softmax was checked only for sum-to-one and
+  shift invariance -- both satisfied by a wrong implementation. Now compared
+  against PyTorch: **11/11** and **13/13**. conv2d is confirmed cross-correlation
+  (kernel NOT flipped) with the flipped convention asserted to differ, and every
+  reduction asserts that the transposed axis would differ.
+- **New: `docs/HOW_IT_WORKS.md`.** The canonical guide to how a model is
+  defined, processed, executed, trained, and proved correct -- the pipeline stage
+  by stage with real API names and files, the 50-op operation set and its
+  conventions, the three execution modes, the training path, the verification
+  discipline with what each gate can and cannot prove, the procedure for adding
+  an operation, and the honest limits.
+- **Standing state: 276 external comparisons, 0 skipped**, mutation gate 18 caught
+  and 0 holes. `KNOWN_LIMITATIONS.md` now records the one newly-found unchecked
+  path (softmax backward has no external oracle).

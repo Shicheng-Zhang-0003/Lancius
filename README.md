@@ -1,6 +1,10 @@
 <!-- SECTION:HEADER -->
 # Lancius v12R2
 
+> **New here?** [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md) is the
+> canonical guide to how a model is defined, processed, executed, trained and
+> proved correct — pipeline stage by stage, the operation set and its
+> conventions, and the verification discipline.
 > **Internal milestone:** `v12R2`
 > **Public release:** `V1.2RC2`
 > **Status:** Development milestone (R2 — second v12 milestone)

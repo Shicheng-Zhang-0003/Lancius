@@ -152,7 +152,7 @@ wrong:
 
 | Gate | What it proves | Tally |
 |---|---|---|
-| `make check-oracle` | every kernel and graph op recomputed in NumPy / PyTorch autograd / closed form / central differences | 41/41 kernels + 37/37 graph ops |
+| `make check-oracle` | every kernel, graph op, and train-lib entry point recomputed in NumPy / PyTorch autograd / closed form / central differences | **276 comparisons, 0 skipped**: 46/46 kernels + 37/37 graph ops + 169/169 train-lib + 11/11 conv2d-vs-torch + 13/13 reductions+softmax-vs-torch |
 | `make check-sanitizers` | ASan + UBSan + LSan over the **instrumented library** and every audit (the old gate ran 3 binaries against an uninstrumented archive) | 26/26 clean |
 | `make check-ubstrict` | UBSan alone, `-fno-sanitize-recover=all`, so signed overflow / shift / float-cast abort instead of warn | 25/25 clean |
 | `make check-mutation` | real defects injected; the gate must go red | **18/18 caught, 1 verified-neutral, 0 holes** (first run: 8 caught, 7 holes) |
@@ -248,3 +248,9 @@ trains, and pauses on ttys. User paths exec without a shell. `demo`
 proves an install in one command; `make check` covers `info`/`run`/`eval`. `train_mnist/cifar10` stay manual-only
 (see `KNOWN_LIMITATIONS.md`); `run_edge`/`parity_runner`/`run_trained_batch` are manual
 parity runners, not gate members.
+
+## Where to start reading
+
+`docs/HOW_IT_WORKS.md` -- the canonical guide to how a model is defined,
+processed, executed, trained, and proved correct. `docs/ARCHITECTURE.md` is the
+shape of the system; that document is the mechanics.
