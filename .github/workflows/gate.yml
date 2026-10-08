@@ -27,8 +27,14 @@ jobs:
       - name: toolchain
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends build-essential clang libcurl4-openssl-dev zlib1g-dev
+          sudo apt-get install -y --no-install-recommends build-essential clang libcurl4-openssl-dev zlib1g-dev python3-numpy
           gcc --version | head -1
+          # numpy is a HARD requirement, not an optional extra like torch:
+          # tools/audit/kernel_oracle.py and graph_oracle.py both import it at
+          # module scope, and tools/audit/oracle_gate.sh says so outright. The
+          # runner image does not provide it, so this line failed on every run
+          # of this workflow and the oracle gate never once executed in CI --
+          # a green-looking gate that had in fact never checked anything.
           python3 -c "import numpy; print('numpy', numpy.__version__)"
           python3 -c "import torch; print('torch', torch.__version__)" 2>/dev/null || echo "torch absent: oracle falls back to NumPy + closed form"
 
