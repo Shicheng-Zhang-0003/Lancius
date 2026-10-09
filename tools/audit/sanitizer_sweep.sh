@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Sanitizer sweep over EVERY gate binary.
 #
-# The makefile's check-sanitizers only rebuilds three binaries
-# (stress_test, test_torture, fuzz_lancius) and leaves the library
-# uninstrumented for the ASan-linked test_diamond_memory. This sweep builds
-# the library AND every binary with -fsanitize=address,undefined and runs the
-# whole gate under LeakSanitizer, so a leak or UB anywhere shows up with the
-# library actually instrumented.
+# Despot V9: header corrected (was stale: claimed makefile only rebuilds three
+# binaries with an uninstrumented library -- true pre-V7, false since V7
+# instruments the library in makefile:238-242). This sweep is the redundant
+# second opinion: it rebuilds the library AND every binary including the CLI
+# and parity runners that make check-sanitizers omits by design (distill is
+# standalone, parity/soak are manual runners).
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="${ROOT}/temp/sanitizers"
