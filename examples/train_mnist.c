@@ -304,7 +304,8 @@ int main() {
             int idx = i+b;
             for(int p=0; p<784; p++) x_batch[b*784 + p] = (te_X[idx*784 + p] / 255.0) - 0.5; // Zero-Mean Centering
         }
-        lancius_vm_execute(prog, vm_inputs, out_batch, scratch);
+        /* Despot V9: bounded VM execution (was unbounded out write). */
+        lancius_vm_execute_checked(prog, vm_inputs, out_batch, (size_t)BATCH_SIZE * 10, scratch);
         for(int b=0; b<BATCH_SIZE; b++) {
             int pred = 0; double max_logit = -1e9;
             for(int c=0; c<10; c++) {

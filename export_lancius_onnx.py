@@ -54,13 +54,19 @@ OP_NAMES = {
 
 def parse_lancius(path, allow_legacy=False):
     # Despot truth: whole-file read was uncapped (OOM on GB files).
+    # Despot V9: stat-then-read is TOCTOU; open first, fstat, then capped read.
     try:
         if os.path.getsize(path) > 2 * 1024 * 1024 * 1024:
             raise ValueError(f"{path}: file exceeds 2GB cap; refusing parse.")
     except OSError as e:
         raise ValueError(f"{path}: cannot stat: {e}.") from e
     with open(path, 'rb') as f:
-        blob = f.read()
+        _sz = os.fstat(f.fileno()).st_size
+        if _sz > 2 * 1024 * 1024 * 1024:
+            raise ValueError(f"{path}: file exceeds 2GB cap after open; refusing parse.")
+        blob = f.read(2 * 1024 * 1024 * 1024 + 1)
+        if len(blob) > 2 * 1024 * 1024 * 1024:
+            raise ValueError(f"{path}: file exceeds 2GB cap; refusing parse.")
     if len(blob) < 48:
         raise ValueError(f"{path}: file too small ({len(blob)} bytes)")
     hdr = struct.unpack(HEADER_FMT, blob[:48])
