@@ -90,7 +90,9 @@ lancius_pool* lancius_pool_create(int num_threads) {
 }
 
 void lancius_pool_submit(lancius_pool* pool, lancius_task_fn fn, void* arg) {
-    if (!pool || !fn) return;
+    /* Despot V9 truth: silent return left get_error()==OK on NULL misuse
+     * (was inconsistent with pool_wait which sets NULL_PTR). Fail loud. */
+    if (!pool || !fn) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
     pthread_mutex_lock(&pool->mutex);
     /* Despot truth: queue-full inline fallback ran on the submitter thread
      * concurrently with workers (scratch arenas are not thread-safe) and was

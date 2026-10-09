@@ -141,13 +141,17 @@ lancius_memory_plan* lancius_build_memory_plan(lancius_schedule* sched, lancius_
 
     for (uint32_t i = 0; i < num_intervals; i++) {
         lancius_interval* curr = &intervals[i];
-        if (curr->node_id >= max_id) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); continue; }
+        /* Despot V9 truth: error-but-success (was set_error()+continue then
+         * return plan non-NULL with incomplete offsets/is_pooled, poisoning
+         * later autodiff abort checks with a sticky error). Fail loud: any
+         * planning error tears down and returns NULL. */
+        if (curr->node_id >= max_id) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); goto plan_fail; }
 
         uint32_t new_active_count = 0;
         for (uint32_t a = 0; a < active_count; a++) {
             if (active[a].death_wave < curr->birth_wave) {
                 free_block* fb = (free_block*)malloc(sizeof(free_block));
-                if (!fb) { lancius_set_error(LANCIUS_ERROR_OOM); continue; }
+                if (!fb) { lancius_set_error(LANCIUS_ERROR_OOM); goto plan_fail; }
                 fb->offset = active[a].offset;
                 fb->size = active[a].size_bytes;
                 fb->next = free_list;
@@ -164,13 +168,13 @@ lancius_memory_plan* lancius_build_memory_plan(lancius_schedule* sched, lancius_
 
         while (curr_fb) {
             if (curr_fb->size >= curr->size_bytes) {
-                if (curr_fb->offset > SIZE_MAX - curr->size_bytes) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); break; }
+                if (curr_fb->offset > SIZE_MAX - curr->size_bytes) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); goto plan_fail; }
                 plan->offsets[curr->node_id] = curr_fb->offset;
                 curr->offset = curr_fb->offset;
                 plan->is_pooled[curr->node_id] = 1;
 
                 size_t end_addr = curr_fb->offset + curr->size_bytes;
-                if (end_addr < curr_fb->offset) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); break; }
+                if (end_addr < curr_fb->offset) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); goto plan_fail; }
                 if (end_addr > peak_memory) peak_memory = end_addr;
 
                 if (curr_fb->size > curr->size_bytes) {
@@ -198,7 +202,7 @@ lancius_memory_plan* lancius_build_memory_plan(lancius_schedule* sched, lancius_
         }
 
         if (!found) {
-            if (peak_memory > SIZE_MAX - curr->size_bytes) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); continue; }
+            if (peak_memory > SIZE_MAX - curr->size_bytes) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); goto plan_fail; }
             plan->offsets[curr->node_id] = peak_memory;
             curr->offset = peak_memory;
             plan->is_pooled[curr->node_id] = 1;
@@ -213,13 +217,22 @@ lancius_memory_plan* lancius_build_memory_plan(lancius_schedule* sched, lancius_
     free(birth); free(death); free(intervals); free(active); free(is_input_to_others);
     
     // V1.0 ASAN FIX: Free the remaining free_list blocks
-    free_block* curr_fb = free_list;
-    while(curr_fb) {
-        free_block* next = curr_fb->next;
-        free(curr_fb);
-        curr_fb = next;
+    {
+        free_block* _fb = free_list;
+        while(_fb) { free_block* _nx = _fb->next; free(_fb); _fb = _nx; }
     }
     return plan;
+
+plan_fail:
+    /* Despot V9: tear down partial plan; caller gets NULL + error, never a
+     * half-filled plan with a sticky error attached. */
+    {
+        free_block* _fb = free_list;
+        while(_fb) { free_block* _nx = _fb->next; free(_fb); _fb = _nx; }
+    }
+    free(plan->offsets); free(plan->is_pooled); free(plan);
+    free(birth); free(death); free(intervals); free(active); free(is_input_to_others);
+    return NULL;
 }
 
 void lancius_memory_plan_destroy(lancius_memory_plan* plan) {

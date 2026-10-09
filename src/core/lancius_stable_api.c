@@ -5,6 +5,9 @@
 #include "lancius/lancius_arena.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+#include <time.h>
+#include <unistd.h>
 
 // Thread-Local Error State (Production Standard)
 static _Thread_local lancius_status g_last_error = LANCIUS_OK;
@@ -77,14 +80,18 @@ LANCIUS_EXPORT const char* lancius_get_error_string(lancius_status err) {
 
 typedef struct {
     uint32_t magic;
+    uint64_t cookie;
     lancius_arena* arena;
 } lancius_context_internal;
 
 // V1.0 FIX: Wrap the graph with its execution state (scratch arena & schedule)
 // This prevents the dangling pointer segfault when reading outputs!
+// V9 hardening below adds a per-process secret cookie so a forged stack
+// struct with the public magic constants alone no longer passes validation.
 typedef struct lancius_tensor_internal lancius_tensor_internal;
 typedef struct {
     uint32_t magic;
+    uint64_t cookie;
     lancius_graph* g;
     lancius_arena* scratch;
     lancius_schedule* sched;
@@ -97,8 +104,34 @@ typedef struct {
 
 struct lancius_tensor_internal {
     uint32_t magic;
+    uint64_t cookie;
     lancius_node* node;
+    lancius_graph_internal* owner;
 };
+
+/* Despot V9 truth: magic constants are public headers, so magic-only checks
+ * accept forged stack structs (poc_handles.c passed with correct magics).
+ * Every handle now carries a per-process secret cookie chosen at startup
+ * from time+pid+address entropy; validation requires both. Forgery needs a
+ * 64-bit guess, not a header copy. Tensor wrappers also record their owner
+ * graph so cross-graph reuse fails loud. */
+static uint64_t lancius_handle_secret = 0;
+static uint64_t lancius_handle_secret_init(void) {
+    /* Lazily seeded once; no threads needed pre-main, benign race writes same. */
+    if (lancius_handle_secret == 0) {
+        uint64_t t = (uint64_t)time(NULL);
+        uint64_t p = (uint64_t)getpid();
+        uint64_t a = (uint64_t)(uintptr_t)&lancius_handle_secret;
+        /* xorshift mix: public constants cannot predict this per-run value. */
+        uint64_t x = t ^ (p * 0x9E3779B97F4A7C15ULL) ^ (a >> 3);
+        x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ULL;
+        x ^= x >> 27; x *= 0x94D049BB133111EBULL;
+        x ^= x >> 31;
+        if (x == 0) x = 0xA5A5A5A5A5A5A5A5ULL;
+        lancius_handle_secret = x;
+    }
+    return lancius_handle_secret;
+}
 
 /* Despot audit: stable handles were raw casts with NULL-check only, so a
  * stale / wrong-graph / destroyed-graph pointer passed validation.
@@ -110,17 +143,20 @@ struct lancius_tensor_internal {
 
 static int ctx_valid(lancius_context ctx) {
     if (!ctx) return 0;
-    return ((const lancius_context_internal*)ctx)->magic == LANCIUS_CTX_MAGIC;
+    const lancius_context_internal* c = (const lancius_context_internal*)ctx;
+    return c->magic == LANCIUS_CTX_MAGIC && c->cookie == lancius_handle_secret_init();
 }
 
 static int graph_valid(lancius_graph_handle g) {
     if (!g) return 0;
-    return ((const lancius_graph_internal*)g)->magic == LANCIUS_GRAPH_MAGIC;
+    const lancius_graph_internal* w = (const lancius_graph_internal*)g;
+    return w->magic == LANCIUS_GRAPH_MAGIC && w->cookie == lancius_handle_secret_init();
 }
 
 static int tensor_valid(lancius_tensor_handle t) {
     if (!t) return 0;
-    return ((const lancius_tensor_internal*)t)->magic == LANCIUS_TENSOR_MAGIC;
+    const lancius_tensor_internal* w = (const lancius_tensor_internal*)t;
+    return w->magic == LANCIUS_TENSOR_MAGIC && w->cookie == lancius_handle_secret_init();
 }
 
 /* External audit V8: tensor handles were raw node* (any forged pointer
@@ -132,7 +168,9 @@ static lancius_tensor_handle wrap_tensor(lancius_graph_internal* w, lancius_node
     lancius_tensor_internal* t = (lancius_tensor_internal*)malloc(sizeof(*t));
     if (!t) { set_error(LANCIUS_ERR_OOM); return NULL; }
     t->magic = LANCIUS_TENSOR_MAGIC;
+    t->cookie = lancius_handle_secret_init();
     t->node = n;
+    t->owner = w;
     if (w->ntensors >= w->ctensors) {
         size_t nc = w->ctensors ? w->ctensors * 2 : 16;
         lancius_tensor_internal** nl = (lancius_tensor_internal**)realloc(w->tensors, nc * sizeof(*nl));
@@ -149,11 +187,20 @@ static lancius_node* unwrap_tensor(lancius_tensor_handle t) {
     return ((lancius_tensor_internal*)t)->node;
 }
 
+/* Despot V9: cross-graph tensor reuse previously unchecked (wrapper held no
+ * owner). A tensor from graph A passed into graph B derefed a foreign node.
+ * Owner is now recorded at wrap time; callers must pass it for validation. */
+static int tensor_owned_by(lancius_tensor_handle t, lancius_graph_internal* w) {
+    if (!tensor_valid(t) || !w) return 0;
+    return ((const lancius_tensor_internal*)t)->owner == w;
+}
+
 LANCIUS_EXPORT lancius_context lancius_create_context(void) {
     set_error(LANCIUS_OK);
     lancius_context_internal* ctx = (lancius_context_internal*)malloc(sizeof(lancius_context_internal));
     if (!ctx) { set_error(LANCIUS_ERR_OOM); return NULL; }
     ctx->magic = LANCIUS_CTX_MAGIC;
+    ctx->cookie = lancius_handle_secret_init();
     ctx->arena = lancius_arena_create(64 * 1024 * 1024); // 64MB default scratch
     if (!ctx->arena) { free(ctx); set_error(LANCIUS_ERR_OOM); return NULL; }
     set_error(LANCIUS_OK);
@@ -164,8 +211,9 @@ LANCIUS_EXPORT void lancius_destroy_context(lancius_context ctx) {
     set_error(LANCIUS_OK);
     if (!ctx) return;
     lancius_context_internal* internal = (lancius_context_internal*)ctx;
-    if (internal->magic != LANCIUS_CTX_MAGIC) { set_error(LANCIUS_ERR_INVALID_HANDLE); return; }
+    if (internal->magic != LANCIUS_CTX_MAGIC || internal->cookie != lancius_handle_secret_init()) { set_error(LANCIUS_ERR_INVALID_HANDLE); return; }
     internal->magic = 0;
+    internal->cookie = 0;
     if (internal->arena) lancius_arena_destroy(internal->arena);
     free(internal);
 }
@@ -186,6 +234,7 @@ LANCIUS_EXPORT lancius_graph_handle lancius_graph_create_stable(lancius_context 
     if (!wrapper->scratch) { lancius_graph_destroy(wrapper->g); free(wrapper); set_error(LANCIUS_ERR_OOM); return NULL; }
     wrapper->sched = NULL;
     wrapper->magic = LANCIUS_GRAPH_MAGIC;
+    wrapper->cookie = lancius_handle_secret_init();
     wrapper->tensors = NULL;
     wrapper->ntensors = 0;
     wrapper->ctensors = 0;
@@ -199,8 +248,9 @@ LANCIUS_EXPORT void lancius_graph_destroy_stable(lancius_graph_handle g) {
     if (!graph_valid(g)) { if (!g) return; set_error(LANCIUS_ERR_INVALID_HANDLE); return; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     wrapper->magic = 0;
+    wrapper->cookie = 0;
     for (size_t i = 0; i < wrapper->ntensors; i++) {
-        if (wrapper->tensors[i]) { wrapper->tensors[i]->magic = 0; free(wrapper->tensors[i]); }
+        if (wrapper->tensors[i]) { wrapper->tensors[i]->magic = 0; wrapper->tensors[i]->cookie = 0; free(wrapper->tensors[i]); }
     }
     free(wrapper->tensors);
     if (wrapper->sched) lancius_schedule_destroy(wrapper->sched);
@@ -235,6 +285,7 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_matmul(lancius_graph_handle g, 
     if (!graph_valid(g)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     if (!tensor_valid(a) || !tensor_valid(b)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
+    if (!tensor_owned_by(a, wrapper) || !tensor_owned_by(b, wrapper)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
     lancius_node* na = unwrap_tensor(a);
     lancius_node* nb = unwrap_tensor(b);
     if (!na || !nb) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
@@ -252,6 +303,7 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_relu(lancius_graph_handle g, la
     if (!graph_valid(g)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
     lancius_graph_internal* wrapper = (lancius_graph_internal*)g;
     if (!tensor_valid(a)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
+    if (!tensor_owned_by(a, wrapper)) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
     lancius_node* na = unwrap_tensor(a);
     if (!na) { set_error(LANCIUS_ERR_INVALID_HANDLE); return NULL; }
     lancius_node* n = lancius_relu(wrapper->g, na);
