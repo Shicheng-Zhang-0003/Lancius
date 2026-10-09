@@ -47,7 +47,7 @@ clean:
 	rm -f audit_regression_13c regression_roundtrip.lancius regression_bad_*.lancius regression_trunc_*.lancius regression_huge_*.lancius
 	rm -f audit_known_answer audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_flash_attention
 	rm -f audit_despot_probe train_verifier_head distill_prm800k lancius
-	rm -f audit_train_lib audit_sandbox train_micromodel eval_verifier audit_sum_axis_nd audit_train_bwd audit_train_converge audit_train_converge audit_train_bwd
+	rm -f audit_train_lib trainlib_dump audit_sandbox train_micromodel eval_verifier audit_sum_axis_nd audit_train_bwd audit_train_converge audit_train_converge audit_train_bwd
 .PHONY: all clean check check-long check-sanitizers ldfd-test ldfd-build \
         check-oracle check-mutation check-ubstrict
 train_cifar10: examples/train_cifar10.c liblancius.a
@@ -226,12 +226,15 @@ SAN_LDFLAGS = $(SAN_FLAGS) -fopenmp -lm -lpthread
 SAN_DIR = temp/sanitized
 SAN_AUDITS = stress_test test_torture fuzz_lancius test_path_bg test_grad_check \
              audit_internals audit_ffi audit_threadpool_parity audit_nan_injection \
-             audit_memory_pool audit_flash_attention audit_modern_llm \
+             audit_memory_pool test_diamond_memory audit_flash_attention audit_modern_llm \
              audit_known_answer audit_regression_13c \
              audit_transformer_known_answer audit_fp32_path \
              audit_fault_injection audit_despot_probe audit_train_lib \
              audit_sum_axis_nd audit_train_bwd audit_train_converge \
-             audit_sandbox audit_v7_hardening train_micromodel eval_verifier
+             audit_sandbox audit_v7_hardening train_micromodel eval_verifier \
+             train_verifier_head
+# Despot V9: distill_prm800k is standalone (no liblancius.a) so it is not part
+# of the instrumented-library gate; it runs under --selftest in make check.
 
 check-sanitizers:
 	@mkdir -p $(SAN_DIR)/obj $(SAN_DIR)/logs
