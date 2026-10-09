@@ -38,5 +38,10 @@ typedef struct {
 
 lancius_program* lancius_compile_graph(lancius_graph* g);
 int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lancius_arena* scratch); /* returns 0 on success, -1 on OOM */
+/* Despot V9: bounded variant. out_len_elems is the caller's buffer capacity in
+ * doubles; execution fails with LIMIT instead of overflowing a short buffer.
+ * New code must call this; the unbounded form is kept for ABI compat and
+ * rejects outputs over 100M elems but cannot verify caller capacity. */
+int lancius_vm_execute_checked(lancius_program* prog, double** inputs, double* out, size_t out_len_elems, lancius_arena* scratch);
 void lancius_program_destroy(lancius_program* prog);
 #endif

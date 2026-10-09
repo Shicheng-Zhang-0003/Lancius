@@ -226,6 +226,14 @@ static void execute_node_math(lancius_node* n) {
             double log_sum_exp = log(sum_exp) + max_val;
             for(size_t c=0; c<C; c++) {
                 double yc = y[r*C+c];
+                /* Despot V9 truth: NaN/Inf/negative targets are corrupt labels,
+                 * not skippable zeros. BWD differentiates y raw (NaN propagates),
+                 * so FWD skipping yc<=0 silently disagreed with its own VJP
+                 * (fwd finite + err 0, bwd NaN). Fail loud like the INT8-scale
+                 * and degenerate-denominator contracts. yc==0 stays skipped:
+                 * 0*log p is 0 by convention. Verified against torch: valid
+                 * one-hot/soft targets agree to 1e-15; NaN now NUMERICAL. */
+                if (!isfinite(yc) || yc < 0.0) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
                 if (yc > 0.0) total_loss -= yc * (x[r*C+c] - log_sum_exp);
             }
         }
@@ -759,6 +767,11 @@ static void execute_node_math(lancius_node* n) {
             if (N && M > SIZE_MAX / N) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
             if (M * N > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
             double scale_b = n->inputs[1]->scale;
+            /* Despot V9 truth: degenerate INT8 scale must be NUMERICAL, not silent
+             * NaN output. Mirrors lancius_vision_ops.c INT8 conv guard
+             * (!(scale>0)||NaN -> NUMERICAL). Quantizer/loader guarantee valid
+             * scales; a corrupt scale previously produced NaN with err 0. */
+            if (!(scale_b > 0.0) || !isfinite(scale_b)) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
             double max_a = 0.0;
             size_t elems_a = M * K;
             for(size_t i=0; i<elems_a; i++) { double v = fabs(a[i]); if(v>max_a) max_a = v; }
