@@ -59,10 +59,25 @@ static uint64_t ser_from_le64(uint64_t v) { return ser_to_le64(v); }
 static double ser_from_le_double(double v) { return ser_to_le_double(v); }
 
 int lancius_graph_save(lancius_graph* g, const char* path) {
-    if (lancius_graph_save_v2(g, path) == 0) return 0;
-
-    /* Despot truth: NULL graph/path derefed (was unguarded). */
+    /* Despot V9 truth: NULL checks first (was after v2 attempt, so NULL
+     * derefed inside v2 before the guard ran). */
     if (!g || !path || !g->nodes) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return -1; }
+    /* Despot V9 truth: v2 is the active format; a v2 refusal (per-channel
+     * scales, invalid dtype) must fail loud, not silently downgrade to v1
+     * which clamps dtype and drops per-channel scales. Previous code fell
+     * through to v1 on any v2 nonzero, wrote magic 0x21434E41 with lost
+     * scales, and left a stale error alongside rc==0 success. */
+    lancius_clear_error();
+    if (lancius_graph_save_v2(g, path) == 0) return 0;
+    /* Preserve the v2 error cause; do not attempt v1 fallback. */
+    return -1;
+}
+
+/* Despot V9: legacy v1 save body preserved as an explicit opt-in helper.
+ * It is NOT called by lancius_graph_save() anymore: silent v2->v1 downgrade
+ * lost per-channel scales and clamped dtypes. Kept so old files can still
+ * be written by callers that explicitly ask for v1. */
+__attribute__((unused)) static int lancius_graph_save_v1_legacy(lancius_graph* g, const char* path) {
     /* Despot V6 truth: tmp+mkstemp+rename (was truncate-in-place). */
     char v1tmp[4096];
     if (snprintf(v1tmp, sizeof(v1tmp), "%s.tmp.XXXXXX", path) >= (int)sizeof(v1tmp)) { lancius_set_error(LANCIUS_ERROR_LIMIT); return -1; }
@@ -360,10 +375,12 @@ lancius_graph* lancius_graph_load(const char* path) {
                  * Just destroy (v2 pattern). */
                 if (elems > SIZE_MAX / sizeof(double)) {
                     free(in_ids); fclose(f); free(id_map);
+                    lancius_set_error(LANCIUS_ERROR_LIMIT);
                     lancius_graph_destroy(g); return NULL;
                 }
                 if (elems > 100000000) {
                     free(in_ids); fclose(f); free(id_map);
+                    lancius_set_error(LANCIUS_ERROR_LIMIT);
                     lancius_graph_destroy(g); return NULL;
                 }
                 uint8_t dtype;
@@ -381,15 +398,19 @@ lancius_graph* lancius_graph_load(const char* path) {
                     if (!(n->scale > 0.0)) { free(in_ids); goto fail; }
                 }
                 if (n->dtype == LANCIUS_DTYPE_INT8) {
-                    n->runtime_data_int8 = (int8_t*)malloc(elems);
+                    n->runtime_data_int8 = (int8_t*)malloc(elems ? elems : 1);
                     if (!n->runtime_data_int8) { free(in_ids); goto fail; }
-                    if (fread(n->runtime_data_int8, sizeof(int8_t), elems, f) != elems) { free(in_ids); goto fail; }
+                    /* Despot V9 truth: truncated payload leaked the just-malloced
+                     * buffer (was free(in_ids)+goto fail without free(buf);
+                     * buffer not yet bound OWNED so destroy could not reclaim).
+                     * Free before fail on every short-read. */
+                    if (fread(n->runtime_data_int8, sizeof(int8_t), elems, f) != elems) { free(n->runtime_data_int8); n->runtime_data_int8 = NULL; free(in_ids); goto fail; }
                     lancius_node_bind_owned_heap_int8(n, n->runtime_data_int8); /* A2 */
                 } else if (n->dtype == LANCIUS_DTYPE_FP32) {
                     /* Despot V6 truth: FP32 payload loads (was coerced to FP64). */
-                    n->runtime_data_f32 = (float*)malloc(elems * sizeof(float));
+                    n->runtime_data_f32 = (float*)malloc(elems ? elems * sizeof(float) : 1);
                     if (!n->runtime_data_f32) { free(in_ids); goto fail; }
-                    if (fread(n->runtime_data_f32, sizeof(float), elems, f) != elems) { free(in_ids); goto fail; }
+                    if (fread(n->runtime_data_f32, sizeof(float), elems, f) != elems) { free(n->runtime_data_f32); n->runtime_data_f32 = NULL; free(in_ids); goto fail; }
                     if (!ser_is_little_endian()) {
                         for (size_t j = 0; j < elems; j++) {
                             uint32_t u; memcpy(&u, &n->runtime_data_f32[j], 4);
@@ -399,9 +420,9 @@ lancius_graph* lancius_graph_load(const char* path) {
                     }
                     lancius_node_bind_owned_heap_f32(n, n->runtime_data_f32);
                 } else {
-                    n->runtime_data = (double*)malloc(elems * sizeof(double));
+                    n->runtime_data = (double*)malloc(elems ? elems * sizeof(double) : 1);
                     if (!n->runtime_data) { free(in_ids); goto fail; }
-                    if (fread(n->runtime_data, sizeof(double), elems, f) != elems) { free(in_ids); goto fail; }
+                    if (fread(n->runtime_data, sizeof(double), elems, f) != elems) { free(n->runtime_data); n->runtime_data = NULL; free(in_ids); goto fail; }
                     if (!ser_is_little_endian()) {
                         /* v12R1 fix: byte-swap FP64 payload on big-endian hosts. */
                         for (size_t j = 0; j < elems; j++)

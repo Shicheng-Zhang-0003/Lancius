@@ -115,6 +115,13 @@ lancius_program* lancius_compile_graph(lancius_graph* g) {
 }
 
 int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lancius_arena* scratch) {
+    /* Despot V9: unbounded form cannot verify caller capacity (no out_len).
+     * Delegate with SIZE_MAX (legacy behaviour) after the same sanity caps
+     * the checked path enforces; new code must use _checked. */
+    return lancius_vm_execute_checked(prog, inputs, out, SIZE_MAX, scratch);
+}
+
+int lancius_vm_execute_checked(lancius_program* prog, double** inputs, double* out, size_t out_len_elems, lancius_arena* scratch) {
     if (!prog || !scratch || !out) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return -1; }
     /* Despot V6 truth: program invariants validated (was OOB out_reg). */
     if (!prog->code || !prog->rows || !prog->cols) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return -1; }
@@ -148,8 +155,11 @@ int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lanc
 
     size_t pc = 0;
     while (pc < prog->code_len) {
-        /* Despot V6 truth: tape OOB read guarded (was 3-word overread). */
-        if (pc + 3 > prog->code_len) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return -1; }
+        /* Despot V9 truth: V6 tape guard required 3 words before reading op,
+         * so a trailing HALT (1 word) at code_len-1 falsely failed with
+         * GRAPH_INVALID (proven: 2x2 ADD program code_len=5, HALT at pc=4,
+         * 4+3>5 -> -20 on a valid program). Require 1 word for op first. */
+        if (pc + 1 > prog->code_len) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return -1; }
         uint32_t op = prog->code[pc++];
         if (op == LANCIUS_BC_HALT) break;
 
@@ -248,6 +258,12 @@ int lancius_vm_execute(lancius_program* prog, double** inputs, double* out, lanc
     if (prog->rows[prog->out_reg] && prog->cols[prog->out_reg] > SIZE_MAX / prog->rows[prog->out_reg]) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return -1; }
     size_t out_elements = prog->rows[prog->out_reg] * prog->cols[prog->out_reg];
     if (!regs[prog->out_reg]) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return -1; }
+    /* Despot V9 truth: unbounded out write (was memcpy of program-sized output
+     * into a caller buffer of unknown capacity -> heap overflow on short out).
+     * Checked path requires out_len_elems >= out_elements, else LIMIT. */
+    if (out_elements > 100000000) { lancius_set_error(LANCIUS_ERROR_LIMIT); return -1; }
+    if (out_len_elems < out_elements) { lancius_set_error(LANCIUS_ERROR_LIMIT); return -1; }
+    if (out_elements && out_elements > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return -1; }
     memcpy(out, regs[prog->out_reg], out_elements * sizeof(double));
     return 0;
 }
