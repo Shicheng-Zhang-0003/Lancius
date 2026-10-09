@@ -1,5 +1,68 @@
 # Lancius Changelog
 
+## Despot audit V9 (2026-10-09) — math, programming, operational truth
+
+Hostile formula-by-formula, line-by-line audit of the entire system plus
+independent re-execution against NumPy 2.5.1 / PyTorch 2.13 CPU / closed form.
+13 confirmed defects, all fixed and re-proven by `make clean && make -j && make check`
+(RC=0) + `tools/audit/oracle_gate.sh` green (46/46 kernels, 37/37 graph,
+169/169 train-lib, 11/11 conv2d-vs-torch, 13/13 reductions+softmax-vs-torch,
+276 total, 0 skipped with torch present) + targeted reproducers in
+`temp/despot-v9/` (CE-NaN, pool-NULL, VM-bounds, VM-HALT).
+
+- Math: `CROSS_ENTROPY` fwd now rejects NaN/Inf/negative targets with
+  `NUMERICAL` (`src/runtime/lancius_scheduler.c`, was `if (yc>0)` skip that
+  silently disagreed with its own BWD which differentiates y raw: fwd finite
+  err 0 + bwd NaN on `[NaN,1]`); INT8 matmul validates `scale_b>0` finite
+  (`was silent NaN out err 0`, now `NUMERICAL` like INT8 conv in
+  `lancius_vision_ops.c:55`). Valid one-hot/soft targets agree with torch
+  to 1e-15; `yc==0` stays skipped (0*log p == 0).
+- Programming: v2 save no longer silently downgrades to v1 on refusal
+  (`src/core/lancius_serialize.c:61`, was per-channel/ bad-dtype -> magic
+  `0x21434E41` v1 with lost scales + stale err + rc 0; now preserves v2 error
+  and returns -1; legacy v1 body kept as explicit
+  `lancius_graph_save_v1_legacy` opt-in); v1 load frees truncated payloads
+  before fail (was leak per short-read, buffers not yet bound OWNED) and sets
+  `LIMIT` on absurd elems (was NULL + err OK); stable handles carry a
+  per-process 64-bit secret cookie + owner graph (`src/core/lancius_stable_api.c`,
+  was magic-constants-only forgery with stack struct passing `destroy/compile/read`
+  + cross-graph reuse unchecked; now `INVALID_HANDLE` without 64-bit guess);
+  `lancius_pool_submit` sets `NULL_PTR` (was silent return vs `pool_wait`
+  loud); VM gains `lancius_vm_execute_checked` with `out_len_elems`
+  (`include/lancius/lancius_bytecode.h`, was unbounded `memcpy` heap overflow
+  on short `out`; `train_mnist.c` migrated; legacy wrapper delegates with
+  `SIZE_MAX`); memory planner tears down and returns NULL on any error
+  (was `set_error+continue` then return partial plan poisoning later aborts);
+  Python TOCTOU closed (`onnx_to_lancius.py`, `export_lancius_onnx.py`: open
+  + `fstat` + capped read, was stat-then-reopen unbounded); `manage_datasets.py`
+  caps inflate at 8GB + tar members at 8GB total (was capped 2GB compressed
+  then unbounded `copyfileobj`/`extractall` disk-fill); CLI `--topk` capped
+  at 100 + display scans at most 100k cols (was 1..1M with `O(topk*C)` hang
+  on `wide.lancius --topk 1000000`).
+- New find while proving the VM fix: trailing `HALT` falsely failed
+  (`src/compiler/lancius_bytecode.c:159`, V6 guard required 3 words before
+  reading op so `code_len=5` ADD program with `HALT` at pc=4 hit `4+3>5`
+  -> `GRAPH_INVALID` on a valid program; `make check` never exercised the VM
+  path since `train_mnist` is manual-only). Guard now requires 1 word for op,
+  then per-op need. Proven: 2x2 ADD `out=[2,3,4,5]` exact, short `out[1]`
+  -> `LIMIT -22`, full `out[4]` -> 0.
+- Operational: `SAN_AUDITS` gains `test_diamond_memory` + `train_verifier_head`
+  (was 26 omitting 2 gate members; `distill` standalone documented);
+  `ubstrict_sweep.sh` gains `fuzz_lancius/test_path_bg/diamond` (was 25 with
+  holes); `.gitignore` + `make clean` gain `trainlib_dump` (was `??`
+  untracked + stale after clean); `oracle_gate.sh` counts `^  SKIP` and fails
+  when torch present but skips >0 (was matching substring `skipped` so
+  `0 skipped` summary falsely failed; now 276/276 0 skipped green); `sanitizer_sweep.sh`
+  header corrected (was claiming 3-binary uninstrumented gate, true pre-V7);
+  docs reconciled: `audit_v7_hardening` 346 checks (was 1226 in 3 files, 3.5x
+  overstatement), mutation 18 caught + 1 neutral = 19 tries (README dropped
+  denominator), kernel 46/46 (was 41/41 stale), requirements gain
+  torch + libcurl/zlib, install/ABI scope clarified, version mapping
+  `1.2.0` == `V1.2RC2` dev stated.
+- Proven: `make check` RC=0 from clean tree; oracle 276/276 0 skipped;
+  reproducers `repro_ce_nan` (`NUMERICAL -21`), `repro_pool` (`NULL_PTR -2`),
+  `repro_vm` (`LIMIT -22` short / exact full) all RC=0 in `temp/despot-v9/`.
+
 ## V8 truth batch: every constant and equation checked against its primary source
 
 Finite differences prove the derivative of whatever function was implemented.
