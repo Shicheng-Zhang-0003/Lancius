@@ -36,12 +36,24 @@ def get_shape(tensor_type):
 def convert(onnx_path, lancius_path):
     import os
     # Despot V6 truth: size cap before load (was unbounded onnx.load).
+    # Despot V9 truth: stat-then-load is TOCTOU (file can grow/replaced
+    # between getsize and onnx.load -> unbounded read/OOM). Open first,
+    # fstat the open fd, and cap the read itself; onnx.load reads from the
+    # already-capped byte string, never from a re-opened path.
     try:
         if os.path.getsize(onnx_path) > 2 * 1024 * 1024 * 1024:
             raise ValueError(f"ONNX file exceeds 2GB cap: {onnx_path}")
     except OSError as e:
         raise ValueError(f"cannot stat ONNX file: {e}")
-    model = onnx.load(onnx_path)
+    with open(onnx_path, 'rb') as _f:
+        _sz = os.fstat(_f.fileno()).st_size
+        if _sz > 2 * 1024 * 1024 * 1024:
+            raise ValueError(f"ONNX file exceeds 2GB cap after open: {onnx_path}")
+        _blob = _f.read(2 * 1024 * 1024 * 1024 + 1)
+        if len(_blob) > 2 * 1024 * 1024 * 1024:
+            raise ValueError(f"ONNX file exceeds 2GB cap: {onnx_path}")
+    import io as _io
+    model = onnx.load(_io.BytesIO(_blob))
     onnx.checker.check_model(model)
     model = onnx.shape_inference.infer_shapes(model)
     graph = model.graph

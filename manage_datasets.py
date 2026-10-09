@@ -233,12 +233,18 @@ def clean_datasets():
 
 def _safe_members_tar(tar):
     """Despot truth: tar.extractall is tar-slip (was: malicious member wrote
-    outside cwd on MITM/mirror)."""
+    outside cwd on MITM/mirror).
+    Despot V9: total decompressed size capped at 8GB (was unbounded inflate
+    after a capped 2GB download -> disk-fill). CIFAR-10 raw is ~170MB."""
+    total = 0
     for m in tar.getmembers():
         if m.name.startswith('/') or '..' in m.name.split('/'):
             raise ValueError(f"refusing unsafe tar member: {m.name!r}")
         if m.issym() or m.islnk():
             raise ValueError(f"refusing tar link: {m.name!r}")
+        total += m.size
+        if total > 8 * 1024 * 1024 * 1024:
+            raise ValueError("tar payload exceeds 8GB decompressed cap; refusing (zip-bomb guard)")
     return tar.getmembers()
 
 
@@ -285,9 +291,20 @@ def download_mnist():
                     if total > MAX_DOWNLOAD_BYTES:
                         raise IOError(f"Download exceeds {MAX_DOWNLOAD_BYTES} byte cap")
                     out.write(chunk)
+            # Despot V9: decompressed size was uncapped (zip-bomb fills disk:
+            # compressed capped at 2GB, inflate via copyfileobj unbounded).
+            # Cap inflate at 8GB (MNIST raw is ~50MB; 8GB is 160x headroom).
             with gzip.open(f, 'rb') as f_in:
                 with open(raw_name, 'wb') as f_out:
-                    shutil.copyfileobj(f_in, f_out)
+                    _total_out = 0
+                    while True:
+                        _chunk = f_in.read(65536)
+                        if not _chunk:
+                            break
+                        _total_out += len(_chunk)
+                        if _total_out > 8 * 1024 * 1024 * 1024:
+                            raise IOError("Decompressed MNIST exceeds 8GB cap; refusing (zip-bomb guard)")
+                        f_out.write(_chunk)
             os.remove(f)
         except Exception as e:  # noqa: BLE001
             print(f"  !! MNIST download failed: {e}")
