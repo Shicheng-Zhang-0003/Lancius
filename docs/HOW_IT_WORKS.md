@@ -150,7 +150,13 @@ and what the thread pool consumes.
 The planner computes per-node lifetimes from the schedule and assigns arena
 offsets so that buffers of nodes with disjoint lifetimes can share space. This
 is the "memory planning" in the pipeline diagram, and it is a static analysis,
-not a runtime allocation.
+not a runtime allocation. **V9: any planning error returns NULL** (never a
+partial plan with a sticky error that poisons a later autodiff abort check).
+
+The bytecode VM has the same fail-closed shape: `lancius_vm_execute_checked`
+requires the caller's `out_len` to cover the program output, else `LIMIT`;
+a trailing `HALT` no longer falsely fails (V9 fixed a 3-word guard that
+rejected `code_len=5` programs).
 
 ### [5] Execute
 
