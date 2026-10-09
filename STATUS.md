@@ -152,13 +152,14 @@ wrong:
 
 | Gate | What it proves | Tally |
 |---|---|---|
-| `make check-oracle` | every kernel, graph op, and train-lib entry point recomputed in NumPy / PyTorch autograd / closed form / central differences | **276 comparisons, 0 skipped**: 46/46 kernels + 37/37 graph ops + 169/169 train-lib + 11/11 conv2d-vs-torch + 13/13 reductions+softmax-vs-torch |
-| `make check-sanitizers` | ASan + UBSan + LSan over the **instrumented library** and every audit (the old gate ran 3 binaries against an uninstrumented archive) | 26/26 clean |
-| `make check-ubstrict` | UBSan alone, `-fno-sanitize-recover=all`, so signed overflow / shift / float-cast abort instead of warn | 25/25 clean |
-| `make check-mutation` | real defects injected; the gate must go red | **18/18 caught, 1 verified-neutral, 0 holes** (first run: 8 caught, 7 holes) |
+| `make check-oracle` | every kernel, graph op, and train-lib entry point recomputed in NumPy / PyTorch autograd / closed form / central differences | **276 comparisons, 0 skipped (torch present)**: 46/46 kernels + 37/37 graph ops + 169/169 train-lib + 11/11 conv2d-vs-torch + 13/13 reductions+softmax-vs-torch |
+| `make check-sanitizers` | ASan + UBSan + LSan over the **instrumented library** and every audit (the old gate ran 3 binaries against an uninstrumented archive) | 28/28 clean (V9: +diamond +verifier_head; distill standalone) |
+| `make check-ubstrict` | UBSan alone, `-fno-sanitize-recover=all`, so signed overflow / shift / float-cast abort instead of warn | 29/29 clean (V9: +fuzz/path_bg/diamond) |
+| `make check-mutation` | real defects injected; the gate must go red | **18/18 caught, 1 verified-neutral, 0 holes, 19 tries** (first run: 8 caught, 7 holes) |
 
-All of them run on every push via `.github/workflows/gate.yml`, which did not
-exist before this pass. Full record: `docs/DESPOT_TRUTH_V2.md` §16.
+Four gates run on every push; `check-mutation` sampled on `main` + dispatch
+via `.github/workflows/gate.yml`, which did not exist before this pass.
+Full record: `docs/DESPOT_TRUTH_V2.md` §16 (V9 §20).
 
 ## V8 truth batch: every constant checked against its primary source
 
@@ -213,11 +214,12 @@ compiles against the C headers to prove the ctypes struct layout and enum
 values match, and exits 77 (skip) when the library is absent.
 
 
-Build clean under `-Wall -Wextra -Werror`; `audit_v7_hardening` 1226/1226
+Build clean under `-Wall -Wextra -Werror`; `audit_v7_hardening` 346/346
 (H1-H9: sticky-error contract, softmax/attention stability at |z|=1e5, arena
-32B alignment across 64 fresh arenas, alignment cap, quantizer exactness and
-error bound, fusion shape guard, full op table, `broadcast_to_shape` contract at
-every rank, INT8 64-bit accumulation proven at 204800 taps); `audit_regression_13c` 49/49,
+32B alignment sweeping 4KB..1MB across the mmap/heap boundary, alignment cap,
+quantizer exactness and error bound, fusion shape guard, full op table,
+`broadcast_to_shape` contract at every rank, INT8 64-bit accumulation proven
+at 204800 taps); `audit_regression_13c` 49/49,
 `audit_known_answer` 73/73, `audit_transformer_known_answer` 265/265,
 `audit_fp32_path` 19/19, `audit_fault_injection` 12/12,
 `audit_sum_axis_nd` 21/21, `audit_train_bwd` 24/24,
@@ -237,6 +239,18 @@ R3 training-wrap verified by the same gates plus the new training gates (N-dim r
 V6 fixes verified by the same gates (all green from clean tree) plus
 `probe_v6` (4D dim0/1/2/3 + multi-dim, CE_BWD, VM rank) and
 `test_grad_check` still `8.6e-10`, `5.8e-8`.
+V9 fixes verified by the same gates (all green from clean tree) plus
+`temp/despot-v9/` reproducers (CE-NaN NUMERICAL, pool NULL_PTR, VM LIMIT +
+trailing-HALT exactness) and oracle 276/276 0 skipped (torch present).
+
+## Despot V9 (2026-10-09): the gate audited against physics truth
+
+Three parallel hostile sweeps (math / programming / operational) + NumPy 2.5.1
++ torch 2.13 CPU + closed-form re-execution. 13 defects fixed: CE corrupt-label
+NUMERICAL, INT8-matmul scale NUMERICAL, v2-only saves, v1 trunc-leak + LIMIT,
+handle cookies + owner, pool_submit NULL_PTR, VM checked + HALT, planner
+fail-closed, Python TOCTOU + inflate caps, CLI topk 1..100. Full record
+`docs/DESPOT_TRUTH_V2.md` §20 + `CHANGELOG.md` V9.
 
 ## Operator status
 

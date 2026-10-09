@@ -41,6 +41,15 @@ ndim==0/CONST/ROPE/scale, quantizer/optimizer/vision, capped fetches,
 distill I/O, tar-slip member validation. See `CHANGELOG.md` and
 `docs/DESPOT_TRUTH_V2.md` §12.
 
+## Security Improvements (Despot Audit V9)
+
+V9 (2026-10-09): v2-only saves (no silent downgrade losing per-channel scales),
+v1 trunc-leak + LIMIT, handle secret cookies + owner (magic-only forgery
+closed), pool_submit NULL_PTR, VM checked execution + trailing-HALT fix,
+planner fail-closed, Python TOCTOU (open+fstat+capped) + 8GB inflate caps,
+CLI topk 1..100 + 100k display bound. See `CHANGELOG.md` and
+`docs/DESPOT_TRUTH_V2.md` §20.
+
 
 ## Trust model as enforced (V7)
 

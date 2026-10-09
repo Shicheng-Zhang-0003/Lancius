@@ -154,13 +154,14 @@ Limitations are documented intentionally to prevent unsupported
 assumptions.
 
 
-## Gate scope (V7)
+## Gate scope (V7, V9 deltas)
 
 These are the boundaries of the *evidence*, not of the code. A property not
 listed as proven here is not proven; the honest default is "unchecked".
 
 Proven by `make check-oracle` against NumPy / torch autograd / hand-derived
-closed form / central differences:
+closed form / central differences (276 total, 0 skipped with torch present;
+`oracle_gate.sh` fails if torch present but skips>0):
 
 - Every pure kernel: matmul, FP32 matmul, conv2d (two stride/pad settings),
   INT8 conv, LayerNorm and RMSNorm forward and all backwards, GELU forward and
@@ -173,21 +174,41 @@ closed form / central differences:
   clip, both LR schedules
 - The full autodiff VJP set of a two-layer tanh MLP, against torch autograd and
   against central differences on the same objective
+- V9: CE corrupt-label NUMERICAL + INT8-matmul scale NUMERICAL pinned by
+  `temp/despot-v9/` reproducers (NaN now loud, valid targets torch-exact)
 
 Proven by `make check-sanitizers` (ASan + UBSan + LeakSanitizer over the
 **instrumented library**, every audit):
 
 - No heap or stack error, no undefined behaviour, no leak in any gate binary
+- V9: 28/28 (`test_diamond_memory`, `train_verifier_head` added; `distill`
+  standalone documented, not omitted silently)
 
 Proven by `make check-ubstrict` (UBSan alone, `-fno-sanitize-recover=all`):
 
 - No signed-integer overflow, shift error, bad float-to-int conversion,
   misaligned or out-of-bounds access in any gate binary
+- V9: 29/29 (`fuzz_lancius`, `test_path_bg`, diamond added)
 
 Proven by `make check-mutation`:
 
-- The gate catches 18 of 18 injected defects; 1 further mutation was verified
+- The gate catches 18 of 18 injected defects (19 tries); 1 further mutation was verified
   behaviourally equivalent and is reported as neutral, not as a pass
+
+**V9 contract tightenings (no format break, additive API only):**
+
+- Saves are v2-only: v2 refusal returns -1 with cause preserved (was silent
+  v1 downgrade with lost per-channel scales). Legacy v1 writer kept as
+  explicit `lancius_graph_save_v1_legacy` opt-in, never implicit.
+- Handles carry a per-process secret cookie + owner graph: forged/cross-graph
+  handles return `INVALID_HANDLE` (was magic-only forgery).
+- VM has a bounded form `lancius_vm_execute_checked(prog,ins,out,out_len,scratch)`
+  requiring `out_len>=out_elements` else `LIMIT` (was unbounded `memcpy`);
+  trailing `HALT` no longer falsely fails.
+- Planner returns NULL on any error (was partial plan + sticky error).
+- CLI `--topk 1..100`, display scans at most 100k cols (was 1..1M `O(topk*C)`).
+- Python: open+`fstat`+capped reads; inflate capped at 8GB (was TOCTOU +
+  unbounded disk-fill).
 
 **Not proven, and therefore not claimed:**
 

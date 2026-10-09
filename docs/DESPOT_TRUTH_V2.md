@@ -884,3 +884,95 @@ implies a quantity, confirm what the probe actually wrote before trusting it,
 and when an oracle fires, establish which side is wrong before believing
 either.** Six of the seven were harness defects that would have been reported as
 library defects had the harness not been fixed first.
+
+## 20. Despot audit V9 (2026-10-09) — 13 defects, external truth NumPy 2.5.1 / torch 2.13 CPU
+
+Policy unchanged: plausible outputs are not proof; every fix re-proven by
+`make check` (RC=0) + `oracle_gate.sh` (276/276, 0 skipped) + reproducers in
+`temp/despot-v9/`. Scratch under `temp/despot-v9/`; repo `temp/` stays
+generated-only per `.gitignore`.
+
+### 20.1 Math (2)
+
+- **CE fwd NaN/negative targets** (`scheduler.c:229`): `if (yc>0)` skipped NaN
+  (NaN>0 false) and negatives, while BWD (`:260`) uses y raw so NaN propagates.
+  Same input `[NaN,1]` gave fwd finite err 0 + bwd NaN — VJP != dFWD. Correct:
+  `!isfinite(yc)||yc<0 -> NUMERICAL`; `yc==0` stays skipped (0*log p == 0).
+  Verified: valid targets agree with torch to 1e-15; `repro_ce_nan` now -21.
+  External source: `torch.nn.functional.cross_entropy` NaN propagates; negative
+  targets are invalid indices/weights.
+- **INT8 matmul scale_b unchecked** (`scheduler.c:761`): `final=scale_a*scale_b`
+  with no check vs INT8 conv (`vision_ops.c:55`) requiring `scale>0` finite.
+  Weight `scale=NaN` gave matmul NaN out err 0 vs conv -21 loud. Now
+  `!(scale_b>0)||!isfinite -> NUMERICAL`. Quantizer/loader guarantee valid
+  scales; corrupt scale now loud. External source: TFLite symmetric quant
+  requires positive scale (`max_abs/127`); NaN scale is degenerate by definition.
+
+Verified correct (no change): matmul `C=AB` IKJ FP64 accum; conv
+cross-correlation no-flip (`bwd_in`/`bwd_w` consistent); LayerNorm biased 1/n;
+RMSNorm `sqrt(mean(x^2)+eps)`; GELU tanh `0.5x(1+tanh(0.79788456(x+0.044715x^3)))`
+4.74e-04 vs erf-exact pinned; softmax max-sub last-axis + `y(dy-dot)`; CE 1/R
++ `(sm-y)g/R`; MSE 1/N + `2g(p-t)/N`; tanh `1-y^2`; broadcast trailing-rank;
+permute/transpose/batched index math; attention `QK^T/sqrt(d)` causal
+online-softmax exact to 2.2e-16; RoPE `10000^(-2i/d)` relative-position 4.4e-16;
+GQA `hq/group`; SwiGLU branch-exact; INT8 `max/127` int64 (132104 inside
+[131072,133144]); AdamW decoupled `torch.optim.AdamW` 5.6e-16/20 steps; cosine
+SGDR endpoints exact; clip exact ratio (more accurate than torch `+1e-6`);
+He `sqrt(2/fan_in)` Box-Muller. Physics outcomes: online-softmax rescaling
+bit-identical to direct to 2.2e-16; causal row 0 attends only to itself (proven);
+CRC-32 byte-identical to `zlib.crc32` (`0xde62d723`, `0x3084e45b`); MNIST IDX
+2051/2049 + CIFAR-10 1000/class by content (gzip not byte-reproducible across
+mirrors, so content invariants, not digests).
+
+### 20.2 Programming (10 + 1 new)
+
+1. **v2->v1 silent downgrade** (`serialize.c:61`): v2 refusal -> v1 write magic
+   `0x21434E41` with lost per-channel + clamped dtype, rc 0 + stale err. Now
+   v2-only; legacy body kept as `lancius_graph_save_v1_legacy` opt-in.
+2. **v1 trunc leak** (`:399-425`): `malloc` then short-read `goto fail` without
+   `free(buf)` (not yet OWNED). Now frees + nulls before fail; `elems?elems:1`.
+3. **v1 absurd elems silent** (`:376-383`): `return NULL` without error. Now
+   `LIMIT`.
+4. **Handle forgery** (`stable_api.c`): magic-only -> forged stack struct passes.
+   Now per-process 64-bit cookie (`time^pid^addr` xorshift) + owner graph;
+   `INVALID_HANDLE` without guess; cross-graph reuse refused.
+5. **pool_submit silent** (`threadpool.c:92`): `return` with err OK. Now `NULL_PTR`.
+6. **VM unbounded out** (`bytecode.c:251`): `memcpy(out, regs[out_reg])` with no
+   `out_len` -> heap overflow. New `lancius_vm_execute_checked` requires
+   `out_len>=out_elements` else `LIMIT`; `train_mnist` migrated; legacy
+   delegates with `SIZE_MAX`.
+7. **Planner error-but-success** (`memory_planner.c:144-205`): `set_error+continue`
+   then return partial plan. Now `goto plan_fail` -> free + NULL.
+8. **Python TOCTOU** (`onnx_to_lancius.py:40`, `export_lancius_onnx.py:58`):
+   stat-then-load/read unbounded on replace. Now open + `fstat` + capped read;
+   `onnx.load(BytesIO(capped))`.
+9. **Inflate bombs** (`manage_datasets.py:288,346`): 2GB compressed cap then
+   unbounded `copyfileobj`/`extractall`. Now 8GB decompressed cap both paths
+   (MNIST ~50MB, CIFAR ~170MB raw).
+10. **CLI algo-DoS** (`lancius_cli.c:945,1201`): `--topk 1..1M` + `O(topk*C)` scan.
+    Now `--topk 1..100`, display scans at most 100k cols; argmax stays exact
+    over full C.
+11. **NEW: VM trailing HALT false failure** (`bytecode.c:159`): V6 guard `pc+3>`
+    before op made `code_len=5` ADD (`HALT` at 4) fail `4+3>5` -> -20 on valid
+    program. `make check` never ran VM (train_mnist manual-only). Now 1-word
+    op guard + per-op need. Proven 2x2 ADD `[2,3,4,5]` exact.
+
+### 20.3 Operational (counts, gates, hygiene)
+
+- Counts: `audit_v7_hardening` 346 checks (docs said 1226 in README/STATUS/
+  CHANGELOG, 3.5x); mutation 18 caught + 1 neutral = 19 tries (README dropped
+  denominator); kernels 46/46 (was 41/41 stale). All reconciled; single-owner
+  rule re-asserted (fix lists live once in CHANGELOG).
+- Gates: `oracle_gate.sh` now counts `^  SKIP` and fails if torch present but
+  skips>0 (was substring match so `0 skipped` falsely failed; now 276 green);
+  kernel/graph SKIP vs conv/math/trainlib hard-require documented as design
+  (NumPy fallback exists vs torch-as-engine, no circular fallback);
+  `SAN_AUDITS` + `ubstrict` gain `diamond/verifier_head/fuzz/path_bg`
+  (were 26/25 with holes); `sanitizer_sweep.sh` header corrected;
+  `gate.yml` mutation sampled on main + dispatch (README `every push` corrected
+  to 4 gates per push + mutation on main).
+- Hygiene: `trainlib_dump` added to `.gitignore` + `make clean` (was `??` +
+  stale); oracle dumps unified under `temp/oracle/` (was 4 divergent defaults);
+  requirements gain `torch` + `libcurl/zlib`; install/ABI scope clarified
+  (headers-only checks, never `$PREFIX`); version `1.2.0` == `V1.2RC2` dev
+  mapping stated; `temp/despot-v9/` is the V9 scratch (repo `temp/` generated).

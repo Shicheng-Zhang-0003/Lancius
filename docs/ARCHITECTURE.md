@@ -63,14 +63,17 @@ allocations. The linear-scan planner assigns every intermediate tensor a
 recorded flat-buffer offset with wave-liveness reuse (`birth`=producing wave,
 `death`=max consuming wave, sinks pinned, `death<birth` expiry, first-fit +
 32B align); pooled execution is verified value-identical to direct execution
-on diamond graphs. Arena uses 32B footprints with `SIZE_MAX`-guarded
+on diamond graphs. **V9: any planning error tears down and returns NULL**
+(never a partial plan + sticky error). Arena uses 32B footprints with `SIZE_MAX`-guarded
 `uintptr_t` align math. All profiling uses `_checked` sizing, never aborting.
 
 ### Numerical Honesty
 
 v12R2 executes N-dimensional trailing-rank broadcast
 (`out[I]=A[bcast(I)] OP B[bcast(I)]`, `out=max(a,b)`), max-subtracted
-softmax/CE with `NUMERICAL` zero-sum guards, Flash/GQA/KV-cache attention
+softmax/CE with `NUMERICAL` zero-sum guards (**V9: corrupt CE targets
+NaN/Inf/negative are NUMERICAL, not skipped; INT8-matmul scales validated
+like INT8-conv**), Flash/GQA/KV-cache attention
 with `NaN→NUMERICAL` (zero stays zeros for causal safety), tanh-approx GELU
 (measured 4.74e-04 vs erf-exact, pinned by the oracle), `LANCIUS_NORM_EPS=1e-5` norms, int64 INT8
 accumulation (`scale=1.0` for all-zero, not `1e-8`), and fail-loud autodiff

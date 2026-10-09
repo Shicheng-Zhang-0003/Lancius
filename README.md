@@ -203,11 +203,14 @@ Lancius is primarily built with GNU Make.
 - GNU Make
 - OpenMP support
 - Linux x86_64 is the primary supported environment
+- libcurl + zlib headers for the 3463-LDFD submodule (`libcurl4-openssl-dev zlib1g-dev`; ML runtime builds without them, `ldfd-test` SKIPs honestly)
+- Python3 + NumPy for `make check-oracle` (hard requirement: `kernel_oracle.py`/`graph_oracle.py` import NumPy at module scope); PyTorch CPU for the full 276/276 evidence (`pip install --index-url https://download.pytorch.org/whl/cpu torch`; conv/math/trainlib layers have no non-circular NumPy fallback)
 
 On Debian/Ubuntu-like systems:
 
 ```bash
-sudo apt install build-essential
+sudo apt install build-essential libcurl4-openssl-dev zlib1g-dev python3-numpy
+pip install --index-url https://download.pytorch.org/whl/cpu torch
 ```
 
 ### Build with Make
@@ -307,12 +310,17 @@ This runs the primary regression and correctness suite, including:
 - N-dim reduction audit (per-axis sums 1..4-D, broadcast training exactness)
 - norm/activation/batched backward audit (finite-diff ~1e-9..1e-11)
 - training convergence audit (XOR solve, determinism, checkpoint resume)
-- V7 hardening audit (1226 checks): sticky-error contract per op, softmax /
+- V7 hardening audit (346 checks, H1-H9): sticky-error contract per op, softmax /
   cross-entropy / attention stability at |logit| up to 1e5, arena 32B alignment
-  across 64 fresh arenas, the alignment cap, INT8 quantizer scale exactness and
+  across sweeping sizes (4KB..1MB, mmap/heap boundary), the alignment cap, INT8 quantizer scale exactness and
   round-trip error bound, conv+relu fusion shape guard, a representative op
   table, the `broadcast_to_shape` contract at every rank plus its v2 round-trip,
   and INT8 64-bit accumulation proven at 204800 taps
+- V9 hardening (despot V9, 2026-10-09): CE NaN/negative-target NUMERICAL,
+  INT8-matmul scale NUMERICAL, v2-only saves, v1 trunc-leak + LIMIT, handle
+  secret cookies + owner checks, pool_submit NULL_PTR, VM checked execution
+  + trailing-HALT fix, planner fail-closed, Python TOCTOU + inflate caps,
+  CLI topk 1..100. See `CHANGELOG.md` + `docs/DESPOT_TRUTH_V2.md` §20.
 
 Every audit in the gate propagates failures through its exit code: a green
 `make check` means every check passed, not just that binaries ran.
@@ -416,8 +424,9 @@ make check-ubstrict   # UBSan alone with -fno-sanitize-recover=all (signed overf
 make check-mutation   # inject real defects and require this gate to go red
 ```
 
-`make check-mutation` is the one that matters most: it took 18 injected defects
-and required the gate to catch every one. The first run caught 8 and **missed 7**;
+`make check-mutation` is the one that matters most: it tries 19 mutations
+(18 real defects + 1 verified-neutral arena-rounding) and requires the gate to
+catch every real one. The first run caught 8 and **missed 7**;
 each of those 7 became a permanent check in `audit_v7_hardening`. The current
 tally is 18/18 caught, 1 verified behaviourally neutral, 0 holes. Details and the
 per-mutation record are in `docs/DESPOT_TRUTH_V2.md` §16.
@@ -440,9 +449,15 @@ erf-exact GELU of `~2e-3`, when the true value is **4.74e-04**. The bound had
 never been checked against anything — and the oracle had inherited the same
 unverified number. Both are now measured and pinned. The full citation table,
 including the one deliberate divergence from the TFLite spec and the claims that
-remain unchecked, is `docs/DESPOT_TRUTH_V2.md` §17.
+remain unchecked, is `docs/DESPOT_TRUTH_V2.md` §17. Despot V9 (§20) re-proves
+every kernel against NumPy 2.5.1 / torch 2.13 CPU: 46/46 kernels, 37/37 graph,
+169/169 train-lib, 11/11 conv2d, 13/13 reductions+softmax (276 total, 0 skipped
+with torch present; `oracle_gate.sh` fails if torch present but skips>0).
 
-All five gates run on every push (`.github/workflows/gate.yml`).
+Four gates run on every push plus `check-long`; `check-mutation` runs on `main`
++ `workflow_dispatch` (sampled: rebuilds the library per mutation) — see
+`.github/workflows/gate.yml`. `check-oracle` requires torch in CI (CPU wheel);
+local runs without torch stay green but report loud WARNING skips.
 <!-- /SECTION:VALIDATION -->
 
 <!-- SECTION:FEATURE_STATUS -->
