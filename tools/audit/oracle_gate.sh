@@ -35,13 +35,30 @@ make -C "$ROOT" trainlib_dump >/dev/null
 
 echo "=== independent NumPy / PyTorch / finite-difference comparison ==="
 rc=0
-python3 "$ROOT/tools/audit/kernel_oracle.py" "$OUT/dumps" || rc=1
-python3 "$ROOT/tools/audit/graph_oracle.py"  "$OUT/dumps" || rc=1
-python3 "$ROOT/tools/audit/trainlib_oracle.py" "$OUT/dumps/trainlib" || rc=1
+LOG="$OUT/oracle_gate.log"
+rm -f "$LOG"
+python3 "$ROOT/tools/audit/kernel_oracle.py" "$OUT/dumps" 2>&1 | tee -a "$LOG" || rc=1
+python3 "$ROOT/tools/audit/graph_oracle.py"  "$OUT/dumps" 2>&1 | tee -a "$LOG" || rc=1
+python3 "$ROOT/tools/audit/trainlib_oracle.py" "$OUT/dumps/trainlib" 2>&1 | tee -a "$LOG" || rc=1
 # conv2d and the reduction/softmax conventions, against torch specifically:
 # a self-authored NumPy reference shares the author with the kernel.
-python3 "$ROOT/tools/audit/conv_oracle.py"  "$OUT/dumps" || rc=1
-python3 "$ROOT/tools/audit/math_oracle.py"  "$OUT/dumps" || rc=1
+python3 "$ROOT/tools/audit/conv_oracle.py"  "$OUT/dumps" 2>&1 | tee -a "$LOG" || rc=1
+python3 "$ROOT/tools/audit/math_oracle.py"  "$OUT/dumps" 2>&1 | tee -a "$LOG" || rc=1
+
+# Despot V9: a SKIP is not a pass. kernel/graph degrade to NumPy+closed form
+# when torch is absent (loud SKIP); conv/math/trainlib hard-require torch.
+# CI installs torch, so any skip there means weaker evidence and must fail.
+# Local runs without torch stay green but report skips loudly.
+_nskips=$(grep -cE "^  SKIP" "$LOG" || true)
+if [ "${_nskips:-0}" -gt 0 ]; then
+  if python3 -c "import torch" 2>/dev/null; then
+    echo "EXTERNAL ORACLE GATE FAILED: ${_nskips} check(s) skipped despite torch being present."
+    echo "A skipped check is a check that did not happen; with torch installed 0 skips are required."
+    exit 1
+  else
+    echo "WARNING: ${_nskips} check(s) skipped (torch absent). Gate ran on weaker evidence."
+  fi
+fi
 
 if [ "$rc" -ne 0 ]; then
   echo "EXTERNAL ORACLE GATE FAILED: the library disagrees with NumPy/PyTorch/closed form."

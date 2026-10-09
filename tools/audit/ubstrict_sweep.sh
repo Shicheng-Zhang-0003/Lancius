@@ -24,8 +24,8 @@ for f in "$ROOT"/src/*/*.c; do
 done
 ar rcs "$OUT/libub.a" "$OUT"/obj/*.o
 
-AUDITS="stress_test test_torture test_grad_check audit_internals audit_ffi \
-audit_threadpool_parity audit_nan_injection audit_memory_pool \
+AUDITS="stress_test test_torture fuzz_lancius test_path_bg test_grad_check audit_internals audit_ffi \
+audit_threadpool_parity audit_nan_injection audit_memory_pool test_diamond_memory \
 audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c \
 audit_transformer_known_answer audit_fp32_path audit_fault_injection \
 audit_despot_probe audit_train_lib audit_sum_axis_nd audit_train_bwd \
