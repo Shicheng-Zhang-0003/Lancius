@@ -942,13 +942,16 @@ static int cmd_run(int argc, char **argv) {
         else if ((strcmp(argv[i], "--mode") == 0) && i + 1 < argc) mode = argv[++i];
         else if ((strcmp(argv[i], "--fill") == 0) && i + 1 < argc) fill = argv[++i];
         /* Despot truth: atoi overflow/UB on garbage (was: unchecked). */
+        /* Despot V9: topk up to 1M with O(topk*C) scan is an algo-DoS
+         * (1M*100M on a wide model hangs). Cap display at 100; scoring
+         * itself is unaffected, only how many are printed. */
         else if ((strcmp(argv[i], "--topk") == 0) && i + 1 < argc) {
             char *ep = NULL;
             long v;
             i++;
             v = strtol(argv[i], &ep, 10);
-            if (!ep || *ep != 0 || v < 1 || v > 1000000) {
-                printf("FAIL: bad --topk '%s' (want 1..1000000)\n", argv[i]);
+            if (!ep || *ep != 0 || v < 1 || v > 100) {
+                printf("FAIL: bad --topk '%s' (want 1..100)\n", argv[i]);
                 return 2;
             }
             topk = (int)v;
@@ -1198,7 +1201,12 @@ static int cmd_run(int argc, char **argv) {
             size_t R = out->shape[0], C = out->shape[1];
             size_t rlim = R < 4 ? R : 4;
             size_t r;
-            int *taken = (int *)calloc(C, sizeof(int));
+            /* Despot V9: C is file-controlled up to 100M; calloc(C) + O(topk*C)
+             * per row is an algo-DoS. Bound display width: at most 4 rows and
+             * at most 100 cols are ever scanned for topk (argmax over full C
+             * stays exact; only the printed topk list is truncated). */
+            size_t Cscan = C > 100000 ? 100000 : C;
+            int *taken = (int *)calloc(Cscan, sizeof(int));
             if (!taken) {
                 printf("FAIL: OOM\n");
                 rc = 1;
@@ -1206,15 +1214,16 @@ static int cmd_run(int argc, char **argv) {
                 for (r = 0; r < rlim; r++) {
                     size_t c;
                     int t, best = 0;
-                    memset(taken, 0, C * sizeof(int));
+                    memset(taken, 0, Cscan * sizeof(int));
                     for (c = 1; c < C; c++)
                         if (out->runtime_data[r * C + c] > out->runtime_data[r * C + (size_t)best]) best = (int)c;
                     printf("row %zu: argmax=%d (%.4f) | top%d:", r, best,
                         out->runtime_data[r * C + (size_t)best], topk);
-                    for (t = 0; t < topk && t < (int)C; t++) {
+                    /* Topk display scans Cscan cols (==C unless C huge). */
+                    for (t = 0; t < topk && t < (int)Cscan; t++) {
                         int bi = -1;
                         double bv = -1e300;
-                        for (c = 0; c < C; c++) {
+                        for (c = 0; c < Cscan; c++) {
                             double v;
                             if (taken[c]) continue;
                             v = out->runtime_data[r * C + c];
