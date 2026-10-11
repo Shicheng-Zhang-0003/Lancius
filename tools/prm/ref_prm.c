@@ -10,12 +10,26 @@
  *   H=32  LR=0.05  MOM=0.9  WD=1e-4  BATCH=64  EPOCHS=60  SEED=20261007
  *   He init  w = rnd()*sqrt(2/fan_in),  b = 0
  *   Fisher-Yates shuffle with the same xorshift64* RNG
- *   step = LR * (2/pe) * (2/NCLASS) * dCE/dw  +  SGDM with L2 into the gradient
+ *   step = LR * dCE/dw  +  SGDM with L2 into the gradient
  *
- * The (2/NCLASS) factor reproduces the framework's convention: its graph builds
- * MSE(logits, onehot), whose VJP is (2/pe)*(z-T) = (2/NCLASS)*dCE/dz, and it then
- * steps with LR*(2/pe). So the two paths take the same step iff the gradients
- * agree.
+ * The step used to be LR*(2/pe)*(2/NCLASS)*dCE/dw, mirroring the framework
+ * trainer, whose graph builds MSE(logits, onehot) with VJP (2/pe)*(z-T) and
+ * which then stepped with LR*(2/pe). The two paths took the same step iff the
+ * gradients agreed -- which is what this file tests -- but both carried a
+ * factor of 2/pe too many, because the VJP already contains it, so the step
+ * scaled as 1/rows^2 and BATCH=1024 collapsed to chance.
+ *
+ * The trainer's factor is now NCLASS/2, which is the unique constant making
+ * its step LR*(1/rows)*sum_r(z_r-T_r)*x_r; this file's step is
+ * LR*(1/rows)*sum_r(p_r-T_r)*x_r. The two paths therefore now differ only by
+ * their true objective, (z-T) versus softmax(z)-T, and no longer by an
+ * arbitrary scale -- so a disagreement here is evidence about the gradients,
+ * not about a step-size convention.
+ *
+ * Note the trainer's graph is MSE applied to the RAW LOGITS (no softmax node):
+ * mse_of_logits() in examples/train_prm_verifier.c and the central-difference
+ * check both pin that. There is therefore no softmax anywhere in its objective,
+ * which is why no constant can convert its VJP into a CE gradient.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -142,7 +156,11 @@ static void metrics(const double* X, const int* T, size_t n,
     for(int c=0;c<NC;c++){
         double tp=(double)cm[c][c];
         double fp=0, fn=0;
-        for(int r=0;r<NC;r++){ if(r!=c) fp+=cm[r][c]; fn+=cm[c][r]; }
+        /* Both skip the diagonal (see examples/train_verifier5.c): fp is a
+         * column sum, fn a row sum, cm[c][c] is in neither. Unguarded, fn
+         * included tp and recall read tp/(tp+rowsum) = 0.5 on a near-perfect
+         * model. */
+        for(int r=0;r<NC;r++){ if(r!=c){ fp+=cm[r][c]; fn+=cm[c][r]; } }
         double pr = (tp+fp>0)? tp/(tp+fp) : 0.0;
         double rc = (tp+fn>0)? tp/(tp+fn) : 0.0;
         s += (pr+rc>0)? 2*pr*rc/(pr+rc) : 0.0;
@@ -202,7 +220,29 @@ int main(int argc, char** argv){
                 tb[r]=tr.T[s];
             }
             ce_and_grad(xb,tb,rows,W1,b1,W2,b2,gW1,gb1,gW2,gb2);
-            double lr_eff = LR * 2.0/((double)rows*NC) * (2.0/NC);
+            /* ce_and_grad returns the TRUE softmax-CE gradient, MEAN over the
+             * batch (it divides by n inside), so the step is just LR -- this is
+             * the standard "LR times the mean gradient" convention.
+             *
+             * This used to be LR*(2/pe)*(2/NC), mirroring the framework
+             * trainer's lr_eff = LR*2/pe against its graph gradient
+             * (2/NC)*dCE/dw. Both paths then stepped with
+             * LR*(2/pe)*(2/NC)*(mean gradient), so they agreed with each other
+             * -- and both divided by pe a second time on top of the 2/pe that
+             * the MSE VJP already contains. That made the step scale as
+             * 1/rows^2: BATCH=1024 measured a collapse to chance (acc 0.3306,
+             * CE 1.109 ~ ln 3) where BATCH=64 reached 0.4913.
+             *
+             * The trainer's factor is now C/2, which is the UNIQUE constant
+             * that turns its step into LR*(1/rows)*sum_r (z_r - T_r)*x_r. This
+             * file's step is LR*(1/rows)*sum_r (p_r - T_r)*x_r. So the two
+             * paths now differ ONLY by their genuine objective -- (z-T) versus
+             * (softmax(z)-T) -- and no longer by an arbitrary scale factor.
+             * That residual difference is real and is the whole point: it is
+             * what a constant CANNOT convert away, which is why the two land at
+             * nearby but not identical accuracies (0.5104 vs 0.5046 at 60
+             * epochs, both against a ~0.49 feature ceiling). */
+            double lr_eff = LR;
             #define STEP(W,M,G,N,WDV) do{ \
                 for(size_t i=0;i<(N);i++){ \
                     double gi=(G)[i]+(WDV)*(W)[i]; \

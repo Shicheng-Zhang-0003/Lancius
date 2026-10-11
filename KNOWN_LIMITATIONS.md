@@ -32,6 +32,37 @@ Lancius v12R2 is inference-first, mute-mathematician-first (<100M, scores never 
 Training-related components may exist in the codebase but should be
 considered experimental development preview, not production-grade.
 
+### Trainer step size divided by `pe` twice (fixed; effect recorded)
+
+All three `examples/` trainers (`train_prm_verifier.c`, `train_verifier5.c`,
+`train_gen1.c`) built a graph of `mean((logits - onehot)^2)`, whose VJP is
+already `(2/pe)*(z-T)` with `pe = rows*NCLASS`, and then stepped with
+`lr_eff = LR * 2/pe` — applying `2/pe` a second time. The effective step
+therefore scaled as **1/rows^2**, so larger batches learned *worse*.
+
+Measured on the 3-class verifier, same data and LR, 25 epochs:
+
+| batch | shipped (`LR*2/pe`) | fixed (`LR*C/2`) |
+|---|---|---|
+| 64 | 0.4913 | 0.5055 |
+| 256 | 0.4821 | 0.5030 |
+| 1024 | **0.3306** (chance) | **0.5155** |
+
+At batch 1024 the shipped step was `2.1e-8` per parameter per step, leaving the
+model at chance and *below* the 0.4418 majority baseline. Corrected to
+`lr_eff = LR * NCLASS/2`, which is the unique constant turning the step into
+`LR*(1/rows)*sum_r (z_r - T_r)*x_r` — the form a mean-CE trainer takes. The
+correction is worth ~2 points at batch 64 (the 16-byte-feature ceiling is the
+binding constraint there) but is the difference between a trained model and
+noise at batch 1024. `tools/prm/ref_prm.c` was updated in lockstep.
+
+Note what the fix does **not** do: `C/2` matches the *step form*, not the
+*gradient*. The MSE-on-logits VJP and a true CE gradient differ by the softmax
+Jacobian, which is input-dependent, so no constant converts one into the other.
+Both trainers minimising mean-MSE-on-logits also cap the achievable CE at
+`ln(1 + (C-1)/e)` (~0.555 for C=3) because the MSE optimum is a hard one-hot
+logit vector, not a calibrated distribution.
+
 ## Backend Support
 
 Primary supported environment:

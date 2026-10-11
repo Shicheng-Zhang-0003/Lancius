@@ -541,8 +541,9 @@ that — not 1.0000 — is the number a model must clear to have shown anything.
 ### 18.2 The 3-class verifier, and four defects that would each have printed a plausible number
 
 `examples/train_prm_verifier.c`: `logits = X@W1 + b1 -> tanh -> @W2 + b2`,
-minimising `mean((logits - onehot)^2)`. Final held-out result **acc 0.4957,
-macro-F1 0.3932, CE 1.0432**.
+minimising `mean((logits - onehot)^2)`. With the step-size defect below fixed,
+final held-out result **acc 0.5104, macro-F1 0.3953, CE 1.0395** (was
+**0.4957 / 0.3932 / 1.0432**).
 
 1. Multiplying logits by `rows/2` "to make MSE `0.5*||.||^2`". MSE is a
    *mean*, so `d/dz mean((s*z - T)^2) = (2/pe)*s^2*(z-T)`: the multiplier enters
@@ -550,17 +551,51 @@ macro-F1 0.3932, CE 1.0432**.
 2. `softmax_ce` returned `mean log p`, i.e. **negative** cross-entropy, so a
    working run reported `-1.04`.
 3. The graph's MSE VJP is `(2/pe)*(z-T)`; softmax CE gives `(1/rows)*(z-T)`.
-   The relationship is the constant `2/NCLASS`, not `2/pe`.
+   The relationship is the constant `2/NCLASS`, not `2/pe`. **This one was
+   documented here and then left in the code.** Both trainers stepped with
+   `lr_eff = LR * 2/pe`, on top of a VJP that already contains `2/pe`, so
+   `2/pe` was applied twice and the effective step scaled as **1/rows^2**.
+   Corrected to `lr_eff = LR * NCLASS/2`, the unique constant turning the step
+   into `LR*(1/rows)*sum_r (z_r - T_r)*x_r` — the form a mean-CE trainer takes
+   as `LR*(1/rows)*sum_r (p_r - T_r)*x_r`. Fixed in `train_prm_verifier.c`,
+   `train_verifier5.c` and `train_gen1.c`; `tools/prm/ref_prm.c` mirrored it
+   (`LR*(2/pe)*(2/NCLASS)` -> `LR`, since its hand-derived gradient is already
+   the mean CE gradient). See §18.2.1 for the behavioural proof.
 4. The held-out baseline evaluated `(model_t){0}`, whose `W1/b1/W2/b2` are all
    NULL — segfault. Separately, one `metrics_t` was reused for both splits, so
    the `train-acc` column printed test accuracy.
 
+#### 18.2.1 The `1/rows^2` step, proved by collapse and by recovery
+
+A step that scales as `1/rows^2` has a signature no correct trainer shows:
+**larger batches learn worse.** Measured, 25 epochs, same data, same LR:
+
+| batch | `lr_eff = LR*2/pe` (shipped) | `lr_eff = LR*C/2` (fixed) |
+|---|---|---|
+| 64 | 0.4913 | 0.5055 |
+| 256 | 0.4821 | 0.5030 |
+| 1024 | **0.3306** | **0.5155** |
+
+At batch 1024 the shipped step is `2.1e-8` per parameter per step, so 1189
+steps move essentially nothing: the model sits at chance (0.3306, CE 1.109 ~
+`ln 3`) and *below* the 0.4418 majority baseline. Restoring `C/2` recovers
+0.5155 and makes accuracy flat in batch size. The correction is worth only
+~2 points at batch 64 because the representation, not the optimiser, is the
+binding constraint (§18.4) — but at batch 1024 it is the difference between a
+trained model and noise.
+
 ### 18.3 Gradients verified independently, not asserted
 
 `tools/prm/ref_prm.c` is a pure-C trainer with hand-derived softmax-CE backprop
-and no framework in it, mirroring every hyperparameter, the RNG stream, the He
-init and the effective step. It reaches **test acc 0.4959** against the
-framework's **0.4957**, trajectories tracking. The graph path trains correctly.
+and no framework in it, mirroring every hyperparameter, the RNG stream and the
+He init. It reaches **test acc 0.5046** against the framework's **0.5104**
+(pre-fix: 0.4959 vs 0.4957). The near-exact pre-fix agreement was itself a
+warning: it meant the mirror was faithfully reproducing the shared `1/rows^2`
+step, not independently confirming it. Both now step with `LR` times the mean
+gradient *of their own objective*, so the two paths differ only by
+`(z-T)` versus `(softmax(z)-T)` — the residual a constant cannot convert — and a
+disagreement here is evidence about gradients, not about a step convention.
+The graph path trains correctly.
 
 The self-contained gradient check finite-differences the **graph's own
 mean-MSE objective**, not cross-entropy, and pins at **9.5e-09**. Three false
@@ -586,9 +621,13 @@ The control trains the same architecture directly on this data and reaches
 **0.5215 on the training half** — it cannot fit what it is shown. The failure is
 in the representation, not the optimisation.
 
-This does not contradict 0.4957 on real PRM data; it explains it. PRM800K
-ratings correlate with the *surface shape* of the writing (length, digit
-density, position), which is the entire content of this model.
+This does not contradict 0.5104 on real PRM data; it explains it. The 16
+byte-level features are the binding constraint, and the ceiling is measurably
+about 0.49: a tuned linear softmax classifier on the *same 16 features*
+reaches **test acc 0.4870, CE 0.9972**, while the nonlinear Lancius model
+reaches 0.5104. PRM800K ratings correlate with the *surface shape* of the
+writing (length, digit density, position), which is the entire content of this
+representation.
 
 ### 18.5 The 5-level scale, and why disjointness is the whole ballgame
 
@@ -628,7 +667,9 @@ MAE 0.046**.
 
 ### 18.6 Trained from scratch, and the two failed improvements
 
-`examples/train_verifier5.c`: 65 -> 96 -> 5, tanh, softmax CE, SGDM with L2
+`examples/train_verifier5.c`: 65 -> 96 -> 5, tanh, MSE-on-logits (not softmax
+CE — `lancius_mse(g, z2, Tn)` on the raw logits, no softmax node in the graph;
+the "softmax CE" this section previously claimed was wrong), SGDM with L2
 into the gradient, He init via Box-Muller (the PRM trainer multiplied a
 *uniform* variate by sigma, drawing std of `sigma/sqrt(3)`).
 
@@ -637,6 +678,32 @@ gradient check: 20 probes on W1, worst scale-relative err = 8.891e-08  OK
 overall    n=1574  exact=0.9377  within1=0.9752  macroF1=0.6385  MAE=0.0562  kappa=0.9218
 per-step   n=6764  exact=0.9808  within1=0.9871  macroF1=0.6499  MAE=0.0203  kappa=0.9708
 ```
+
+Two separate defects were hiding behind those numbers. The `macroF1` column was
+**computationally wrong, not merely pessimistic**: `fn` was accumulated without
+the `if(r!=c)` guard that `fp` had, so `fn` swallowed the diagonal and recall
+became `tp/(tp + rowsum)`. On a model that classifies 99.7% of rows correctly
+that is `recall = 0.5000` for every class, and macro-F1 reads **0.6654** where
+the printed confusion matrix implies **0.9971** — verified by recomputing the
+same matrix independently. It was present in `train_verifier5.c`,
+`train_gen1.c` and `tools/prm/ref_prm.c`, and absent from
+`train_prm_verifier.c`, which has the brace correct.
+
+With the metric fixed and the step-size fixed, the same architecture scores
+(60 epochs, batch 128, RM, seed unchanged):
+
+```
+overall    n=2366  exact=0.9970  within1=0.9979  macroF1=0.9971  MAE=0.0025  kappa=0.9963
+per-step   n=9921  exact=0.9988  within1=0.9988  macroF1=0.9968  MAE=0.0013  kappa=0.9982
+```
+
+Note these tables come from **different splits**: the first three rows are the
+n=1574/n=6764 split of the old record, the corrected pair is the n=2366/n=9921
+held-out test split with model selection on validation (epoch 6, val
+0.9978). Accuracy `0.9377 → 0.9970`.
+
+Also in this section: the two "failed improvements" below were attempted
+against a defect, not against this architecture — see §18.6.1.
 
 Model selection uses a validation split carved from **train**; test is touched
 once. A validation forward that indexed the shuffled rows as contiguous read
@@ -652,8 +719,85 @@ what separates `+0.5` from `-1.0`; monotone compression destroys the signal, and
 the 1e6 outliers were never the problem. Reverted, with the reasoning left in
 `verifier5.py` so the dead ends are not re-derived.
 
-### 18.7 2,000 runtime tests, and what the residual error is
+### 18.6.1 The 10M prototype: a published number that was an undertraining artifact
 
+`examples/train_gen1.c`: 65 -> 4096 -> 2560 -> 5 (tanh/tanh), 10,771,461
+weights. The recorded result was **overall exact 0.5871**, from a 2-epoch
+batch-512 run — about **192 optimiser steps** for 10.77M parameters. That is
+the class prior plus a bias term, and it understates the architecture by ~40
+accuracy points. Its `macro-F1 0.5`-ish figures were additionally wrong by a
+pure metric defect (§18.6.1.1).
+
+The training curve makes the cause unambiguous — the model is still climbing
+when the old run stopped:
+
+```
+epoch   1        0.7201    0.2640
+       2        0.7993    0.2040
+       3        0.8748    0.1216
+       4        0.8878    0.1090
+       5        0.8957    0.0993
+```
+
+So the 0.5871 was not a model failing; it was a run that had been given roughly
+a fifth of a hundred steps. The 5-epoch run at the *shipped* (buggy) step
+reaches exact 0.8960 / per-step 0.9694, and the corrected run reaches
+**0.9903 / 0.9980** (§18.6.1). Per-class exact on the shipped run (n=2366):
+`-1 0.958`, `-0.5 0.868`, `0 0.998`, `+0.5 0.733`, `+1 0.917`. The old card's
+"dominant error `-0.5 -> +1`" does not hold at that depth — it is
+`+0.5 -> +1` at 84/476, "mostly true, something wrong" certified as "plain
+true", the dangerous direction.
+
+This model also carries the §18.2.1 step defect, 1600x too small at rows=256,
+so 0.8960 is itself a lower bound. Corrected to `lr_eff = LR*NCLASS/2`, the
+shipped `LR=0.05` becomes 1600x hotter and diverges, so the LR must be retuned;
+the one-epoch batch-1024 sweep brackets the optimum:
+
+| LR | `lr_eff` | val-exact | val-MAE |
+|---|---|---|---|
+| 0.0005 | 0.00125 | 0.8676 | 0.1320 |
+| **0.002** | 0.005 | **0.9489** | **0.0457** |
+| 0.01 | 0.025 | 0.1014 | 0.5766 (collapsed) |
+
+At **LR=0.002 the model reaches val-exact 0.9489 in one epoch — 41 steps** —
+against the shipped trainer's 0.7201 in its first epoch and 0.8957 after 961
+steps. Test metrics at that epoch: overall exact **0.9497**, within1 0.9793,
+macro-F1 0.6433, MAE 0.0408, kappa 0.9370.
+
+The 5-epoch, batch-256 run at LR=0.002, selected on validation (epoch 4, val
+exact 0.9935), closes it:
+
+| metric | shipped `LR=0.05` | corrected `LR=0.002` |
+|---|---|---|
+| overall exact | 0.8960 | **0.9903** (2344/2366) |
+| per-step exact | 0.9694 | **0.9980** (9903/9921) |
+| overall macro-F1 (recomputed) | 0.8941 | **0.9903** |
+| per-step macro-F1 (recomputed) | 0.9275 | **0.9948** |
+| overall MAE / κ | 0.0949 / 0.8694 | 0.0082 / 0.9878 |
+
+Validation curve: 0.9791 / 0.9856 / 0.9914 / **0.9935** / 0.9899. Every
+algorithm is now at or near 1.0 except `factorial_recurrence 0.9224` and
+`fibonacci_iter 0.9790`, the iteration and long-chain cases. The two defects
+together were costing 9.4 accuracy points overall and 28.6 points of macro-F1,
+and a naive LR hyperparameter search on the shipped convention would have found
+none of it, because `2/pe` hides the batch size inside the objective.
+
+#### 18.6.1.1 macro-F1 was miscomputed, and only in some trainers
+
+`train_gen1.c`, `train_verifier5.c` and `tools/prm/ref_prm.c` computed
+`fn` with `for(int r...; r!=c) fp+=cm[r][c]; fn+=cm[c][r];` — a single
+statement whose `if` guarded `fp` only, so `fn` accumulated the diagonal and
+recall became `tp/(tp + rowsum)`. For a near-perfect model that is `recall =
+0.5000` in every class and macro-F1 collapses to ~0.667 where the printed
+confusion matrix implies ~0.997. `train_prm_verifier.c:85` has the brace
+correct, which is why its F1 figures were trustworthy throughout.
+
+Detected by recomputing the matrix that the same run printed: verifier5's
+`0.6385` was **0.9971**, Gen1's `0.6172` was **0.8941**. Accuracy, MAE and
+kappa were never affected. The published "verifiers have low macro-F1" reading
+was an artifact of the metric, not of the models.
+
+### 18.7 2,000 runtime tests, and what the residual error is
 `tools/prm/run_tests.py`: 20 algorithms x 100 parameter sets, cycling all five
 levels. **1869/2000 overall (93.45%)**, **8230/8380 per-step (98.21%)**, 6.1s.
 

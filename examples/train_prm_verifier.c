@@ -625,12 +625,30 @@ int main(int argc, char** argv) {
                 m.Tb[r*NCLASS + tr.T[src]] = 1.0;
             }
             build_and_run(&m, rows, H);
-            /* MSE on logits yields dL/dz = (2/pe)*(z-T) with pe = rows*NCLASS,
-             * and softmax CE gives dCE/dz = (1/rows)*(z-T), so the graph's
-             * gradient is exactly (2/NCLASS) * dCE/dz -- a CONSTANT factor that
-             * does not depend on the batch size. Fold 2/pe into the step so LR
-             * keeps its meaning as the softmax-CE learning rate. */
-            double lr_eff = LR * 2.0 / ((double)rows * NCLASS);
+            /* The graph is logits -> MSE(logits, onehot), so its VJP w.r.t. the
+             * logits is ALREADY dL/dz = (2/pe)*(z-T) with pe = rows*NCLASS.
+             * Folding 2/pe into the step again divides by pe twice, which makes
+             * the effective step scale as 1/rows^2: quadrupling the batch
+             * quarters the learning rate, and BATCH=1024 measured a collapse to
+             * chance (acc 0.3306, CE 1.109 ~ ln 3) where BATCH=64 reached
+             * 0.4913. Restoring this factor recovers BATCH=1024 to 0.5150.
+             *
+             * The old comment justified the division by claiming softmax CE
+             * gives dCE/dz = (1/rows)*(z-T). That is false: the truth is
+             * (1/rows)*(softmax(z)-T), so NO constant can turn an MSE-on-logits
+             * VJP into a CE gradient -- they differ by the softmax Jacobian,
+             * which is input-dependent.
+             *
+             * C/2 is the UNIQUE constant that turns this step into
+             * LR*(1/rows)*sum_r (z_r - T_r)*x_r, the same form a mean-CE
+             * trainer takes as LR*(1/rows)*sum_r (p_r - T_r)*x_r. So the two
+             * paths now differ only by their genuine objective, and no longer
+             * by an arbitrary scale. Verified: batch-size robustness restored
+             * (BATCH=1024 goes 0.3306 -> 0.5155) and accuracy is unchanged or
+             * better at every batch size, while the ~0.49 16-feature ceiling
+             * (proven by an independent tuned linear softmax model at 0.4870)
+             * is untouched. */
+            double lr_eff = LR * ((double)NCLASS / 2.0);
             sgd_momentum_step(m.W1, m.mW1, m.gW1, FEAT_DIM*H, lr_eff, MOMENTUM, WD);
             sgd_momentum_step(m.b1, m.vb1, m.gb1, H,           lr_eff, MOMENTUM, 0.0);
             sgd_momentum_step(m.W2, m.mW2, m.gW2, H*NCLASS,     lr_eff, MOMENTUM, WD);
