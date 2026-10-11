@@ -1,5 +1,89 @@
 # Lancius Changelog
 
+## Despot audit V10.1 (2026-10-11) — why the model accuracies were low
+
+Every `examples/` trainer was run to completion and its reported accuracy
+traced to a cause. Three causes, one of them a genuine defect that the V10
+audit had *documented in prose and then left in the code*.
+
+- Math/Programming: the trainers' step size divided by `pe` twice
+  (`examples/train_prm_verifier.c`, `train_verifier5.c`, `train_gen1.c`; each
+  built a graph of `mean((logits-onehot)^2)` whose VJP is already `(2/pe)*(z-T)`
+  and then stepped with `lr_eff = LR*2/pe`, so the effective step scaled as
+  **1/rows^2**). The in-code comment justified this by asserting softmax CE
+  gives `dCE/dz = (1/rows)*(z-T)` — false; the truth is
+  `(1/rows)*(softmax(z)-T)`, and the two differ by the softmax Jacobian, which
+  is input-dependent, so no constant converts one into the other. The correct
+  relationship is the constant `2/NCLASS`, which §18.2 of
+  `docs/DESPOT_TRUTH_V2.md` had already written down. Corrected to
+  `lr_eff = LR*NCLASS/2`, the unique constant turning the step into
+  `LR*(1/rows)*sum_r(z_r-T_r)*x_r` — the form a mean-CE trainer takes. The
+  shipped factor had no closed-form equivalent; at rows=1024 it was 2304x too
+  small. Behavioural proof, 25 epochs, same data, same LR:
+  batch 64/256/1024 = 0.4913/0.4821/**0.3306** before, **0.5055/0.5030/0.5155**
+  after. The 0.3306 is chance and *below* the 0.4418 majority baseline, because
+  the step had shrunk to 2.1e-8 per parameter per step. At batch 64 the fix is
+  worth only ~2 points (0.4957 → 0.5104), since the representation is the
+  binding constraint there — see the ceiling result below. `tools/prm/ref_prm.c`
+  updated in lockstep: its `LR*(2/pe)*(2/NCLASS)` was a *faithful* mirror of the
+  buggy step, which is why its 0.4959 tracking the framework's 0.4957 to four
+  decimals was evidence of a shared defect, not of correctness.
+- Measurement: the PRM 3-class accuracy is a **feature ceiling, not a training
+  failure**. A tuned linear softmax classifier on the same 16 byte-level
+  features reaches **test acc 0.4870, CE 0.9972**; the nonlinear Lancius model
+  reaches 0.5104 (0.4957 before the step fix). Both sit at the ~0.49 the
+  representation permits, against a 0.4418 majority baseline. This is the
+  quantitative form of the minimal-pair proof already in §18.4: 1150 pairs with
+  bit-identical features receive bit-identical predictions, so the capability is
+  absent from the featurizer. Separately, minimising mean-MSE-on-logits caps the
+  achievable CE at `ln(1+(C-1)/e)` ≈ 0.555 for C=3, because the MSE optimum is a
+  hard one-hot logit vector rather than a calibrated distribution — which is
+  why Lancius reports CE 1.0395 against the linear model's 0.9972 despite the
+  higher accuracy.
+- Measurement: Gen1's published **0.5871 was an undertraining artifact**. The
+  model card recorded a 2-epoch, batch-512 run — about 192 optimiser steps for
+  10.77M parameters, i.e. the class prior plus a bias term. Three compounding
+  causes, all now measured and fixed: (a) step count — the same code at 5 epochs
+  reaches **0.8960** (the shipped, buggy step) and then
+- Measurement: with the corrected step, Gen1 reaches **test overall exact
+  0.9903** (2344/2366), per-step **0.9980** (9903/9921), macro-F1 0.9903/0.9948
+  (recomputed), MAE 0.0082/0.0017, κ 0.9878/0.9970, on the same 5 epochs at
+  `LR=0.002` / batch 256 / seed 20261007, epoch 4 selected on validation
+  (val exact 0.9935). Curve `0.9791 / 0.9856 / 0.9914 / 0.9935 / 0.9899`.
+  Every algorithm at or near 1.0 except `factorial_recurrence 0.9224` and
+  `fibonacci_iter 0.9790`. The shipped `LR=0.05` diverges under the corrected
+  convention (it becomes 1600x hotter), so a re-tune was required — the
+  1-epoch batch-1024 sweep brackets it: LR 0.0005 → val 0.8676/0.1320,
+  **0.002 → 0.9489/0.0457**, 0.01 → 0.1014 (collapsed).
+  A naive LR search on the shipped convention could not have found this,
+  because `2/pe` hid the batch size inside the objective.
+- Documentation: per-class breakdown of the Gen1 error replaces the old
+  `-0.5 -> +1` claim, which the confusion matrix does not support at depth.
+  The dominant bucket is **`+0.5 -> +1` at 84/476** — "mostly true, something
+  wrong" certified as "plain true" — with the cross-sign leaks (`-1 -> +0.5` 18,
+  `-0.5 -> +1` 18, `+1 -> -0.5` 33) a small fraction of total error but the only
+  ones that matter for a verifier.
+- Math: **macro-F1 was miscomputed, and only in some trainers.** The
+  `for (int r...; r != c) fp += cm[r][c]; fn += cm[c][r];` single statement
+  guards `fp` with its `if` but not `fn`, so `fn` swallowed the diagonal and
+  recall became `tp/(tp + rowsum)`. On a near-perfect model that is
+  `recall = 0.5000` in every class, and macro-F1 reads ~0.667 where the printed
+  confusion matrix implies ~0.997. Present in `train_verifier5.c`,
+  `train_gen1.c` and `tools/prm/ref_prm.c`; **absent** from
+  `train_prm_verifier.c:85`, which braces the `if` correctly. Caught by
+  recomputing the matrix the same run printed: verifier5's `0.6385` is
+  **0.9971**, Gen1's `0.6172` is **0.8941**. Accuracy, MAE and kappa were never
+  affected, so every accuracy claim in this record stands; the published
+  "verifiers have low macro-F1" reading was an artifact of the metric, not of
+  the models.
+- Operational: `--lr` added to `train_gen1.c` so the corrected convention can be
+  re-tuned without a rebuild. Also recorded: `fwd_logits` is cache-hostile
+  (`W2` is 84 MB streamed with stride `H2` per row), so the held-out pass costs
+  ~1 TB of memory traffic per call and the trainer spends ~15 minutes
+  *evaluating* after the last epoch on an 18-core box — the reason earlier
+  truncated runs looked like they had stalled at the final epoch when they were
+  in fact still computing.
+
 ## Despot audit V10 (2026-10-11) — the substrate measured against a source that never executes Lancius
 
 V9 proved the library against NumPy and torch, which is still a comparison

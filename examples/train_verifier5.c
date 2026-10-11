@@ -17,10 +17,15 @@
  *   S == 0   the whole derivation  -> one overall veracity
  *   S  > 0   one canonical step    -> per-step veracity
  *
- * Objective: mean((logits - onehot)^2) over 5 logits. As established in
- * examples/train_prm_verifier.c, MSE_BWD emits (2/pe)*(z-T) and softmax CE
- * gives (1/rows)*(z-T), so the graph's gradient is exactly (2/NCLASS) times the
- * softmax-CE gradient -- a constant, folded into the learning rate below.
+ * Objective: mean((logits - onehot)^2) over 5 logits. Note this is MSE on the
+ * RAW LOGITS: there is no softmax node anywhere in the graph, so the objective
+ * is NOT softmax cross-entropy. MSE_BWD emits (2/pe)*(z-T) with pe =
+ * rows*NCLASS; softmax CE would give (1/rows)*(softmax(z)-T), NOT
+ * (1/rows)*(z-T) -- the two differ by the softmax Jacobian, which is
+ * input-dependent, so no constant converts one into the other. The step-size
+ * factor below is lr_eff = LR*NCLASS/2, which restores the step FORM a mean-CE
+ * trainer takes rather than claiming the gradients are equivalent. See
+ * examples/train_prm_verifier.c for the full derivation and the measurement.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -181,7 +186,19 @@ static void step_model(model* m, size_t rows){
     lancius_schedule_destroy(fs);
     lancius_graph_destroy(g);
 
-    double lr_eff = LR * 2.0/((double)rows*NCLASS);
+    /* The training graph is logits -> MSE(logits, onehot), so its VJP w.r.t.
+     * the logits is ALREADY dL/dz = (2/pe)*(z-T) with pe = rows*NCLASS.
+     * Folding 2/pe into the step as well divides by pe twice and makes the
+     * effective step scale as 1/rows^2, so bigger batches learn SLOWER:
+     * measured on the 3-class trainer with the identical objective, BATCH=1024
+     * collapsed to chance (acc 0.3306, CE 1.109 ~ ln 3) where BATCH=64
+     * reached 0.4913, and restoring this factor recovered BATCH=1024 to
+     * 0.5155. C/2 is the unique constant turning the step into
+     * LR*(1/rows)*sum_r(z_r-T_r)*x_r, matching the form a mean-CE trainer
+     * takes. It cannot make the gradients into CE gradients -- those differ by
+     * the softmax Jacobian, which is input-dependent. See the fully worked
+     * version in examples/train_prm_verifier.c. */
+    double lr_eff = LR * ((double)NCLASS / 2.0);
 #define UPD(W,M,G,N,WDV) do{ for(size_t i=0;i<(size_t)(N);i++){ \
     double gi=(G)[i]+(WDV)*(W)[i]; (M)[i]=MOM*(M)[i]+gi; (W)[i]-=lr_eff*(M)[i]; } }while(0)
     UPD(m->W1,m->mW1,m->gW1,FEAT*H,WD);
@@ -248,8 +265,15 @@ static void macc(met* m,const model* md,const double* X,const int* L,const int* 
     m->mae = m->n? absd/(double)m->n : 0.0;
     double f1=0;
     for(int c=0;c<NCLASS;c++){
+        /* Both accumulators must skip the diagonal: fp is a column sum and fn a
+         * row sum, and cm[c][c] belongs to neither. The guard used to cover only
+         * fp, so fn pulled in tp as well and recall became tp/(tp + rowsum) --
+         * 0.5000 for every class on a near-perfect model, which read as
+         * macro-F1 0.6654 where the printed confusion matrix implied 0.9971.
+         * A metric that reports a model as 67% F1 while classifying 99.7% of
+         * rows correctly is worse than no metric. */
         double tp=m->cm[c][c], fp=0, fn=0;
-        for(int r=0;r<NCLASS;r++){ if(r!=c) fp+=m->cm[r][c]; fn+=m->cm[c][r]; }
+        for(int r=0;r<NCLASS;r++){ if(r!=c){ fp+=m->cm[r][c]; fn+=m->cm[c][r]; } }
         double pr=(tp+fp>0)?tp/(tp+fp):0.0, rc=(tp+fn>0)?tp/(tp+fn):0.0;
         f1 += (pr+rc>0)? 2*pr*rc/(pr+rc):0.0;
     }
