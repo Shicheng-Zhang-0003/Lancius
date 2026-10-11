@@ -22,11 +22,11 @@
   RuleTaker git clone remain Python-side. Kafka/S3/HTTP sinks, websocket
   and SSE sources, checkpointing, and schema registry remain roadmap.
 
-## v12R2 Milestone (development, current) + v12R1 baseline (2026-09-21) + despot truth V2/V3 (2026-09-28) + hardening V4 (2026-09-28) + V5 (2026-09-30) + despot audit V6 (2026-10-01) + despot audit V7 (2026-10-03) + despot audit V9 (2026-10-09)
+## v12R2 Milestone (development, current) + v12R1 baseline (2026-09-21) + despot truth V2/V3 (2026-09-28) + hardening V4 (2026-09-28) + V5 (2026-09-30) + despot audit V6 (2026-10-01) + despot audit V7 (2026-10-03) + despot audit V9 (2026-10-09) + despot audit V10 (2026-10-11)
 
 v12R2 is the second development milestone of the v12 cycle, not a stable
 release. Public github tag: `V1.2RC2` (CMake/pkg-config `1.2.0` is the same
-line: `1.2.0` + milestone `v12R2` == public `V1.2RC2` dev). It inherits the v11S contract and the v12R1/V1.2RC1 additions below, plus R2-1..R2-6 (train-lib, char-v1, micromodel, eval_verifier, sandbox, CLI eval) and despot audit V7 error-channel + grad-shape + per-channel honesty fixes + V9 math/programming/operational truth (13 defects). Enumeration in `CHANGELOG.md`; proofs in `docs/HOW_IT_WORKS.md          # concrete mechanics: pipeline, ops, training, verification
+line: `1.2.0` + milestone `v12R2` == public `V1.2RC2` dev). It inherits the v11S contract and the v12R1/V1.2RC1 additions below, plus R2-1..R2-6 (train-lib, char-v1, micromodel, eval_verifier, sandbox, CLI eval) and despot audit V7 error-channel + grad-shape + per-channel honesty fixes + V9 math/programming/operational truth (13 defects) + V10 substrate truth (physics gate, FP32 matmul loop order, pool thread budget, softmax-bwd oracle). Enumeration in `CHANGELOG.md`; proofs in `docs/HOW_IT_WORKS.md          # concrete mechanics: pipeline, ops, training, verification
 docs/DESPOT_TRUTH_V2.md` §12-13, §20:
 
 - v2 model format unchanged: files written by v11S+ load with mandatory
@@ -94,6 +94,19 @@ unchanged), `pool_submit` NULL_PTR, `lancius_vm_execute_checked` additive
 (legacy `vm_execute` delegates with `SIZE_MAX`), planner NULL-on-error,
 Python open+fstat+capped reads + 8GB inflate caps, CLI topk 1..100.
 Enumeration in `CHANGELOG.md`, proofs in `docs/DESPOT_TRUTH_V2.md` §20.
+
+Despot audit V10 (2026-10-11) — no format break, no API change, no numerical
+behaviour change: `kernel_matmul_f32` is restructured (IKJ over a
+register-blocked column tile) and proven bit-identical over 12 shapes
+including the non-multiples-of-8 tile boundaries, so no model's outputs move;
+the FP64-accumulate convention the external oracle pins is unchanged. The
+thread pool pins each worker's OpenMP team to 1, which changes only how many
+OS threads exist and makes pool execution bit-deterministic — results are the
+same, the thread count and the reproducibility are not. Two new gates
+(`make check-physics`, and the softmax-backward block inside the existing
+graph oracle) and one new measurement (`make bench_kernels`) are additive and
+run nowhere near the ABI. Enumeration in `CHANGELOG.md`, proofs in
+`docs/DESPOT_TRUTH_V2.md` §21.
 
 Internal headers and experimental paths (transformer builders, training
 loops, ONNX converter, quantizer) may change in v12R2 without notice.

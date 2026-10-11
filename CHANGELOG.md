@@ -1,5 +1,76 @@
 # Lancius Changelog
 
+## Despot audit V10 (2026-10-11) — the substrate measured against a source that never executes Lancius
+
+V9 proved the library against NumPy and torch, which is still a comparison
+between two floating-point programs that can share a wrong assumption about
+what the hardware and the C library do. V10 adds `make check-physics`, whose
+second arm cannot be wrong in the same way as the first: a C probe compiled
+with the project's own flags records what this machine actually produces, and
+`physics_oracle.py` re-derives every number from IEEE 754-2019 bit patterns,
+ISO/IEC 60929 decimal arithmetic (`decimal.exp/ln/sqrt` are correctly rounded
+by specification), Machin's π feeding a Taylor erf, `zlib.crc32` / IEEE 802.3
+and the source papers — an engine that never imports or executes Lancius and
+needs no torch. 56 checks, 0 failures, python3 stdlib only. Re-proven by
+`make clean && make -j && make check` plus the full suite (oracle 284/284
+with torch present, physics 56/56).
+
+- Math: `kernel_matmul_f32` rewritten as IKJ over a register-blocked column
+  tile (`src/math/lancius_kernels.c:891`, was `(r,c,k)` walking `b` as
+  `b[k*N+c]` with `c` inner — strided, unvectorised, and a double accumulator
+  round-tripping through memory, which is why FP32 measured **3.6 GFLOP/s
+  against FP64's 12**, slower in a wider type). The FP64 accumulator and the
+  single final rounding to float are the convention the external oracle pins
+  and are unchanged; the ascending k-order is unchanged, so every output bit
+  is identical — proven by dumping 12 shapes before and after (including the
+  non-multiples-of-8 `17x19x23` and `65x67x71` that would catch a tile-boundary
+  bug) and diffing, then re-proven by the unchanged 46/46 kernel oracle.
+  **3.6 → 11.4 GFLOP/s** at 512³.
+- Programming: pool oversubscription fixed
+  (`src/runtime/lancius_threadpool.c:36`, was every pthread worker opening a
+  full OpenMP team — 4 workers × 18 threads = 72 OS threads for one matmul
+  node, with wave parallelism stacked on kernel parallelism instead of
+  replacing it; measured by the probe's sampler at 22–23 OS threads mid-run).
+  Each worker now pins its team to 1, which sets only the calling thread's
+  nthreads-var so the serial path keeps the full team; after: delta = 1. Pool
+  execution is consequently bit-deterministic, because no kernel on a worker
+  can vary its reduction partition with the machine's CPU count. Budget pinned
+  by the gate (`delta ≤ pool + 2`).
+- Operational: `tools/audit/mutation_test.sh` now `trap`s EXIT/INT/TERM/HUP
+  and restores the original (`ACTIVE_MUT_BAK`), because a killed run left the
+  injected defect in the tree — this pass lost time to an INT8 `int64_t sum` →
+  `int32_t sum` still sitting in `lancius_kernels.c`; a gate that can leave the
+  tree *more wrong* than it found it is a hazard. `make clean` gains
+  `audit_v7_hardening` (was missing, so clean left a gate binary behind) and
+  the new artefacts. `generation_1/` (541 MB of PRM scratch incl. a 266 MB
+  weight dump) gitignored before it could reach history.
+- New gates: `make check-physics` (56 checks: DBL_EPSILON/subnormal/ties-to-even
+  anchors; libm exp/tanh/sin/cos/log/sqrt ≤ 0.49 ulp and erf ≤ 0.22 ulp vs the
+  decimal reference; GELU max deviation **4.73236e-04 at |x|=2.6989** recomputed
+  from both published formulas and pinned to the comment's 4.74e-04;
+  `sqrt(2/pi)` literal 0.449 ulp; attention `1/sqrt(d)` and RoPE `θ^(-2i/d)`
+  from Vaswani/Su; FMA contraction **0** under our own flags, so the repo's
+  bit-identity claims do not secretly depend on a compiler switch; matmul
+  bit-identical at 1 vs 8 threads and serial vs pool; v2 CRC byte-identical to
+  `zlib.crc32` with `"123456789"` → `0xCBF43926` confirming the reference);
+  wired into the makefile and CI (six gates per push, not the four the README
+  claimed — that sentence was already stale). Softmax backward hole closed:
+  `graph_oracle_dump.c` dumps dy/y/dx for ordinary and saturated rows and
+  `graph_oracle.py` pins `dx = y*(dy - Σ dy·y)` by torch autograd plus the two
+  structural properties a wrong axis or missing `dot` breaks; graph oracle
+  37 → 45, total 276 → 284, 0 skipped.
+- New measurement: `make bench_kernels` (`examples/bench_kernels.c`), median of
+  7 after a warm-up that absorbs first-touch and libgomp team creation, FLOP
+  formula and thread environment printed beside every rate, deliberately not a
+  gate member because timing must never fail the suite. On the audit box:
+  matmul fp64 13.7/10.5/12.7 GFLOP/s at 256³/512³/1024³, gelu 159 Melem/s,
+  layernorm 890 Melem/s, causal attention 9.2 GFLOP/s at S=256 H=8 D=64, and
+  the honest pair — graph e2e serial 10.8 GFLOP/s vs pool=4 at 3.0, because a
+  single node has no wave parallelism to exploit and the pool is then pure
+  overhead. `KNOWN_LIMITATIONS`' "nothing measures throughput" is retired and
+  replaced by what is still unchecked (model-scale training throughput, any
+  cross-framework comparison).
+
 ## Despot audit V9 (2026-10-09) — math, programming, operational truth
 
 Hostile formula-by-formula, line-by-line audit of the entire system plus

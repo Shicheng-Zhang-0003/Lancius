@@ -450,14 +450,22 @@ never been checked against anything — and the oracle had inherited the same
 unverified number. Both are now measured and pinned. The full citation table,
 including the one deliberate divergence from the TFLite spec and the claims that
 remain unchecked, is `docs/DESPOT_TRUTH_V2.md` §17. Despot V9 (§20) re-proves
-every kernel against NumPy 2.5.1 / torch 2.13 CPU: 46/46 kernels, 37/37 graph,
-169/169 train-lib, 11/11 conv2d, 13/13 reductions+softmax (276 total, 0 skipped
-with torch present; `oracle_gate.sh` fails if torch present but skips>0).
+every kernel against NumPy 2.5.1 / torch 2.13 CPU; Despot V10 (§21) adds
+`make check-physics`, which re-derives the same substrate a second time from
+IEEE 754-2019, ISO/IEC 60929 decimal arithmetic, zlib and the source papers —
+an engine that never executes Lancius and needs no torch: 284 oracle
+comparisons (46/46 kernels + 45/45 graph + 169/169 train-lib + 11/11 conv2d +
+13/13 reductions+softmax) plus 56 physics checks, 0 skipped with torch present;
+`oracle_gate.sh` fails if torch present but skips>0.
 
-Four gates run on every push plus `check-long`; `check-mutation` runs on `main`
-+ `workflow_dispatch` (sampled: rebuilds the library per mutation) — see
+Six gates run on every push (`check`, `check-long`, `check-sanitizers`,
+`check-oracle`, `check-physics`, `check-ubstrict`); `check-mutation` runs on
+`main` + `workflow_dispatch` (sampled: rebuilds the library per mutation) — see
 `.github/workflows/gate.yml`. `check-oracle` requires torch in CI (CPU wheel);
 local runs without torch stay green but report loud WARNING skips.
+`check-physics` needs only python3's standard library, so it stays green where
+torch is absent — but it is then the only gate that can speak about the
+numerics substrate at all.
 <!-- /SECTION:VALIDATION -->
 
 <!-- SECTION:FEATURE_STATUS -->

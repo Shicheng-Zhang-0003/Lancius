@@ -278,12 +278,31 @@ This is the part that makes the rest trustworthy, and it is layered on purpose.
 | `make check-long` | the slower audits | same |
 | `make check-sanitizers` | no leaks, no UB, no OOB — over the **library**, not just the audits | correctness |
 | `make check-oracle` | results recomputed by NumPy / PyTorch / closed form, sharing no code and no author with the implementation | that the oracle is itself right |
+| `make check-physics` | the substrate the above stands on — IEEE 754 constants, libm accuracy, the GELU/attention/RoPE constants, FMA contraction, kernel/scheduler determinism, the pool thread budget, the model CRC — recomputed from ISO decimal arithmetic, zlib and the source papers by an engine that **never executes Lancius** | performance, and anything above the kernel layer |
 | `make check-ubstrict` | signed overflow and float-cast overflow **abort** rather than warn (`-fno-sanitize-recover=all`) | correctness |
 | `make check-mutation` | the gates can **fail**: real defects are injected and the gate must go red | that every defect is covered |
 
-Current standing state: **276 external comparisons, 0 skipped.** Individually:
-external oracle 46/46, graph-level 37/37, train-lib 169/169, conv2d vs torch
-11/11, reductions+softmax vs torch 13/13. Mutation gate: 18 caught, 0 holes.
+Current standing state: **284 external comparisons, 0 skipped**, plus **56
+physics checks, 0 failures.** Individually: external oracle 46/46, graph-level
+45/45 (including softmax backward against torch autograd on ordinary and
+saturated rows), train-lib 169/169, conv2d vs torch 11/11, reductions+softmax
+vs torch 13/13. Mutation gate: 18 caught, 0 holes.
+
+Note what `check-physics` is for. `check-oracle` compares Lancius against
+NumPy and torch — two *other floating-point programs*, which can share a
+wrong assumption about what the hardware and the C library do. The physics
+gate's second arm cannot be wrong in the same way: `decimal.exp/ln/sqrt` are
+correctly rounded *by specification* under ISO 60929, so they cannot share
+glibc's rounding decisions, and `zlib.crc32` has never heard of Lancius. That
+is the difference between "agrees with another implementation" and "agrees
+with the standard".
+
+Throughput is a different question and is measured, not gated, by
+`make bench_kernels`: median of 7 timed calls after a warm-up that absorbs
+first-touch and libgomp team creation, with the FLOP formula and the thread
+environment printed beside every rate. It is deliberately not a gate, because
+timing is machine-dependent and must never be able to turn the suite red —
+and because a benchmark that beats a strawman is a lie in the making.
 
 ### The failure mode this discipline exists to catch
 
@@ -334,9 +353,16 @@ Not everything is supported, and the boundaries are as load-bearing as the
 features.
 
 - **conv2d** is zero-padded, single-group, undilated, and has no fused bias.
-- **softmax backward** has no external oracle; it is reachable through
-  `lancius_softmax_bwd` and exercised indirectly by training, but nothing
-  compares it against torch autograd.
+- **softmax backward** *had* no external oracle — a hole `KNOWN_LIMITATIONS`
+  recorded rather than left implied by an absent test. It is closed by the
+  `softmax backward` block in `graph_oracle_dump.c` / `graph_oracle.py`, which
+  pins `dx = y*(dy - Σ dy·y)` against torch autograd on ordinary and saturated
+  rows, plus the two structural properties a wrong axis or a missing `dot`
+  subtraction breaks. See `docs/DESPOT_TRUTH_V2.md` §21.4.
+- **Throughput at model scale is unmeasured.** `make bench_kernels` measures
+  the kernels and a single-node graph end to end; nothing here measures a full
+  training step at the sizes a user would care about, and nothing here is
+  compared against another framework on the same hardware.
 - **INT8 quantisation** clamps to `[-128, 127]` where TFLite and TensorRT
   specify `[-127, 127]`. Inert as written because `scale = max_abs/127` makes
   `-128` unreachable, but any future path that can produce it must change the
@@ -346,6 +372,8 @@ features.
   no non-circular fallback — a NumPy reimplementation of SGD checked against a
   NumPy reimplementation of SGD would agree with itself. The other oracle layers
   do degrade to NumPy plus closed form, and they say so loudly when they skip.
+  `check-physics` is the exception that proves the rule is a choice: it needs
+  only python3's standard library, because its reference is the standard.
 - **`data_vec/` and `temp/`** are generated and gitignored. Trained models in
   `data_vec/` are therefore not in the tree; the `V1.2-RC2` release carries them
   as artifacts.

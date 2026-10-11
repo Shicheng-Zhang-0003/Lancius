@@ -152,14 +152,23 @@ wrong:
 
 | Gate | What it proves | Tally |
 |---|---|---|
-| `make check-oracle` | every kernel, graph op, and train-lib entry point recomputed in NumPy / PyTorch autograd / closed form / central differences | **276 comparisons, 0 skipped (torch present)**: 46/46 kernels + 37/37 graph ops + 169/169 train-lib + 11/11 conv2d-vs-torch + 13/13 reductions+softmax-vs-torch |
+| `make check` | the whole gate: every audit, every example, every known-answer | see `docs/DESPOT_TRUTH_V2.md` §16 |
+| `make check-oracle` | every kernel, graph op, and train-lib entry point recomputed in NumPy / PyTorch autograd / closed form / central differences | **284 comparisons, 0 skipped (torch present)**: 46/46 kernels + 45/45 graph ops + 169/169 train-lib + 11/11 conv2d-vs-torch + 13/13 reductions+softmax-vs-torch |
+| `make check-physics` | the physics/numerics substrate -- IEEE 754 constants, libm accuracy, the GELU/attention/RoPE constants, FMA contraction, kernel and scheduler determinism, the pool thread budget and the v2 model CRC -- against an independent reference that never executes Lancius | **56 checks, 0 failures** (ISO decimal arithmetic + zlib + the source papers; python3 stdlib only, no torch, no network) |
 | `make check-sanitizers` | ASan + UBSan + LSan over the **instrumented library** and every audit (the old gate ran 3 binaries against an uninstrumented archive) | 28/28 clean (V9: +diamond +verifier_head; distill standalone) |
-| `make check-ubstrict` | UBSan alone, `-fno-sanitize-recover=all`, so signed overflow / shift / float-cast abort instead of warn | 29/29 clean (V9: +fuzz/path_bg/diamond) |
+| `make check-ubstrict` | UBSan alone, `-fno-sanitize-recover=all`, so signed overflow / shift / float-cast abort instead of warn | 28/28 clean (V9: +fuzz/path_bg/diamond; the 29 in the V9 tally was 25+3 rounded up, and the sweep list is the source of truth) |
 | `make check-mutation` | real defects injected; the gate must go red | **18/18 caught, 1 verified-neutral, 0 holes, 19 tries** (first run: 8 caught, 7 holes) |
 
-Four gates run on every push; `check-mutation` sampled on `main` + dispatch
-via `.github/workflows/gate.yml`, which did not exist before this pass.
-Full record: `docs/DESPOT_TRUTH_V2.md` §16 (V9 §20).
+Six gates run on every push (`check`, `check-long`, `check-sanitizers`,
+`check-oracle`, `check-physics`, `check-ubstrict`); only `check-mutation` is
+sampled to `main` + dispatch, because it rebuilds the library once per
+mutation. Full record: `docs/DESPOT_TRUTH_V2.md` §16 (V9 §20, V10 §21).
+
+Throughput is measured, not claimed, by `make bench_kernels`
+(`examples/bench_kernels.c`): median of 7 timed calls after a warm-up, on
+this machine, with the thread environment and the FLOP formula printed
+beside every rate. It is deliberately not a gate member, because timing is
+machine-dependent and must never be able to turn the suite red.
 
 ## V8 truth batch: every constant checked against its primary source
 
