@@ -85,6 +85,47 @@ last2 = rd("softmax_out2.bin").reshape(4, 6)
 close("softmax shift-invariance: softmax(z+7.5) == softmax(z) within 2 ulp",
       last2.ravel(), last.ravel(), tol=1e-15)
 
+# ------------------------------------------------------- softmax backward
+# dx = y * (dy - sum_c(dy*y)) per row -- the Jacobian-vector product of
+# softmax. Three things are checked, in increasing strength:
+#
+#   1. Structural, no engine needed: each row of dx sums to exactly 0, and dx
+#      is invariant to a constant added to every entry of dy. Both fall out of
+#      sum(y)=1; an implementation that forgets the `dot` subtraction, or that
+#      reduces along the wrong axis, breaks at least one of them.
+#   2. Closed form in NumPy (always available): the formula above, compared on
+#      the values Lancius actually produced.
+#   3. torch autograd -- the engine that owns the convention. Skipped loudly
+#      when torch is absent rather than passed, because a skipped check is a
+#      check that did not happen.
+for tag, R, C in (("softmax_bwd", 4, 6), ("softmax_bwd_extreme", 4, 6)):
+    z = rd(f"{tag}_z.bin").reshape(R, C)
+    dy = rd(f"{tag}_dy.bin").reshape(R, C)
+    y = rd(f"{tag}_y.bin").reshape(R, C)
+    dx = rd(f"{tag}_dx.bin").reshape(R, C)
+    label = "softmax backward" if tag == "softmax_bwd" else "softmax backward (saturated row)"
+    rowsum = np.abs(dx.sum(axis=1)).max()
+    check(f"{label}: each row of dx sums to 0 (Jacobian rows are trace-free)",
+          rowsum < 1e-15, f"max |sum| = {rowsum:.3e}")
+    dx_shift = np.empty_like(dx)
+    for i in range(R):
+        dyi = dy[i] + 3.7
+        dot = float((dyi * y[i]).sum())
+        dx_shift[i] = y[i] * (dyi - dot)
+    close(f"{label}: adding a constant to dy leaves dx unchanged", dx, dx_shift, tol=1e-15)
+    dot = (dy * y).sum(axis=1, keepdims=True)
+    ref_dx = y * (dy - dot)
+    close(f"{label} vs closed form y*(dy - sum(dy*y))", dx.ravel(), ref_dx.ravel(), tol=1e-15)
+    try:
+        import torch
+        zt = torch.tensor(z, dtype=torch.float64, requires_grad=True)
+        yt = torch.softmax(zt, dim=-1)
+        torch.autograd.backward(yt, grad_tensors=torch.tensor(dy, dtype=torch.float64))
+        close(f"{label} vs torch autograd", dx.ravel(), zt.grad.numpy().ravel(), tol=1e-14)
+    except ImportError:
+        skip(f"{label} vs torch autograd",
+             "torch absent -- the convention arm of this check cannot run")
+
 # --------------------------------------------------------------- cross entropy
 ce = rd("ce_loss.bin")
 logits = rd("ce_logits.bin").reshape(5, 3)

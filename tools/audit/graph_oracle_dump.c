@@ -108,6 +108,45 @@ int main(int argc, char** argv) {
         free(z); free(z2);
     }
 
+    /* --------------------------------------------- softmax backward
+     * The Jacobian-vector product for softmax, dx = y * (dy - sum(dy*y)).
+     * Until this block the only softmax BACKWARD evidence was indirect: it is
+     * exercised wherever an MLP trains, and softmax_out2.bin -- whose name
+     * looks like a gradient -- is the shifted FORWARD output written for the
+     * shift-invariance probe. Both directions are dumped here so the oracle
+     * can compare against torch autograd, which is the engine that owns the
+     * convention. Two cases: ordinary logits, and logits scaled x12 so the
+     * row saturates and the y*(dy-dot) form is exercised where y has
+     * underflowed toward 0 for most columns.
+     */
+    fprintf(stderr, "[block] softmax backward\n");
+    {
+        size_t R = 4, C = 6;
+        for (int extreme = 0; extreme < 2; extreme++) {
+            rseed(3001 + (uint64_t)extreme);
+            double* z  = rndarr(R*C, -3, 3);
+            double* dy = rndarr(R*C, -1, 1);
+            if (extreme) for (size_t i=0;i<R*C;i++) z[i] *= 12.0;
+            lancius_graph* g = lancius_graph_create();
+            lancius_node* in  = lancius_input(g, R, C);
+            lancius_node* ind = lancius_input(g, R, C);
+            lancius_node* sm  = lancius_softmax(g, in);
+            lancius_node* bw  = lancius_softmax_bwd(g, ind, sm);
+            REQUIRE(sm != NULL, "softmax node built (bwd case)");
+            REQUIRE(bw != NULL, "softmax_bwd node built");
+            bind(in, z); bind(ind, dy);
+            REQUIRE(run(g), "softmax + softmax_bwd executed");
+            const char* tag = extreme ? "softmax_bwd_extreme" : "softmax_bwd";
+            char n[64];
+            snprintf(n, sizeof(n), "%s_z.bin", tag);   wd(n, z, R*C);
+            snprintf(n, sizeof(n), "%s_dy.bin", tag);  wd(n, dy, R*C);
+            snprintf(n, sizeof(n), "%s_y.bin", tag);   wd(n, sm->runtime_data, R*C);
+            snprintf(n, sizeof(n), "%s_dx.bin", tag);  wd(n, bw->runtime_data, R*C);
+            lancius_graph_destroy(g);
+            free(z); free(dy);
+        }
+    }
+
     /* ---------------------------------------------------- cross entropy */
     fprintf(stderr, "[block] cross_entropy\n");
     {
