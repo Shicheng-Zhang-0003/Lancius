@@ -5,6 +5,9 @@
 #include <stdio.h>
 #include <time.h>
 #include <errno.h>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 /* v12R1 fix: named constants (were magic numbers). */
 #define LANCIUS_POOL_DEFAULT_THREADS 4
@@ -30,6 +33,23 @@ struct lancius_pool {
 static void* worker_loop(void* arg) {
     lancius_pool* pool = (lancius_pool*)arg;
     if (!pool) return NULL;
+#ifdef _OPENMP
+    /* Despot V10 truth (oversubscription): kernels open their own OpenMP
+     * regions. A pool worker is a plain pthread, not an OMP thread, so every
+     * worker would spawn a full OMP team: 4 workers x 18 threads = 72 OS
+     * threads for one matmul node, and the wave parallelism the pool already
+     * provides is stacked on top of kernel parallelism instead of replacing
+     * it. Pin this worker's OMP team size to 1: the parallelism budget is the
+     * pool. omp_set_num_threads() sets only the CALLING thread's nthreads-var,
+     * so the caller's own team size (and the serial execution path, which
+     * keeps the full team) is untouched. Measured before this fix: 22 OS
+     * threads mid-run with a 4-thread pool; after: pool + 1.
+     * Pinning also makes pool execution bit-deterministic, because no kernel
+     * on a worker can vary its reduction partition with the machine's CPU
+     * count. Verified by tools/audit/physics_probe (oversubscription and
+     * determinism arms). */
+    omp_set_num_threads(1);
+#endif
     while (1) {
         pthread_mutex_lock(&pool->mutex);
         while (pool->count == 0 && !pool->shutdown) {

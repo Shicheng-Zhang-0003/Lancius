@@ -47,9 +47,11 @@ clean:
 	rm -f audit_regression_13c regression_roundtrip.lancius regression_bad_*.lancius regression_trunc_*.lancius regression_huge_*.lancius
 	rm -f audit_known_answer audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_flash_attention
 	rm -f audit_despot_probe train_verifier_head distill_prm800k lancius
-	rm -f audit_train_lib trainlib_dump audit_sandbox train_micromodel eval_verifier audit_sum_axis_nd audit_train_bwd audit_train_converge audit_train_converge audit_train_bwd
+	rm -f audit_train_lib trainlib_dump audit_sandbox train_micromodel eval_verifier audit_sum_axis_nd audit_train_bwd audit_train_converge audit_train_converge audit_train_bwd audit_v7_hardening
+	rm -f temp/mutation/_t temp/phys/* temp/audit/physics temp/audit/physics_probe_out.txt
+	rm -f bench_kernels
 .PHONY: all clean check check-long check-sanitizers ldfd-test ldfd-build \
-        check-oracle check-mutation check-ubstrict
+        check-oracle check-mutation check-ubstrict check-physics bench_kernels
 train_cifar10: examples/train_cifar10.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 fuzz_lancius: examples/fuzz_lancius.c liblancius.a
@@ -280,7 +282,19 @@ check-oracle:
 check-mutation:
 	@./tools/audit/mutation_test.sh
 
+# --- V12R2: physics gate. Pins IEEE 754, libm, GELU/attention/RoPE constants,
+# FMA-contraction behaviour, kernel/scheduler determinism, the pool thread
+# budget, and the v2 model CRC against an independent reference (ISO decimal
+# arithmetic + zlib + the source papers) that never executes Lancius. ---
+check-physics:
+	@./tools/audit/physics_gate.sh
+
 audit_transformer_known_answer: examples/audit_transformer_known_answer.c liblancius.a
+	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
+
+# --- V10: throughput harness. Measurement, not a claim, and deliberately not
+# a gate member: timing is machine-dependent and must never fail the suite. ---
+bench_kernels: examples/bench_kernels.c liblancius.a
 	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
 
 audit_fp32_path: examples/audit_fp32_path.c liblancius.a

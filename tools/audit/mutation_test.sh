@@ -14,6 +14,31 @@ WORK="$ROOT/temp/mutation"
 LOG="$WORK/logs"
 mkdir -p "$WORK" "$LOG"
 
+# Despot V10 truth (operational): this harness PATCHES REAL SOURCE FILES and
+# restores them by hand at the end of each try(). A run that is killed between
+# the patch and the restore (timeout, Ctrl-C, OOM killer, CI cancel) leaves the
+# injected defect in the working tree -- and the next `make check` fails on a
+# library the operator never edited. That happened on 2026-10-10: a timed-out
+# run left the INT8 int64->int32 narrowing mutation in
+# src/math/lancius_kernels.c, and the following baseline check went red with
+# "baseline failing audits: 1". Every exit path now restores whatever is
+# currently mutated, and the baseline failure message says how to recover.
+ACTIVE_MUT_FILE=""
+ACTIVE_MUT_BAK=""
+
+restore_active() {
+    if [ -n "$ACTIVE_MUT_FILE" ] && [ -n "$ACTIVE_MUT_BAK" ] && [ -f "$ACTIVE_MUT_BAK" ]; then
+        cp "$ACTIVE_MUT_BAK" "$ACTIVE_MUT_FILE"
+        ( cd "$ROOT" && make liblancius.a >/dev/null 2>&1 ) || true
+        printf '\n[trap] restored %s -- the run was interrupted mid-mutation\n' \
+            "$ACTIVE_MUT_FILE" >&2
+    fi
+}
+trap restore_active EXIT
+trap 'restore_active; exit 130' INT
+trap 'restore_active; exit 143' TERM
+trap 'restore_active; exit 129' HUP
+
 RUNS=(
   stress_test test_torture test_path_bg test_grad_check
   audit_internals audit_ffi audit_threadpool_parity audit_nan_injection
@@ -74,8 +99,11 @@ try() {
     RESULTS+=("$name|SKIPPED|0")
     return
   fi
+  # arm the trap: from here until the restore below, the tree is mutated
+  ACTIVE_MUT_FILE="$ROOT/$file"
+  ACTIVE_MUT_BAK="$WORK/orig.c"
   # rebuild the library only; audits relink against it
-  ( cd "$ROOT" && make liblancius.a >/dev/null 2>&1 ) || { echo "  lib rebuild failed"; cp "$WORK/orig.c" "$ROOT/$file"; return; }
+  ( cd "$ROOT" && make liblancius.a >/dev/null 2>&1 ) || { echo "  lib rebuild failed"; cp "$WORK/orig.c" "$ROOT/$file"; ACTIVE_MUT_FILE=""; ACTIVE_MUT_BAK=""; return; }
   local r detected buildfail
   r=$(run_gate "$tag")
   detected="${r%%|*}"; buildfail="${r##*|}"
@@ -97,6 +125,8 @@ try() {
 
 
   cp "$WORK/orig.c" "$ROOT/$file"
+  ACTIVE_MUT_FILE=""
+  ACTIVE_MUT_BAK=""
   ( cd "$ROOT" && make liblancius.a >/dev/null 2>&1 )
   if [ "$detected" -gt 0 ]; then
     printf "  %-46s CAUGHT by %d audit(s)%s\n" "$name" "$detected" \
@@ -121,6 +151,11 @@ r=$(run_gate baseline)
 echo "baseline failing audits: ${r%%|*} (must be 0)"
 if [ "${r%%|*}" != "0" ]; then
   echo "BASELINE IS RED - mutation results would be meaningless. Aborting."
+  echo "The failing runs are in $LOG/baseline.<name>.run."
+  echo "If this tree was left red by an interrupted earlier run, the injected"
+  echo "mutation is still in one of the target files: restore it with"
+  echo "  git diff src/  (a mutation shows up as a one-line change)"
+  echo "  git checkout -- <file>   # then: make -j && make check"
   exit 2
 fi
 

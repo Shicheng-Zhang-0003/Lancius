@@ -66,6 +66,13 @@ jobs:
       - name: make check-oracle
         run: make check-oracle
 
+      # The physics/numerics substrate (IEEE 754, libm accuracy, GELU/attention/
+      # RoPE constants, FMA contraction, kernel + scheduler determinism, pool
+      # thread budget, v2 model CRC) against an independent reference that never
+      # executes Lancius. python3 stdlib only -- no torch, no network.
+      - name: make check-physics
+        run: make check-physics
+
       # UBSan alone with -fno-sanitize-recover=all: signed overflow, shift,
       # float-cast-overflow and integer-divide-by-zero must ABORT, not warn.
       - name: make check-ubstrict
