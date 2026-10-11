@@ -121,14 +121,26 @@ so multi-step execution is exercised rather than closed forms.
 
 ## Trained from scratch, and 2,000 runtime tests
 
-65 → 96 → 5, tanh, softmax CE, SGDM with L2 into the gradient, He init via
-Box-Muller. Model selection on a validation split carved from **train**; test
-touched once. Gradient check **8.9e-08**.
+65 → 96 → 5, tanh, **mean-MSE on logits** (not softmax CE — the graph is
+`lancius_mse(g, z2, Tn)` on the raw logits, and there is no softmax node in it),
+SGDM with L2 into the gradient, He init via Box-Muller. Model selection on a
+validation split carved from **train**; test touched once. Gradient check
+**8.9e-08**.
 
 ```
 overall    n=1574  exact=0.9377  within1=0.9752  macroF1=0.6385  MAE=0.0562  kappa=0.9218
 per-step   n=6764  exact=0.9808  within1=0.9871  macroF1=0.6499  MAE=0.0203  kappa=0.9708
 ```
+
+Two corrections to how those figures must be read. The `macroF1` column is
+**not** this model's macro-F1: `fn` was accumulated without the `if(r!=c)` guard
+that `fp` had, so recall read `tp/(tp+rowsum)` and the printed 0.6385 is
+**0.9971** recomputed from this same table's confusion matrix. Separately, both
+numbers were produced with the `1/rows^2` step defect, so the accuracy column is
+a lower bound too — the corrected step and metric give **exact 0.9970 /
+macro-F1 0.9971 overall** and **exact 0.9988 / 0.9968 per-step** on the held-out
+test split, epoch 6 selected on validation (val 0.9978). The suite below is
+untouched by all of this and stands as recorded.
 
 `run_tests.py`: 20 algorithms × 100 parameter sets, cycling all five levels —
 **1869/2000 overall (93.45%)**, **8230/8380 per-step (98.21%)**.
