@@ -791,6 +791,8 @@ static void execute_node_math(lancius_node* n) {
 
             memset(n->runtime_data, 0, M * N * sizeof(double));
             double final_scale = scale_a * scale_b;
+            /* Multicore: (r,c) pairs independent (k reduces into a local). */
+            #pragma omp parallel for collapse(2) schedule(static)
             for(size_t r=0; r<M; r++) {
                 for(size_t c=0; c<N; c++) {
                     int64_t sum = 0;
@@ -814,7 +816,9 @@ static void execute_node_math(lancius_node* n) {
         if (K > SIZE_MAX / N) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
         if (M > SIZE_MAX / N || M * N > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
         memset(n->runtime_data, 0, M * N * sizeof(double));
-        // IKJ loop order: perfectly contiguous for AVX2 SIMD vectorization
+        // IKJ loop order: perfectly contiguous for AVX2 SIMD vectorization.
+        // Multicore: parallel over rows (k serial per row -> bit-identical).
+        #pragma omp parallel for schedule(static)
         for(size_t r=0; r<M; r++) {
             for(size_t k=0; k<K; k++) {
                 double val = a[r*K + k];
