@@ -40,6 +40,7 @@ audit_train_converge
 audit_v7_hardening
 train_micromodel
 eval_verifier
+bench_kernels
 
 # Binaries and Artifacts
 *.lancius
@@ -78,3 +79,8 @@ __pycache__/
 *.d
 build/
 temp/
+
+# Gen1 PRM prototype scratch: corpus, generated data and the 266MB weight
+# dump. The code lives in examples/train_gen1.c and tools/prm/; the artefacts
+# are regenerated and are not repository content.
+generation_1/
