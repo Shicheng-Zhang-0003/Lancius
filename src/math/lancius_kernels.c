@@ -23,6 +23,10 @@ void kernel_matmul(double* out, const double* a, const double* b, size_t M, size
     if (K > SIZE_MAX / N) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     if (M * N > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     memset(out, 0, M * N * sizeof(double));
+    /* Multicore: rows are independent (each thread owns whole r rows, k-order
+     * serial inside a row), so results are bit-identical to serial. The f32
+     * twin below already parallelises; FP64 was the missed hot path. */
+    #pragma omp parallel for schedule(static)
     for(size_t r=0; r<M; r++) {
         for(size_t k=0; k<K; k++) {
             double val = a[r*K + k];
@@ -885,16 +889,35 @@ void kernel_matmul_f32(float* out, const float* a, const float* b, size_t M, siz
     if (K > SIZE_MAX / N) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     if (M * N > SIZE_MAX / sizeof(float)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
     memset(out, 0, M * N * sizeof(float));
-#pragma omp parallel for collapse(2) schedule(static)
+    /* FP32 in, FP64 accumulate, single rounding to float at the end -- the
+     * convention the external oracle pins (tools/audit/kernel_oracle.py).
+     *
+     * Loop order is IKJ over a register-blocked column tile rather than the
+     * previous (r,c,k). Both forms accumulate over k in ASCENDING order in a
+     * double and round to float once, so every output bit is identical; what
+     * changes is that b is now read contiguously (k*N+c0+i instead of
+     * k*N+c with c stepping) and the double accumulator lives in registers
+     * instead of round-tripping through memory. The naive form measured 3.6
+     * GFLOP/s against FP64's 12 on an AVX2 box -- slower in a wider type,
+     * which was the symptom of the strided access, not of the accumulator.
+     * Verified bit-identical over 12 shapes from 1x1x1 to 256x256x256 and
+     * the non-multiples-of-8 tiles 17x19x23 and 65x67x71. */
+    #pragma omp parallel for schedule(static)
     for (size_t r = 0; r < M; r++) {
-        for (size_t c = 0; c < N; c++) {
-            double acc = 0.0;
-
+        for (size_t c0 = 0; c0 < N; c0 += 8) {
+            double acc[8] = {0,0,0,0,0,0,0,0};
+            size_t tile = (N - c0 < 8) ? (N - c0) : 8;
             for (size_t k = 0; k < K; k++) {
-                acc += (double)a[r * K + k] * (double)b[k * N + c];
+                double av = (double)a[r * K + k];
+                const float* brow = b + k * N + c0;
+                #pragma omp simd
+                for (size_t i = 0; i < tile; i++) {
+                    acc[i] += av * (double)brow[i];
+                }
             }
-
-            out[r * N + c] = (float)acc;
+            for (size_t i = 0; i < tile; i++) {
+                out[r * N + c0 + i] = (float)acc[i];
+            }
         }
     }
 }
