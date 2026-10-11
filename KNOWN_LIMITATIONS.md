@@ -160,13 +160,16 @@ These are the boundaries of the *evidence*, not of the code. A property not
 listed as proven here is not proven; the honest default is "unchecked".
 
 Proven by `make check-oracle` against NumPy / torch autograd / hand-derived
-closed form / central differences (276 total, 0 skipped with torch present;
+closed form / central differences (284 total, 0 skipped with torch present;
 `oracle_gate.sh` fails if torch present but skips>0):
 
 - Every pure kernel: matmul, FP32 matmul, conv2d (two stride/pad settings),
   INT8 conv, LayerNorm and RMSNorm forward and all backwards, GELU forward and
   backward, SwiGLU, RoPE, causal attention, GQA, KV-cache attention
-- Every graph-level op: softmax, cross-entropy, MSE, `ADD`/`SUB`/`MUL`
+- Every graph-level op: softmax, softmax backward (`dx = y*(dy - sum(dy*y))`
+  against torch autograd on ordinary and saturated rows, plus the two
+  structural properties a wrong axis or a missing `dot` subtraction breaks),
+  cross-entropy, MSE, `ADD`/`SUB`/`MUL`
   broadcast at 2-D/3-D/4-D, `SUM_AXIS_ND` on every axis of every rank,
   `MATMUL_BATCHED`, permute, `CONV2D_BWD`, `CONV2D_BWD_W`, `MAXPOOL2D` and its
   backward, fused conv+relu
@@ -188,7 +191,8 @@ Proven by `make check-ubstrict` (UBSan alone, `-fno-sanitize-recover=all`):
 
 - No signed-integer overflow, shift error, bad float-to-int conversion,
   misaligned or out-of-bounds access in any gate binary
-- V9: 29/29 (`fuzz_lancius`, `test_path_bg`, diamond added)
+- V9: 28/28 (`fuzz_lancius`, `test_path_bg`, diamond added; the V9 note
+  said 29 -- the sweep's own AUDITS list has 28 members and is the truth)
 
 Proven by `make check-mutation`:
 
@@ -217,17 +221,28 @@ Proven by `make check-mutation`:
   is absent
 - ONNX conversion beyond LeNet-class graphs, dynamic shapes, GPU paths,
   multi-process or multi-threaded *user* code, and the FP32 path beyond matmul
-- Performance. Nothing here measures throughput; the oracles measure
-  correctness only
+- Performance. Throughput is now *measured* by `make bench_kernels`
+  (`examples/bench_kernels.c`, median of 7 after a warm-up, FLOP formula and
+  thread environment printed beside every rate) and the numbers are recorded
+  in `docs/DESPOT_TRUTH_V2.md` §21. It is not a gate and it makes no claim
+  about any other framework: a benchmark that beats a strawman is a lie in
+  the making. Still unchecked: end-to-end training throughput at model scale,
+  and any comparison against torch/TF on the same hardware.
 
-## Softmax backward has no external oracle
+## Softmax backward had no external oracle (closed, V10)
 
-`lancius_softmax_bwd` is reachable through autodiff and is exercised
-indirectly wherever an MLP trains, but no external oracle compares it against
-torch autograd. No probe dumps a softmax backward: `softmax_out2.bin` looks
-like a gradient by name and is in fact the *shifted forward output* written for
-the shift-invariance probe. Recorded here rather than left implied by an absent
-test. See `docs/DESPOT_TRUTH_V2.md` section 19.6.
+`lancius_softmax_bwd` was reachable through autodiff and exercised indirectly
+wherever an MLP trained, but no external oracle compared it against torch
+autograd: no probe dumped a softmax backward, and `softmax_out2.bin` -- which
+looks like a gradient by name -- is the *shifted forward output* written for
+the shift-invariance probe. That hole is closed by the `softmax backward` block
+in `tools/audit/graph_oracle_dump.c` (ordinary and saturated rows) and the
+matching block in `graph_oracle.py`, which pins `dx = y*(dy - sum(dy*y))`
+three ways: the two structural properties a wrong axis or a missing `dot`
+subtraction breaks (each row of dx sums to 0; adding a constant to dy leaves dx
+unchanged), the closed form, and torch autograd. Recorded rather than deleted,
+because the fact that a limitation existed and was found by inspection -- not
+by a failing test -- is the part worth keeping.
 
 `conv_oracle.py`, `math_oracle.py` and `trainlib_oracle.py` additionally require
 PyTorch and have no NumPy fallback, because torch is the independent engine for

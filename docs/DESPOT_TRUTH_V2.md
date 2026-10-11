@@ -976,3 +976,133 @@ mirrors, so content invariants, not digests).
   requirements gain `torch` + `libcurl/zlib`; install/ABI scope clarified
   (headers-only checks, never `$PREFIX`); version `1.2.0` == `V1.2RC2` dev
   mapping stated; `temp/despot-v9/` is the V9 scratch (repo `temp/` generated).
+
+## 21. Despot audit V10 (2026-10-11) — the substrate measured against a source that never executes Lancius
+
+V9 proved the *library* against NumPy and torch. That is still a comparison
+between two floating-point programs: both can share a wrong assumption about
+what the hardware and the C library actually do. V10 closes that with
+`make check-physics`, a gate whose second arm cannot be wrong in the same way
+as the first, and with `make bench_kernels`, because every performance
+sentence in this repository was previously unfalsifiable.
+
+### 21.1 The physics gate: two arms that cannot share a bug
+
+`tools/audit/physics_probe.c` is compiled with the project's own flags
+(`-O3 -mavx2 -mfma -fopenmp -std=c11`) and records what *this* machine's CPU
+and C library produce. `tools/audit/physics_oracle.py` re-derives every one of
+those numbers from sources that do not know Lancius exists — IEEE 754-2019
+bit patterns, ISO/IEC 60929 decimal arithmetic (`decimal.exp/ln/sqrt` are
+correctly rounded *by specification*, so they cannot share glibc's rounding
+decisions), Machin's formula for π feeding a Taylor erf, `zlib.crc32` and the
+IEEE 802.3 / ISO 3309 check value, and the papers the equations come from.
+56 checks, 0 failures. python3 stdlib only: no torch, no numpy, no network, so
+it is also the only numerics gate that stays informative on a machine where
+the oracle's torch arms would skip.
+
+**Verified against the source of truth, not against a sibling:**
+
+| Claim | Independent reference | Measured |
+|---|---|---|
+| `DBL_EPSILON` is `0x1.0p-52`, ties-to-even rounds `1+0.5ulp` to `1` | IEEE 754-2019 §4.3 | bits `0x3cb0000000000000`, `1+eps` is the next double |
+| subnormals live (no FTZ/DAZ in MXCSR) | IEEE 754-2019 §3.6 | `2^-1074` observed, flushed flag 0 |
+| libm `exp/tanh/sin/cos/log/sqrt` | decimal reference, 60 dps | worst **0.49 ulp** (all ≤ 1 ulp) |
+| libm `erf` (the engine under GELU) | Taylor series vs decimal π | worst **0.22 ulp** |
+| GELU tanh-approx max deviation from erf-exact | Hendrycks & Gimpel 2016, both formulas recomputed | **4.73236e-04 at \|x\|=2.6989** (comment claims 4.74e-04 — pinned, not rounded up) |
+| `sqrt(2/pi)` literal in `kernel_gelu` | `sqrt(2/π)` in decimal | 0.449 ulp |
+| attention scale `1/sqrt(d)` | Vaswani 2017 | ≤ 0.36 ulp for d ∈ {8..256} |
+| RoPE `1/10000^(2i/d)` | Su et al. 2021, `θ^(-2i/d)` | ≤ 0.42 ulp |
+| no `-ffp-contract` of `a*b+c` into an FMA | the flag set we compile with | contraction **0** at `-O0` and `-O3` — so every bit-identity claim in this repo is not silently depending on a compiler switch |
+| v2 model CRC | `zlib.crc32` over `[48,EOF)` | byte-identical; `"123456789"` → `0xCBF43926` confirms the reference itself |
+
+### 21.2 Two reproducibility defects the gate caught, and one it was built to prevent
+
+1. **Pool oversubscription** (`src/runtime/lancius_threadpool.c`). Kernels
+   carry `#pragma omp parallel for`, and a pool worker is a plain pthread, not
+   an OMP thread — so every worker opened a *full OpenMP team*: 4 workers ×
+   18 threads = 72 OS threads for one matmul node, with wave parallelism
+   stacked on kernel parallelism instead of replacing it. Measured by the
+   probe's thread sampler: 22–23 OS threads mid-run with a 4-thread pool.
+   Fixed by pinning each worker's team to 1 (`omp_set_num_threads(1)` sets
+   only the calling thread's nthreads-var, so the serial path keeps the full
+   team). After: delta = 1 (the sampler). Side effect worth stating: pool
+   execution is now bit-deterministic, because no kernel on a worker can vary
+   its reduction partition with the machine's CPU count. The gate pins the
+   budget (`delta ≤ pool + 2`) so this cannot regress silently.
+2. **The mutation gate could not clean up after itself**
+   (`tools/audit/mutation_test.sh`). A killed run left the injected defect in
+   the source tree — this pass lost time to exactly that, finding an INT8
+   `int64_t sum` → `int32_t sum` still sitting in `lancius_kernels.c` after a
+   killed run. Now `trap`ped on EXIT/INT/TERM/HUP with the original restored.
+   The deeper point is in the failure message: a gate that can leave the tree
+   *more wrong* than it found it is a hazard, not a gate.
+3. **Determinism is now measured, not assumed.** The probe hashes
+   `kernel_matmul` output at 1 and 8 OpenMP threads (bit-identical, bitdiffs
+   0) and hashes a matmul graph executed serially vs on the 4-thread pool
+   (identical). Both go red if either ever stops being true.
+
+### 21.3 FP32 matmul: slower than FP64 in a wider type, and why
+
+`make bench_kernels` reported FP32 at **3.6 GFLOP/s** against FP64's 12. The
+symptom pointed at the loop order, not the accumulator: `kernel_matmul_f32`
+accumulated in `double` (the convention the external oracle pins, so that is
+correct and stays) but walked `b` as `b[k*N + c]` with `c` in the inner loop —
+strided access, no vectorisation, and a double accumulator round-tripping
+through memory. Rewritten as IKJ over a register-blocked column tile of 8:
+same ascending k-order in the same double accumulator, same single rounding to
+float, but `b` read contiguously and the accumulator never leaving registers.
+
+**Bit-identical over 12 shapes** (`1x1x1`, `1x7x3`, `3x5x7`, `16³`, `17x19x23`,
+`64³`, `65x67x71`, `128³`, `256³`, `3x300x3`, `300x3x300`, `2x1024x2` — the
+non-multiples-of-8 cases are the ones that would catch a tile-boundary bug),
+proven by dumping outputs before and after and diffing, then re-proven by the
+unchanged external oracle (46/46 kernels). **3.6 → 11.4 GFLOP/s** on 512³,
+now on par with FP64 as a wider type should be.
+
+### 21.4 Softmax backward: the documented hole is closed
+
+`KNOWN_LIMITATIONS` recorded that `lancius_softmax_bwd` had no external
+oracle and that `softmax_out2.bin` — which looks like a gradient by name — is
+the *shifted forward output* of the invariance probe. The `softmax backward`
+block in `graph_oracle_dump.c` now dumps dy, y and dx for ordinary and
+saturated rows, and `graph_oracle.py` pins `dx = y*(dy - Σ dy·y)` three ways:
+the two structural properties a wrong axis or a missing `dot` subtraction
+breaks (each row of dx sums to 0; adding a constant to dy leaves dx
+unchanged), the closed form, and torch autograd. Graph oracle 37 → 45
+comparisons; total oracle 276 → **284**, still 0 skipped with torch present.
+
+### 21.5 Throughput, measured for the first time
+
+`make bench_kernels` (`examples/bench_kernels.c`): median of 7 timed calls
+after a warm-up that absorbs first-touch, page faults and libgomp team
+creation. FLOP formula printed in the source; thread environment printed
+beside the numbers. On the audit box (18 cores, AVX2+FMA, `-O3`):
+
+| case | shape | median | rate |
+|---|---|---|---|
+| matmul fp64 | 256³ / 512³ / 1024³ | 2.46 / 25.6 / 169 ms | 13.7 / 10.5 / 12.7 GFLOP/s |
+| matmul fp32 | 512³ | 23.5 ms | 11.4 GFLOP/s (was 3.6) |
+| gelu (tanh) | 4M elements | 26.4 ms | 159 Melem/s |
+| layernorm | 4M elements | 4.7 ms | 890 Melem/s |
+| attention (causal) | S=256, H=8, D=64 | 18.4 ms | 9.2 GFLOP/s |
+| graph e2e serial | 256³ matmul node | 3.1 ms | 10.8 GFLOP/s |
+| graph e2e pool=4 | same node | 11.3 ms | 3.0 GFLOP/s |
+
+The last two rows are the honest one: for a *single* node there is no wave
+parallelism to exploit, so the pool is pure overhead (3.6× slower) and the
+serial path wins. The pool earns its keep when a graph has many independent
+nodes in a wave. Saying so with a number is why the harness exists; the rows
+are measurements on one machine and are not targets, not claims about any
+other framework, and not gate members — timing must never be able to turn the
+suite red.
+
+### 21.6 Operational
+
+- `check-physics` wired into `makefile` + `.github/workflows/gate.yml` (six
+  gates per push now, not four — the previous "four gates" sentence in
+  README/STATUS was already stale before this pass).
+- `make clean` gains `audit_v7_hardening` (was missing, so `clean` left a gate
+  binary behind) and the new bench/probe artefacts.
+- `generation_1/` (541 MB of PRM prototype scratch, including a 266 MB weight
+  dump) gitignored: it was showing as untracked work that could never be
+  committed, which is how large binaries end up in history.
