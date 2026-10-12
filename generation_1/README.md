@@ -18,10 +18,19 @@ model-side; no torch, no onnx anywhere in training).
 | `results/dump.log` | Model-dump log. |
 | `MODEL_CARD_GEN1.md` | Numbers + limits. |
 
-The frozen binary itself lives at `temp/gen1-runs/gen1-10M.lancius`
-(83M, 15 nodes, `crc=d2dee26c`, gitignored artifact); `gen1_model.txt`
-here is its portable copy. The trainer is `examples/train_gen1.c`; the
-65-dim gauntlet is `tools/prm/bench_gen1.py`.
+The frozen binary lives at `temp/gen1-runs/gen1-lr002.lancius` (83M, 15 nodes,
+gitignored artefact), with `gen1_model.txt` here as its portable copy. The
+trainer is `examples/train_gen1.c`; the 65-dim gauntlet is
+`tools/prm/bench_gen1.py`.
+
+**The older `gen1-10M.lancius` is still in that directory and is the model the
+docs used to describe.** It is the 2-epoch run and scores overall 0.4474 on the
+big suite against the corrected model's 0.9356 — same architecture, same sweep,
+same master seed, different weights. Both print `65 -> 4096 -> 2560 -> 5`, so the
+architecture does not separate them and nothing in either banner used to say
+which was which. `run_big.py` now refuses to use a default that is not the
+newest `.lancius` in that directory, prints each model's build date, and writes
+the model identity into `results_big/big_summary.txt`.
 
 ## Headline numbers (5-epoch prototype — still not converged)
 

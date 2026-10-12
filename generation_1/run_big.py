@@ -19,10 +19,12 @@ Fully reproducible from the master seed.
 
 USAGE
     python3 generation_1/run_big.py [runs_per_algo] [model] [master_seed] [outdir]
-      defaults: 1000, temp/gen1-runs/gen1-10M.lancius, 20261007, generation_1/results_big
+      defaults: 1000, temp/gen1-runs/gen1-lr002.lancius, 20261007, generation_1/results_big
+      (the default model is refused if a newer .lancius exists in that directory)
 """
 import sys
 import os
+import time
 import random
 from fractions import Fraction as F
 
@@ -159,13 +161,48 @@ def main():
     import bench_gen1 as B
     per_algo = int(sys.argv[1]) if len(sys.argv) > 1 else 1000
     model_path = (sys.argv[2] if len(sys.argv) > 2
-                  else os.path.join(REPO, "temp", "gen1-runs", "gen1-10M.lancius"))
+                  else os.path.join(REPO, "temp", "gen1-runs", "gen1-lr002.lancius"))
     master = int(sys.argv[3]) if len(sys.argv) > 3 else 20261007
     outdir = sys.argv[4] if len(sys.argv) > 4 else os.path.join(HERE, "results_big")
     data_dir = os.path.join(REPO, "data_vec", "v5")
     os.makedirs(outdir, exist_ok=True)
 
     global SKIPPED, MISLABELLED
+
+    # A default path can outlive every model written into it. That is exactly
+    # what happened here: the default named gen1-10M.lancius, left over from the
+    # 2-epoch run, and running the documented command scored THOSE weights at
+    # overall 0.4474 while the corrected model in the same directory scores
+    # 0.9356 on the identical sweep. Nothing in the banner said so, because the
+    # header printed only the architecture, which is 65 -> 4096 -> 2560 -> 5 for
+    # both. The identity of the model is therefore recorded in three places
+    # below: its mtime is printed beside the architecture, a stale default is
+    # refused rather than silently honoured, and the summary file carries the
+    # path so a number can never be detached from the weights that produced it.
+    stale = None
+    if len(sys.argv) <= 2 and os.path.isdir(os.path.join(REPO, "temp", "gen1-runs")):
+        rdir = os.path.join(REPO, "temp", "gen1-runs")
+        cands = [os.path.join(rdir, f) for f in os.listdir(rdir) if f.endswith(".lancius")]
+        if cands:
+            newest = max(cands, key=os.path.getmtime)
+            if os.path.abspath(newest) != os.path.abspath(model_path):
+                stale = (model_path, newest)
+            elif len(cands) > 1:
+                other = max((c for c in cands if c != newest), key=os.path.getmtime)
+                age = os.path.getmtime(newest) - os.path.getmtime(other)
+                if age > 0:
+                    print(f"note: a newer candidate exists, {os.path.basename(other)} "
+                          f"is {age/86400:.1f} days older; using the default",
+                          flush=True)
+
+    if stale:
+        raise SystemExit(
+            f"The default model {model_path} is not the newest .lancius in its\n"
+            f"directory -- {stale[1]} is newer, and a default that names a\n"
+            f"location rather than a model silently scores whatever happens to be\n"
+            f"there. Pass the model explicitly:\n"
+            f"    python3 generation_1/run_big.py {per_algo} {stale[1]}")
+
     d0 = B.parse_lancius(model_path)
     _nodes = d0["nodes"] if isinstance(d0, dict) and "nodes" in d0 else d0
     _shapes = {tuple(n["shape"][:n["ndim"]]) for n in _nodes if n.get("has_w")}
@@ -173,9 +210,16 @@ def main():
     B.H2G = [s[0] for s in _shapes if len(s) == 2 and s[1] == 5][0]
     m = load_gen1(model_path)
     mu, sd = compute_musd(data_dir)
-    print(f"model: {model_path}  65 -> {B.H1G} -> {B.H2G} -> 5", flush=True)
+    # mtime beside the architecture. Two models of the same shape print an
+    # identical banner, which is how a stale default stayed invisible; the date
+    # is the one field that separates them, so it is printed, not just recorded.
+    _mt = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(model_path)))
+    print(f"model: {model_path}", flush=True)
+    print(f"       built {_mt}  ({os.path.getsize(model_path)} bytes)", flush=True)
+    print(f"arch : 65 -> {B.H1G} -> {B.H2G} -> 5", flush=True)
     print(f"algos: {len(ALL100)}, runs/algo: {per_algo}, master={master}", flush=True)
     assert len(ALL100) == 100, f"want 100 algos, have {len(ALL100)}"
+    MODEL_ID = f"{model_path} built {_mt} ({os.path.getsize(model_path)} bytes)"
 
     sub = random.Random(master)
     # pre-draw every cell's sub-seed, tier and level up front: the whole sweep is
@@ -313,6 +357,7 @@ def main():
         print(f"  {LEVELS[r]:+5.1f}  " + "".join(f"{((po[Yo==r])==c).sum():9d}" for c in range(5)),
               flush=True)
     with open(os.path.join(outdir, "big_summary.txt"), "w") as f:
+        f.write(f"model {MODEL_ID}\n")
         f.write(f"overall {(po==Yo).mean():.4f} per-step {(ps==Ys).mean():.4f} "
                 f"n_overall={len(Yo)} n_step={len(Ys)} skipped={SKIPPED} "
                 f"mislabelled_dropped={MISLABELLED} "
