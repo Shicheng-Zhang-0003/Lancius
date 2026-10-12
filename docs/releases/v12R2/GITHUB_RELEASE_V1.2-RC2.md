@@ -143,11 +143,22 @@ test split, epoch 6 selected on validation (val 0.9978). The suite below is
 untouched by all of this and stands as recorded.
 
 `run_tests.py`: 20 algorithms × 100 parameter sets, cycling all five levels —
-**1869/2000 overall (93.45%)**, **8230/8380 per-step (98.21%)**.
+**1980/2000 overall (99.00%)**, **8301/8351 per-step (99.40%)**.
 
-Per level: `−1` 0.9725, `−0.5` 0.9050, `0` 0.9950, **`+0.5` 0.8075**, `+1`
-0.9925. The dominant error is `+0.5 → +1` in 71 cases, then `−0.5 → +1` in 31 —
-both certify something wrong as true.
+The **1869/2000 (93.45%)** published here was measured on a model no longer at
+the default path: `run_tests.py` defaults to `data_vec/v5/model5.txt`, which
+held an **H=64** model predating the H=96 architecture described above, so the
+command in this file scored a different network than the one it documents —
+965/2000 (48.25%) when last run. Retraining into the canonical path with the
+corrected step and metric gives the figures above. See
+`docs/DESPOT_TRUTH_V2.md` §18.6.2 and §18.7 for both the old and the current
+numbers side by side.
+
+Per level: `−1` 1.000, `−0.5` 0.995, `0` 1.000, **`+0.5` 0.980**, `+1` 0.995.
+The 20 misses are concentrated in `euclid_gcd` and `mod_pow_fast`, whose
+variable-length derivations dilute a single-step defect so `frac_exact` barely
+moves — an aggregation artefact in the scorer, not a failure of the model, and
+every fixed-step-length algorithm is at 100%.
 
 ## `.lancius` export
 

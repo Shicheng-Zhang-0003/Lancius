@@ -1,5 +1,93 @@
 # Lancius Changelog
 
+## Despot audit V10.2 (2026-10-11) — the sweep was scheduled, not sampled, and the default path scored the wrong network
+
+The `run_big.py` harness ignored its own name in three places. The level was
+`LEVELS[k % 5]`, so all 100 algorithms received the same level at the same run
+index; the DETAIL walkthrough passed a literal `1.0`, exercising only the
+defect-free case; and the `big` tier scaled every parameter by exactly `7`, so
+scale invariance was tested at one magnitude and a model that had memorised that
+one magnitude looked sane. All three are draws now, still reproducible from the
+master seed, with the drawn distributions printed and persisted so the balance
+is evidence rather than an assumption.
+
+- Randomization: `--lr` added to `train_gen1.c` (the corrected convention makes
+  the shipped `LR=0.05` 1600x hotter and it diverges, so re-tuning needs a flag
+  rather than three rebuilds), `BIG_MULTIPLIERS = 2..20` drawn per cell inside
+  the retry loop so a retry resamples the scale too, and per-cell levels drawn
+  from the master stream ahead of the seeds so the sweep stays a pure function of
+  the master seed. A randomization that smuggles in bias is worse than the
+  schedule it replaces, so it was checked rather than assumed: across three
+  master seeds, cycling and randomized agree within sampling error with both
+  signs present (deltas +0.0084, -0.0115, +0.0094 against a paired SE of ~0.011),
+  and the set of unbuildable algorithms is identical under both (12/100), with the
+  drawn multiplier skipping *less* often than a fixed 7 (178 vs 221 of 12000 cells)
+  because a smaller multiplier stays in range more often.
+- Math: the defect injector cannot express every level for every derivation, and
+  the cells it could not express were entering the tally mislabeled. `+0.5` needs
+  a working step that is not the final one and `0.0` needs a suffix to omit, so a
+  single canonical step has neither: drawing `+0.5` corrupts the only step — the
+  final answer, indistinguishable from `-0.5` — and drawing `0.0` omits nothing,
+  indistinguishable from `+1.0`. Eight algorithms are single-step for every draw
+  (`cross_2d`, `hadamard_trace`, `diag_trace`, `euler_phi`, `legendre_euler`,
+  `divisor_count`, `fermat_little`, `wilson_check`) and three more sometimes;
+  over 1500 cells that is **3.5% of the sweep carrying a label its own
+  measurements could not support**, capping the accuracy *any* verifier could
+  reach at 0.9647 by harness rather than by model. `level_realized()` re-derives
+  the intended level from the produced values by exact Fraction comparison and
+  drops the mismatches, counting them as `dropped unrealizable levels`. This is
+  the same failure mode as the 2-step OOD hole BIG_SUITE recorded, one step worse
+  in degree: a 2-step derivation is out of distribution but honestly labelled.
+- Math: two fixed pools widened in `tools/prm/verifier5.py` — `_bump`'s four-constant
+  pool for the `x == 0` case, and the fatal branch's fixed `{+3, -3, +7}` on every
+  structure key. A model could learn "structure wrong means the parameters moved
+  by 3, 7 or -3" and a sweep could not distinguish that from "structure wrong
+  means the parameters moved". Both now draw a signed offset within a stated
+  band, floors and ceilings preserved. `verifier5.py` is shared with
+  `run_tests.py`, `report_steps.py` and `bench_gen1.py`, so those numbers move;
+  the injector's contract is re-verified on 1200 cells across all 100 algorithms
+  rather than asserted.
+- Operational: `.gitignore` excluded `generation_1/` wholesale to keep the 266MB
+  weight dump out of history, which also excluded the Python harnesses generating
+  and scoring it — `run_big.py`, `run_tests_gen1.py`, `algos_gen1_ext.py`,
+  `algos_gen1_big.py`, `gen_data_gen1.py`, `MODEL_CARD_GEN1.md` and
+  `bench_gen1.py` were absent from every commit while the dump was the entire
+  reason the rule existed. The audit trail for a harness disappeared along with
+  its scratch space; the rule now names the artefacts and leaves the source.
+- Measurement: `tools/prm/run_tests.py` defaulted to `data_vec/v5/model5.txt`,
+  which held an **H=64** model predating the H=96 architecture the docs describe,
+  so the default scored a different network than the one it documents — 965/2000
+  (48.25%). Pointing at the current model gives 1998/2000 (99.90%); retraining
+  into the canonical path gives the 1980/2000 (99.00%) and 8301/8351 (99.40%) the
+  default now yields. A path can outlive every model ever written into it, and the
+  thing being measured quietly changes.
+- Measurement: retraction. BIG_SUITE recorded "2-step derivations are OOD for the
+  whole stack" — clean-`+1` recall 0.000 (0/60) on `shadow_rates`,
+  `lhopital_poly` and `monotonic_quad`, all 2-step algorithms in a corpus whose
+  minimum is 3, with the fix said to belong in the corpus. The premise was right
+  and the conclusion wrong: under the corrected model all three score **1.0000**
+  on 1000 runs each, as does `taylor_linear`, also 2 steps. 0.000 recall was what
+  undertraining looks like, not what a distribution hole looks like, and the
+  step-size fix — not a corpus change — moved them from 0.020–0.054 to 1.0000.
+- Measurement: the fully randomized suite on the corrected model
+  (`temp/gen1-runs/gen1-lr002.lancius`, exported by the trainer itself) gives
+  **overall exact 0.9356** (86,087/92,015) and **per-step 0.8979**
+  (258,084/287,446) over 92,015 valid rows, against 0.4575 / 0.6750 for the
+  2-epoch v1 model on the same suite. Levels `-1 0.9138 / -0.5 0.8660 / 0 0.9969
+  / +0.5 0.9231 / +1 0.9850`; tiers base 0.9502 / big 0.9218 / neg 0.9342.
+  Drawing the scale multiplier makes the `big` tier trail `base` by 2.8 points,
+  which the pinned `x7` sweep reported as flat — a measurement that was an
+  artifact of the single magnification it tested. What is weak now
+  (`sum_odd 0.6657`, `partial_fractions 0.6680`, `inverse_2x2 0.6970`) is not
+  separated by step count: `inverse_2x2` has 3 steps, well inside the training
+  range, and two of the weak have the same count as three now scoring 1.0000.
+
+Not done: `run_tests.py:284` and `run_tests_gen1.py:108` still select levels by
+`% len(LEVELS)`. Same cycling schedule removed here, deliberately not changed,
+because the request named `run_big.py` and because changing them invalidates
+figures in three documents at once — the numbers move and the new ones have not
+been baselined.
+
 ## Despot audit V10.1 (2026-10-11) — why the model accuracies were low
 
 Every `examples/` trainer was run to completion and its reported accuracy

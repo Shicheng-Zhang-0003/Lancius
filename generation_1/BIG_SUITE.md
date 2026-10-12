@@ -52,23 +52,61 @@ mislabelled.
 
 ## Headlines (chance 0.20)
 
-- Overall exact **0.4575** (43,170/94,354); per-step **0.6750** (189,664/280,967).
-- Levels: `-1 0.57 / -0.5 0.24 / 0 0.75 / +0.5 0.28 / +1 0.45`.
-- Tiers: base 0.467 / big 0.439 / neg 0.467 (flat: scale and sign generalize).
-- Best: `cube_of_binomial 0.855`, `sum_fourth_powers 0.852`, `geometric_series 0.816`.
-- Worst: `shadow_rates 0.020`, `lhopital_poly 0.040`, `monotonic_quad 0.054`.
+Measured on the **corrected** model (`temp/gen1-runs/gen1-lr002.lancius`, the
+`LR=0.002` run of §18.6.1, 5 epochs, epoch 4 selected on validation at 0.9935)
+under the fully randomized sweep: 1000 runs per algorithm, master seed 20261007,
+92,015 valid overall rows and 287,446 step rows after 4,513 validity skips and
+3,472 dropped unrealizable levels.
 
-## Finding: 2-step derivations are OOD for the whole stack
+- Overall exact **0.9356** (86,087/92,015); per-step **0.8979**
+  (258,084/287,446). The old figures here were **0.4575 / 0.6750** on the
+  2-epoch Gen1-10M v1.
+- Levels: `-1 0.9138 / -0.5 0.8660 / 0 0.9969 / +0.5 0.9231 / +1 0.9850`.
+  `-0.5` — "probably false, something right in there" — is now the weakest
+  level by 4.8 points, and it was also the weakest before, so the ordering is
+  the model's rather than the schedule's.
+- Tiers: base **0.9502** / big **0.9218** / neg **0.9342**. The `big` tier is
+  now 2.8 points below `base`, where the old sweep showed it flat (0.439 vs
+  0.467) — but that flatness was measured with the scale multiplier pinned at
+  `x7`, a single magnitude. Drawn over 2..20, each magnitude appearing
+  1,488–2,211 times, scale generalizes *less well than a fixed magnification
+  suggested*, which is the point of drawing it.
+- Worst: `sum_odd 0.6657`, `partial_fractions 0.6680`, `inverse_2x2 0.6970`,
+  `inflection_cubic 0.7000`, `nilpotent_sq 0.7010`. Best: 32 algorithms at
+  exactly `1.0000`, including all of `monotonic_quad`, `shadow_rates`,
+  `collatz_5`, `triangular_mod` and `square_part`.
 
-The three worst algos (plus `taylor_linear`, `nilpotent_sq`) all have exactly
-2 canonical steps. Clean-+1 recall on them is **0.000 (0/60)** under BOTH the
-2-epoch Gen1-10M and the converged 60-epoch H128 (`temp/gen1-runs/shadow-check.log`).
-The base training corpus minimum is 3 steps (`binomial_expand`, `chain_rule`,
-...). So no model trained on it has ever seen a 2-step derivation, and all of
-them map sparse-clean measurement vectors to non-+1 (mostly 0.0: the big
-confusion shows +1-truth -> 0.0-pred 8,126 times).
+The dominant error is `-0.5` true read as `+0.5` predicted, **1,353** cases —
+"probably false" read as "mostly true". This is the opposite of the old card's
+`-0.5 -> +1` and the more benign direction, but the second is still present:
+`+0.5` true read as `-1.0`, **898** cases, and `+0.5` true read as `-0.5`,
+263. Both certify a working derivation as false.
 
-This is a distribution hole, not a bug: measurements are correct
-(exact=1, struct_ok=1), the scorer just never learned the sparse regime.
-Fix belongs in the corpus (2-step and 1-step derivations as first-class rows),
-not in H. Recorded here so Gen2 training includes them.
+## Retracted: "2-step derivations are OOD for the whole stack"
+
+This section used to record that the three worst algorithms (`shadow_rates`,
+`lhopital_poly`, `monotonic_quad`) all have exactly 2 canonical steps, that
+clean-`+1` recall on them was **0.000 (0/60)** under both the 2-epoch Gen1-10M
+and the converged 60-epoch H128, and that no model trained on the base corpus
+had ever seen a 2-step derivation — a distribution hole whose fix belonged in
+the corpus rather than in H.
+
+The premise was right and the conclusion was wrong. `shadow_rates`,
+`lhopital_poly` and `monotonic_quad` do all have 2 canonical steps, and the base
+training corpus minimum is 3, so they are outside the training distribution.
+But under the corrected model (fixed step size, epoch 4 of 5) all three now
+score **1.0000** on 1000 runs each, and so does `taylor_linear`, also 2 steps.
+A regime the training data never shows is a regime the model can still
+generalize to; 0.000 recall was what *undertraining* looked like, not what a
+distribution hole looks like. The "fix belongs in the corpus" recommendation
+was a misdiagnosis, and the corrected step size — not a corpus change — is what
+moved those three from 0.020–0.054 to 1.0000.
+
+What is actually weak now, and what it is not: `sum_odd 0.6657` (2–5 steps),
+`partial_fractions 0.6680` (4 steps), `inverse_2x2 0.6970` (3 steps),
+`inflection_cubic 0.7000` (2), `nilpotent_sq 0.7010` (2). `inverse_2x2` and
+`partial_fractions` have 3–4 steps, well inside the training range, and two of
+the six have the same step count as three algorithms now scoring 1.0000 — so
+step count does not separate the weak from the strong. The binding variable is
+something else and is not yet identified; recorded as an open question rather
+than re-diagnosed from the same evidence that produced the first wrong answer.

@@ -25,16 +25,23 @@ here is its portable copy. The trainer is `examples/train_gen1.c`; the
 
 ## Headline numbers (5-epoch prototype — still not converged)
 
-- Held-out test split (12287 rows; 2366 overall + 9921 step): overall exact
-  **`0.8960`** (2120/2366), per-step exact **`0.9694`** (9617/9921), chance `0.20`.
-- macro-F1 `0.8941` overall / `0.9275` per-step, MAE `0.0949`, kappa `0.8694`
-  / `0.9542` per-step. The macro-F1 figures are **recomputed independently**:
-  `train_gen1.c` printed 0.6172 / 0.6329 for these very confusion matrices
-  because `fn` was accumulated without the `if(r!=c)` guard that `fp` had, so
-  recall read `tp/(tp+rowsum)` = 0.5 on a near-perfect model. Accuracy, MAE and
-  kappa were never affected by it.
-- Per-class exact (overall): `-1 0.958`, `-0.5 0.868`, `0 0.998`, `+0.5 0.733`,
-  `+1 0.917` — the `+0.5` class is where verification actually fails.
+- Held-out test split (12287 rows; 2366 overall + 9921 step), corrected model:
+  overall exact **`0.9903`** (2344/2366), per-step **`0.9980`** (9903/9921),
+  chance `0.20`. The `0.8960` / `0.9694` in the same columns is the same 5-epoch
+  run with the step-size defect still present.
+- `run_big.py`, fully randomized (1000 runs/algo, master 20261007): overall
+  exact **`0.9356`** (86,087/92,015), per-step **`0.8979`** (258,084/287,446).
+- macro-F1 **`0.9903`** overall / `0.9948` per-step, MAE `0.0082` / `0.0017`,
+  kappa `0.9878` / `0.9970` — recomputed independently, because
+  `train_gen1.c` printed 0.6623 / 0.6643 for these very confusion matrices
+  (`fn` was accumulated without the `if(r!=c)` guard that `fp` had, so recall
+  read `tp/(tp+rowsum)` = 0.5 on a near-perfect model). Accuracy, MAE and
+  kappa were never affected by that defect.
+- Per-class exact (overall, n=2366): `-1 1.000`, `-0.5 0.969`, `0 1.000`,
+  `+0.5 0.974`, `+1 0.987`. Under the full randomized suite (92,015 rows) the
+  weakest level is `-0.5` at 0.8660 and the weakest class moves again, so
+  single-model per-class figures and suite-level figures are not
+  interchangeable — see `MODEL_CARD_GEN1.md` for both.
 - Dominant error **`+0.5 -> +1` (84/476)**: "mostly true, something wrong"
   certified as "plain true". Secondary: `+0.5 -> -0.5` 36, `+1 -> 0` 28.
 - Worst algos are the long-iteration chains: `fibonacci_iter 0.71`,
@@ -54,6 +61,8 @@ to the class prior plus a bias term, and it understates the architecture by
 This trainer also carried the `lr_eff = LR * 2/pe` bug fixed across all three
 trainers (`docs/DESPOT_TRUTH_V2.md` §18.2.1): the graph's MSE VJP already
 contains `2/pe`, so folding it into the step again divided by `pe` twice —
-**1600x** too small at rows=256, NCLASS=5. The 0.8960 above was measured with
-that defect present, so it is a lower bound. `--lr` was added to the trainer
-for re-tuning under the corrected convention.
+**1600x** too small at rows=256, NCLASS=5. The `0.9903` / `0.9980` headline
+above is the same 5-epoch run with the defect fixed; the `0.8960` / `0.9694` it
+replaced is the same run with the defect present. `--lr` was added for re-tuning
+under the corrected convention, where the shipped `LR=0.05` becomes 1600x
+hotter and diverges (val exact 0.1014 at LR=0.01).

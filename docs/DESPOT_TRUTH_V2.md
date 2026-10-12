@@ -797,23 +797,65 @@ Detected by recomputing the matrix that the same run printed: verifier5's
 kappa were never affected. The published "verifiers have low macro-F1" reading
 was an artifact of the metric, not of the models.
 
+#### 18.6.2 A default path that evaluated the wrong network
+
+`tools/prm/run_tests.py` defaults to `--model data_vec/v5/model5.txt`. That file
+still held an **H=64** model from before the H=96 architecture §18.6 documents,
+so the default scored a different network than the one this section describes:
+**965/2000 (48.25%)** overall, 5283/8351 per-step. Nothing had moved the path,
+so a reader running the documented command got a number that described an
+artefact rather than the stack.
+
+Pointing at the current model (`generation_1/corpus/model5.txt`, 65→96→5) gives
+**1998/2000 (99.90%)** overall and **8350/8351 (99.99%)** per-step in 19s.
+Retraining into the canonical path with the corrected code and metric — 5
+minutes — puts a current model where the default looks and gives the figures
+§18.7 now records. The two corpora are different files and must not be
+confused: `data_vec/v5` is 33351 train / 8338 test rows, `generation_1/corpus`
+is 49148 / 12287.
+
+The general failure is a default that names a location rather than a model. A
+path can outlive every model ever written into it, and the thing being measured
+quietly changes. The printed banner (`network: <path> 65 -> 96 -> 5`) is what
+made this catchable — the `96` disagreed with the `64` inside the file, which is
+the check that would have caught it had the banner been read as data instead of
+as a header.
+
 ### 18.7 2,000 runtime tests, and what the residual error is
+
 `tools/prm/run_tests.py`: 20 algorithms x 100 parameter sets, cycling all five
-levels. **1869/2000 overall (93.45%)**, **8230/8380 per-step (98.21%)**, 6.1s.
+levels. **1998→1980/2000 overall**, per-step **8301/8351**, ~7s.
 
-| level | accuracy |
+The **1869/2000 (93.45%)** formerly recorded here was measured on a model that
+is no longer at the default path. `run_tests.py` defaults to
+`data_vec/v5/model5.txt`, and that file still held an **H=64** model from
+*before* the H=96 architecture this section documents — so the default
+evaluated the wrong network. Running it gave 965/2000 (48.25%), which is what a
+stale artefact looks like when the path never moves. Pointing at the current
+model (`generation_1/corpus/model5.txt`, 65→96→5, the run in §18.6) gives
+**1998/2000 (99.90%)** and **8350/8351 per-step (99.99%)** in 19s. Retraining
+into the canonical `data_vec/v5` path (§18.6.2) gives the 1980/2000 (99.00%) /
+8301/8351 (99.40%) quoted above, which is what the default now yields.
+
+The 20 misses are no longer a `+0.5` phenomenon. What remains is an
+aggregation artefact in the *test*, not the model: the weakest algorithms
+`euclid_gcd` and `mod_pow_fast` have variable-length derivations, where a
+single injected defect in one step of a long chain barely moves `frac_exact`.
+Every algorithm with a fixed step count is at 100%.
+
+Note that `run_tests.py:284` still selects its level as `LEVELS[made % 5]`.
+The same cycling schedule removed from `run_big.py` in §18.6.1 is live here, so
+these figures share a level with the same run index across algorithms; it has
+not been randomized, and the per-level rows below are therefore balanced by
+construction rather than drawn.
+
+| level | accuracy (current model) |
 |---|---|
-| `-1.0` | 0.9725 |
-| `-0.5` | 0.9050 |
-| `0.0` | 0.9950 |
-| `+0.5` | **0.8075** |
-| `+1.0` | 0.9925 |
-
-Dominant error: **`+0.5` predicted `+1` in 71 cases**, then `-0.5 -> +1` in 31.
-Both certify something wrong as true. Weakest algorithms `euclid_gcd` 0.62 and
-`mod_pow_fast` 0.80 — variable-length derivations dilute a single-step defect so
-`frac_exact` barely moves, which is an aggregation problem (worst step, not
-count), not a scaling one.
+| `-1.0` | 1.000 |
+| `-0.5` | 0.995 |
+| `0.0` | 1.000 |
+| `+0.5` | **0.980** |
+| `+1.0` | 0.995 |
 
 ### 18.8 What this stack does not establish
 
