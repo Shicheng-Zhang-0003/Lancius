@@ -1,5 +1,41 @@
 # Lancius Changelog
 
+## Despot audit V10.3 (2026-10-11) — the default model scored the wrong weights, and the banner could not say so
+
+Two models share `temp/gen1-runs/`: `gen1-lr002.lancius`, built 2026-10-11 by the
+corrected `LR=0.002` run, and `gen1-10M.lancius`, built 2026-10-09 by the 2-epoch
+run. Both are `65 -> 4096 -> 2560 -> 5`, so the one line `run_big.py` printed
+about its model — the architecture — was identical for both, and the script's
+default named the older one. Running `python3 generation_1/run_big.py` with no
+model argument therefore measured the 2-epoch weights and wrote **overall 0.4474 /
+per-step 0.6537** into `results_big/big_summary.txt`, against **0.9356 / 0.8979**
+for the corrected model on the identical sweep, master seed 20261007 and the same
+92,015 valid rows. A reader comparing the summary against `BIG_SUITE.md` would
+find two numbers a factor of two apart and no way to tell which weights produced
+either.
+
+- Programming: the banner prints the model's **build date and size** beside its
+  architecture, and the model's full identity is written as the first line of
+  `big_summary.txt`, so a number can no longer be detached from the weights that
+  produced it. Two models of one shape were indistinguishable before, and the
+  date is the only field that separates them.
+- Programming: the script now **refuses a default that is not the newest
+  `.lancius` in its directory**, with the explicit replacement command in the
+  message — the failure mode is a default naming a location rather than a model,
+  so the location must not be able to silently substitute a different one. An
+  explicit path is always honoured (an old model is a legitimate thing to
+  compare against); only the *default* is checked, and only against mtime.
+- This is the same defect as §18.6.2, in a different directory: `run_tests.py`
+  defaulted to a stale `model5.txt` and scored an H=64 network at 48% while the
+  H=96 one scored 99%. Two harnesses, two stale defaults, one root cause — a
+  path is not a reference to a model.
+- Verified: defaults now score 0.9406 at 20 runs/algo and 0.9356 at 1000
+  (identical sweep, identical seed — the regenerated summary reproduces the
+  earlier run digit for digit); the explicit stale path still runs, at 0.4449,
+  and now identifies itself as built 2026-10-09; and the guard was proven by
+  pointing a copy of the script at the old default, which refuses and names the
+  newest candidate.
+
 ## Despot audit V10.2 (2026-10-11) — the sweep was scheduled, not sampled, and the default path scored the wrong network
 
 The `run_big.py` harness ignored its own name in three places. The level was
