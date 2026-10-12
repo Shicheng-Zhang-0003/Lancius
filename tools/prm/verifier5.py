@@ -54,7 +54,15 @@ def _bump(x, rng, rel=None):
     a direct source of the model calling "probably false" "plain true". Enforce
     a minimum absolute change."""
     if x == 0:
-        return F(rng.choice([1, -1, 2, 3]), 1)
+        # x == 0 has no magnitude to scale, so the perturbation has to be
+        # absolute. The pool used to be the four constants [1, -1, 2, 3] --
+        # fine as a defect, but a model that had seen enough zero-valued steps
+        # could learn "a zero step changed by 1, 2 or 3" instead of learning to
+        # detect a changed zero step at all, and a sweep using only this pool
+        # could not tell the difference. Drawn instead, with a floor that keeps
+        # it a detectable change and a ceiling that keeps the relative error in
+        # the same band as the nonzero path above.
+        return F(rng.choice([1, -1]) * rng.randint(1, 9), 1)
     # minimum RELATIVE change of 5%. Without a floor, "a step is slightly off"
     # ranged over a continuum from 1% to 30% and the +0.5/+1 boundary became an
     # arbitrary judgement call rather than a defined one, which capped +0.5
@@ -125,7 +133,17 @@ def make_candidate(algo, params, steps, rng, level):
     elif level == -1.0:
         kind = "fatal"
         for k in algo.structure_keys:
-            struct[k] = struct[k] + F(rng.choice([3, -3, 7]))
+            # Structure is compared by EXACT Fraction inequality in check(), so
+            # any nonzero offset is a detected corruption; the magnitude decides
+            # how far off the model is told the equation's defining parameters
+            # are. The offset used to be a fixed {+3, -3, +7}, which is a single
+            # loudness at a single bias -- a model could learn "structure wrong
+            # means the parameters moved by 3, 7 or -3" and a sweep could not
+            # distinguish that from "structure wrong means the parameters moved".
+            # Signed random offset within a stated band instead: |delta| >= 1 so
+            # it is never a no-op, <= 9 so it stays a comparable "way off" and
+            # does not quietly become a different regime from a different sign.
+            struct[k] = struct[k] + F(rng.choice([1, -1]) * rng.randint(1, 9), 1)
         for i in range(len(rep)):
             rep[i] = _bump(rep[i], rng, None)
 
