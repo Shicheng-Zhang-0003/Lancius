@@ -24,6 +24,28 @@ Per-algorithm held-out accuracy is at or near 1.0 for every algorithm except
 long-chain cases are the only remaining structure. The two defects below were
 costing 9.4 accuracy points overall and 28.6 on macro-F1.
 
+### Under full randomization (`run_big.py`, 1000 runs/algo, master 20261007)
+
+The held-out split above is a fixed test set; the big suite re-scores the model
+across 100,000 freshly generated derivations with every cell's level, tier and
+scale multiplier drawn independently, so nothing is aligned by run index.
+92,015 valid overall rows and 287,446 step rows survive 4,513 validity skips and
+3,472 dropped unrealizable levels.
+
+| slice | value |
+|---|---|
+| overall exact | **0.9356** (86,087/92,015) |
+| per-step exact | **0.8979** (258,084/287,446) |
+| `-1.0` / `-0.5` / `0.0` / `+0.5` / `+1.0` | 0.9138 / 0.8660 / 0.9969 / 0.9231 / 0.9850 |
+| base / big / neg tier | 0.9502 / 0.9218 / 0.9342 |
+
+The same suite on the 2-epoch v1 model gave 0.4575 overall. `-0.5` ("probably
+false, something right in there") is the weakest level at 0.8660 and its
+dominant error is `-0.5` true read as `+0.5` predicted, 1,353 cases — the
+opposite direction from the old card's `-0.5 -> +1`. The `big` tier now trails
+`base` by 2.8 points, which the old sweep could not see because its scale
+multiplier was pinned at `x7` instead of drawn over 2..20.
+
 Per-algorithm overall accuracy: 30 of 32 algorithms at or above 0.78, with
 `chain_rule`, `dot_product_3d`, `power_rule`, `perfect_square_trinomial`,
 `sum_of_cubes`, `sum_of_squares`, `difference_of_cubes` and `horner_eval` all
