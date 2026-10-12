@@ -50,11 +50,31 @@ the same failure mode as the 2-step hole below, one step worse in degree: a
 2-step derivation is OOD but honestly labelled, whereas these were OOD *and*
 mislabelled.
 
+## Two models share a directory, and the older one scores 0.4474
+
+`temp/gen1-runs/` holds both `gen1-lr002.lancius` (the corrected model, built
+2026-10-11) and `gen1-10M.lancius` (the 2-epoch run, built 2026-10-09). They are
+the same architecture — both print `65 -> 4096 -> 2560 -> 5` — so the banner that
+printed only the architecture could not tell them apart, and `run_big.py`'s
+default named the older one. Running the documented command with no model
+argument therefore scored the 2-epoch weights and reported **overall 0.4474 /
+per-step 0.6537**, versus **0.9356 / 0.8979** for the corrected model on the
+identical sweep, master seed and 92,015 rows. The 0.4474 in the summary below
+`results_big/big_summary.txt` was that result and is the reason the accuracies
+looked "a little bad" while the same lines in this file read 0.9356.
+
+Nothing about the harness was wrong. `run_big.py` now refuses a default that is
+not the newest `.lancius` in its directory, prints each model's build date beside
+its architecture, and writes the model identity into the summary file so a number
+can never be detached from the weights that produced it. This is the same defect
+as `docs/DESPOT_TRUTH_V2.md` §18.6.2, in a different directory: a path that
+outlived the model written into it.
+
 ## Headlines (chance 0.20)
 
-Measured on the **corrected** model (`temp/gen1-runs/gen1-lr002.lancius`, the
-`LR=0.002` run of §18.6.1, 5 epochs, epoch 4 selected on validation at 0.9935)
-under the fully randomized sweep: 1000 runs per algorithm, master seed 20261007,
+Measured on the **corrected** model — `temp/gen1-runs/gen1-lr002.lancius`, built
+2026-10-11, the `LR=0.002` run of §18.6.1, 5 epochs, epoch 4 selected on
+validation at 0.9935 — under the fully randomized sweep: 1000 runs per algorithm, master seed 20261007,
 92,015 valid overall rows and 287,446 step rows after 4,513 validity skips and
 3,472 dropped unrealizable levels.
 
