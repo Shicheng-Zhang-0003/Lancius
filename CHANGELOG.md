@@ -1,5 +1,73 @@
 # Lancius Changelog
 
+## V1.2RC3 (2026-10-19) — training-framework repair: one canonical trainer, the debt of the example driver lineage retired
+
+The framework library (`src/train/lancius_train.c`) grew exact optimizers,
+global-norm clipping and a warmup+cosine schedule, but the drivers that actually
+trained the verifiers (`train_verifier5.c`, `train_gen1.c`, 731/721-line
+copy-forks) predated all of it: each rebuilt its graph from scratch for every
+batch, hand-rolled an MSE-on-logits objective with an `lr_eff = LR*NCLASS/2`
+step-size fudge (correct step form, wrong gradient — softmax Jacobian missing),
+shuffled each epoch with a partner-range permutation that is not Fisher-Yates,
+printed `-` for the loss it never read, never clipped, never scheduled LR,
+selected on overall-exact only, froze `--lancius-rows 256` into every export,
+and stored nothing a crashed run could resume from.
+
+`examples/train_verifier.c` supersedes the lineage as a single parameterized
+trainer (any FEAT/NCLASS/H1/H2 from `corpus.hdr`):
+
+- the framework's own fused softmax cross-entropy (`lancius_cross_entropy`,
+  exact VJP `(softmax-y)/R`); loss read every step; gradient-checked against
+  central differences to <1e-7 at both 512x256 and 4096x2560;
+- a persistent training graph — built once, INPUT buffers bound by pointer
+  (the autodiff mirror shares `runtime_data`), so a step is one memcpy-into-
+  buffers plus one fused fwd+bwd schedule execute, no per-batch graph build,
+  no double forward;
+- Fisher-Yates epoch shuffle; per-step `lancius_lr_warmup_cosine` (resume
+  stretches the schedule over the remaining plan instead of restarting);
+- `lancius_clip_global_norm` on every step, fail-loud guards on batch data,
+  grads and weights (NaN dies with the index, not two epochs later);
+- selection on the deployed metric — mean of val overall- and per-step-exact,
+  MAE tiebreak — twice per epoch (`--eval-frac`); checkpoints `best.bin`/
+  `last.bin` carry weights, momentum, mu/sd, rng state and step; `--resume`
+  continues step numbering and the best-score gate;
+- export defaults to `--lancius-rows 1` (row-agnostic deployment; the frozen
+  256-row contract was a parent-tracking artifact of the old bus), with
+  round-trip verification for any saved batch size;
+- loader validates bin file sizes against `corpus.hdr` (emitted by
+  `gen_data_gen1.py` alongside the bins; `data_vec/v5/corpus.hdr` added) and
+  isfinite-scans features at load — poison rows are rejected with row indices
+  before training starts.
+
+`make train_verifier` builds it; `make clean` knows it;
+`KNOWN_LIMITATIONS.md` marks the MSE lineage resolved/superseded (the legacy
+drivers stay in `examples/` as heritage — the gen-1 artifacts they produced
+reference their exact conventions); `tools/prm/sweep_configs.py` now drives
+the unified trainer (H1=H swept, H2=64 pinned) instead of a hand-built copy
+of `train_verifier5.c`, verified by a 9-configuration wire test (H x 3 seeds,
+10 epochs): 9/9 trained, exported and round-trip exact, seed spread
+test-exact 0.9970 ± 0.0012 — at width 64 the new objective is no longer
+fragile, where the old toolchain saw 48% vs 99% between H=64 and H=96
+defaults.
+
+Release: tagged `V1.2-RC3`; notes in
+`docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.md`; the trained models ship
+as GitHub release assets (`*.lancius` stays gitignored, so the release page
+is the only place a model binary can be downloaded from).
+
+Smoke results on `data_vec/v5` (20-algo corpus): 512x256 for two epochs
+reaches val-exact 1.0000 / per-step 1.0000, held-out overall 0.9981
+(n=1574 overall rows, 6764 step rows), export round-trip 3.6e-15 at batch
+row-count 1; resume picks up step 111 / best 0.9974 and anneals
+`0.0088 -> 0.000524` across the resumed epoch. Full-scale 4096x2560x5ep:
+555 steps in ~40 min, val-exact 1.0000 from step 220 on, held-out overall
+0.9968 / per-step 0.9999 / kappa 0.9960, export round-trip 7.1e-15 at row
+count 1; gradients on an objective that actually reads its loss stop
+needing the `lr_eff` rescue: the same LR that was tuned around a
+double-scaled MSE step anneals monotonically `0.0494 -> 0.0005` with no
+divergence events across the run. The legacy `--lancius-rows 256` contract
+also round-trips (5.3e-15 at H=128).
+
 ## Despot audit V10.3 (2026-10-11) — the default model scored the wrong weights, and the banner could not say so
 
 Two models share `temp/gen1-runs/`: `gen1-lr002.lancius`, built 2026-10-11 by the

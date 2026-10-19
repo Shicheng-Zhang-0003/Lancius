@@ -6,7 +6,7 @@
 > proved correct — pipeline stage by stage, the operation set and its
 > conventions, and the verification discipline.
 > **Internal milestone:** `v12R2`
-> **Public release:** `V1.2RC2`
+> **Public release:** `V1.2RC3`
 > **Status:** Development milestone (R2 — second v12 milestone)
 
 Lancius is a lightweight C machine-learning compiler and runtime focused on
@@ -32,7 +32,7 @@ total).
 
 | Internal Version | Public Version       | Release Type      |
 |------------------|----------------------|-------------------|
-| `v12R2`          | `V1.2RC2`      | Development Milestone    |
+| `v12R2`          | `V1.2RC3`      | Development Milestone    |
 
 Lancius uses the following internal milestone progression:
 
@@ -618,6 +618,9 @@ Each document owns one thing; start here, then follow pointers:
 - `docs/releases/v12R1/GITHUB_RELEASE_v12R1.md` — v12R1 release notes
 - `docs/releases/v11S/GITHUB_RELEASE_v11S.md` — v11S release notes
 - `docs/releases/v10S/RELEASE_NOTES_v10S.md` — historical v10S notes
+- `docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.md` — current release notes
+  (trained models are attached to the GitHub release page — `*.lancius` is
+  gitignored, so release assets are the only model distribution)
 - `docs/v11A3_SCOPE.md`, `docs/v11A2_SCOPE.md`, `docs/v11A1_SCOPE.md` — frozen history
 - `docs/v11A1_MODEL_FORMAT.md`, `docs/v11A1_OPS.md` — historical direction
   (bannered as superseded; do not quote for v12R1 behavior)
@@ -648,7 +651,7 @@ For public GitHub releases, internal milestones are mapped as follows:
 | `v11A3`            | `V1.1-AlphaRC3`      | Freeze, hardening, and bug hunting   |
 | `v11S`             | `V1.1`               | Stable release                       |
 | `v12R1`            | `V1.2RC1`            | Previous development milestone: hardening plus numerical correctness |
-| `v12R2`            | `V1.2RC2`            | Current development milestone (R2 phase: mute mathematician learns) |
+| `v12R2`            | `V1.2RC3`            | Current development milestone (R2 phase: mute mathematician learns) |
 
 ### Current Milestone
 
