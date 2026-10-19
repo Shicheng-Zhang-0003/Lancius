@@ -2,7 +2,7 @@
 
 Current internal milestone: **v12R2**
 Previous internal milestone: **v12R1**
-Public equivalent: **V1.2RC2**
+Public equivalent: **V1.2RC3**
 Release line: **12 R2 development**
 
 ## Phase

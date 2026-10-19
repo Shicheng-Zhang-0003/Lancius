@@ -20,8 +20,8 @@ vs tools/prm/verifier5.generate:
     runs unchanged; meta records regimes + edge counts (single-owner: here).
 
 USAGE
-    python3 generation_1/gen_data_gen1.py [n_per_level] [seed] [out_dir]
-      defaults: 2000, 20261007, generation_1/corpus
+    python3 generation_1/I1/gen_data_gen1.py [n_per_level] [seed] [out_dir]
+      defaults: 2000, 20261007, generation_1/I1/corpus
 """
 import os
 import sys
@@ -31,7 +31,7 @@ import struct as _bin
 from fractions import Fraction as F
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(HERE)
+REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(REPO, "tools", "prm"))
 
@@ -210,6 +210,9 @@ def generate(n_per_level, seed, out_dir):
 
     dump("train", idx[:cut])
     dump("test", idx[cut:])
+    with open(os.path.join(out_dir, "corpus.hdr"), "w") as f:
+        f.write(f"FEAT {V.FEAT_DIM}\nNCLASS {V.NLEV}\nNTRAIN {cut}\n"
+                f"NTEST {len(X) - cut}\n")
     with open(os.path.join(out_dir, "algos.txt"), "w") as f:
         for a in ALL:
             f.write(a.name + "\n")

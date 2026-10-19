@@ -25,8 +25,13 @@
 ## v12R2 Milestone (development, current) + v12R1 baseline (2026-09-21) + despot truth V2/V3 (2026-09-28) + hardening V4 (2026-09-28) + V5 (2026-09-30) + despot audit V6 (2026-10-01) + despot audit V7 (2026-10-03) + despot audit V9 (2026-10-09) + despot audit V10 (2026-10-11)
 
 v12R2 is the second development milestone of the v12 cycle, not a stable
-release. Public github tag: `V1.2RC2` (CMake/pkg-config `1.2.0` is the same
-line: `1.2.0` + milestone `v12R2` == public `V1.2RC2` dev). It inherits the v11S contract and the v12R1/V1.2RC1 additions below, plus R2-1..R2-6 (train-lib, char-v1, micromodel, eval_verifier, sandbox, CLI eval) and despot audit V7 error-channel + grad-shape + per-channel honesty fixes + V9 math/programming/operational truth (13 defects) + V10 substrate truth (physics gate, FP32 matmul loop order, pool thread budget, softmax-bwd oracle). Enumeration in `CHANGELOG.md`; proofs in `docs/HOW_IT_WORKS.md          # concrete mechanics: pipeline, ops, training, verification
+release. Public github tag: `V1.2-RC3` (release title `V1.2RC3`; CMake/pkg-config
+`1.2.0` is the same line: `1.2.0` + milestone `v12R2` == public `V1.2RC3` dev).
+RC3 adds the unified trainer (`examples/train_verifier.c`, fused softmax
+cross-entropy behind a persistent training graph, checkpoint/resume, corpus.hdr
+contract, row-agnostic export) and ships its trained models as GitHub release
+assets — the shapes are unchanged from RC2, so every RC2 model still loads.
+It inherits the v11S contract and the v12R1/V1.2RC1 additions below, plus R2-1..R2-6 (train-lib, char-v1, micromodel, eval_verifier, sandbox, CLI eval) and despot audit V7 error-channel + grad-shape + per-channel honesty fixes + V9 math/programming/operational truth (13 defects) + V10 substrate truth (physics gate, FP32 matmul loop order, pool thread budget, softmax-bwd oracle). Enumeration in `CHANGELOG.md`; proofs in `docs/HOW_IT_WORKS.md          # concrete mechanics: pipeline, ops, training, verification
 docs/DESPOT_TRUTH_V2.md` §12-13, §20:
 
 - v2 model format unchanged: files written by v11S+ load with mandatory

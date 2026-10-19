@@ -18,9 +18,10 @@ and multipliers are printed so the imbalance is visible instead of assumed.
 Fully reproducible from the master seed.
 
 USAGE
-    python3 generation_1/run_big.py [runs_per_algo] [model] [master_seed] [outdir]
-      defaults: 1000, temp/gen1-runs/gen1-lr002.lancius, 20261007, generation_1/results_big
-      (the default model is refused if a newer .lancius exists in that directory)
+    python3 generation_1/I1/run_big.py [runs_per_algo] [model] [master_seed] [outdir]
+      defaults: 1000, temp/gen1-runs/gen1-lr002.lancius, RANDOM, generation_1/I1/results_big
+      (master_seed is randomised per run unless given; the default model is refused
+       if a newer .lancius exists in that directory)
 """
 import sys
 import os
@@ -29,7 +30,7 @@ import random
 from fractions import Fraction as F
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(HERE)
+REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(REPO, "tools", "prm"))
 sys.path.insert(0, REPO)
@@ -162,7 +163,13 @@ def main():
     per_algo = int(sys.argv[1]) if len(sys.argv) > 1 else 1000
     model_path = (sys.argv[2] if len(sys.argv) > 2
                   else os.path.join(REPO, "temp", "gen1-runs", "gen1-lr002.lancius"))
-    master = int(sys.argv[3]) if len(sys.argv) > 3 else 20261007
+    # Completely random master seed per run unless explicitly provided,
+    # so every invocation draws a wholly independent data feed.
+    if len(sys.argv) > 3:
+        master = int(sys.argv[3])
+    else:
+        master = random.randrange(2 ** 30)
+        print(f"master: {master} (randomised per run)", flush=True)
     outdir = sys.argv[4] if len(sys.argv) > 4 else os.path.join(HERE, "results_big")
     data_dir = os.path.join(REPO, "data_vec", "v5")
     os.makedirs(outdir, exist_ok=True)
@@ -201,7 +208,7 @@ def main():
             f"directory -- {stale[1]} is newer, and a default that names a\n"
             f"location rather than a model silently scores whatever happens to be\n"
             f"there. Pass the model explicitly:\n"
-            f"    python3 generation_1/run_big.py {per_algo} {stale[1]}")
+            f"    python3 generation_1/I1/run_big.py {per_algo} {stale[1]}")
 
     d0 = B.parse_lancius(model_path)
     _nodes = d0["nodes"] if isinstance(d0, dict) and "nodes" in d0 else d0
