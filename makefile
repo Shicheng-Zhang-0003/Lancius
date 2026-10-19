@@ -1,6 +1,29 @@
+# Lancius build system.
+#
+# ONE build tree: every compiled thing lands under build/, mirrored by what
+# it is. The repository root is for sources, corpora and docs only — a clean
+# `ls` at the root shows what the project IS, not what you last compiled.
+#
+#   build/lib/          liblancius.a              (the library; consumers link this path)
+#   build/bin/          lancius CLI + every example, trainer and audit binary
+#   build/obj/          object files + .d depfiles, mirroring src/
+#   build/san/          check-sanitizers workspace (instrumented lib + audits)
+#   temp/               gate scratch + probe outputs (transient)
+#
+# `make help` prints the map. `make env` prints an eval-able PATH addition.
+# CMake builds land in build/ as well, so both build systems agree on one
+# output convention.
+
 CC = gcc
-CFLAGS = -Wall -Wextra -g -Werror -O3 -mavx2 -mfma -fopenmp -std=c11 -I./include -fPIC -MMD -MP
+CFLAGS = -Wall -Wextra -g -Werror -O3 -mavx2 -mfma -fopenmp -std=c11 -I./include -fPIC
 LDFLAGS = -lm
+
+BUILD  = build
+BIN    = $(BUILD)/bin
+LIBD   = $(BUILD)/lib
+OBJD   = $(BUILD)/obj
+LIB    = $(LIBD)/liblancius.a
+
 SRCS = src/core/lancius_arena.c \
        src/core/lancius_serialize.c \
        src/core/lancius_serialize_v2.c \
@@ -17,133 +40,197 @@ SRCS = src/core/lancius_arena.c \
        src/compiler/lancius_bytecode.c \
        src/compiler/lancius_optimizer.c \
        src/core/lancius_checked.c \
-src/core/lancius_validate.c \
-src/compiler/lancius_quantize.c \
-src/train/lancius_train.c \
-src/runtime/lancius_sandbox.c
+       src/core/lancius_validate.c \
+       src/compiler/lancius_quantize.c \
+       src/train/lancius_train.c \
+       src/runtime/lancius_sandbox.c
 
-OBJS = $(SRCS:.c=.o)
-# Default goal must precede any -include: depfiles define %-targets that
-# would otherwise hijack the default goal (bare `make` built only arena.o).
-.DEFAULT_GOAL := all
-all: liblancius.a lancius audit_internals stress_test test_torture train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check audit_ffi audit_memory_pool test_diamond_memory soak_fuzz parity_runner run_trained_batch audit_threadpool_parity audit_nan_injection audit_flash_attention audit_modern_llm audit_known_answer audit_regression_13c audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_despot_probe train_verifier_head distill_prm800k audit_train_lib trainlib_dump audit_sandbox train_micromodel eval_verifier audit_sum_axis_nd audit_train_bwd audit_train_converge audit_v7_hardening train_verifier
-lancius: examples/lancius_cli.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-liblancius.a: $(OBJS)
+OBJS = $(SRCS:%.c=$(OBJD)/%.o)
+
+# ---- link rules, table-driven so 40 targets stay one rule each ----------
+# $(1) = binary name, $(2) = its single .c source, $(3) = extra libs.
+# LINK          : bare                    (none needed)
+# LINK_PTHREAD  : + -fopenmp -lpthread    (normal OpenMP programs)
+# LINK_OMP      : + -fopenmp only         (program opens its own pool)
+define LINK
+$$(BIN)/$(1): $(2) $(LIB) | $$(BIN)
+	$$(CC) $$(CFLAGS) -o $$@ $$< $$(LIB) $$(LDFLAGS) $(3)
+endef
+$(eval $(call LINK,lancius,examples/lancius_cli.c,-fopenmp -lpthread))
+$(eval $(call LINK,train_mnist,examples/train_mnist.c,-fopenmp -lpthread))
+$(eval $(call LINK,train_verifier,examples/train_verifier.c,-fopenmp -lpthread))
+$(eval $(call LINK,train_cifar10,examples/train_cifar10.c,-fopenmp -lpthread))
+$(eval $(call LINK,train_micromodel,examples/train_micromodel.c,-fopenmp -lpthread))
+$(eval $(call LINK,eval_verifier,examples/eval_verifier.c,-fopenmp -lpthread))
+$(eval $(call LINK,train_verifier_head,examples/train_verifier_head.c,-fopenmp -lpthread))
+$(eval $(call LINK,fuzz_lancius,examples/fuzz_lancius.c,-fopenmp))
+$(eval $(call LINK,soak_fuzz,examples/soak_fuzz.c,-fopenmp))
+$(eval $(call LINK,test_path_bg,examples/test_path_bg.c,))
+$(eval $(call LINK,run_edge,examples/run_edge.c,))
+$(eval $(call LINK,test_grad_check,examples/test_grad_check.c,))
+$(eval $(call LINK,test_torture,examples/test_torture.c,))
+$(eval $(call LINK,stress_test,examples/stress_test.c,))
+$(eval $(call LINK,audit_internals,examples/audit_internals.c,))
+$(eval $(call LINK,audit_memory_pool,examples/audit_memory_pool.c,))
+$(eval $(call LINK,audit_ffi,examples/audit_ffi.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_flash_attention,examples/audit_flash_attention.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_modern_llm,examples/audit_modern_llm.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_threadpool_parity,examples/audit_threadpool_parity.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_nan_injection,examples/audit_nan_injection.c,-fopenmp -lpthread))
+$(eval $(call LINK,parity_runner,examples/parity_runner.c,-fopenmp -lpthread))
+$(eval $(call LINK,run_trained_batch,examples/run_trained_batch.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_known_answer,examples/audit_known_answer.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_regression_13c,examples/audit_regression_13c.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_transformer_known_answer,examples/audit_transformer_known_answer.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_fp32_path,examples/audit_fp32_path.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_fault_injection,examples/audit_fault_injection.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_despot_probe,examples/audit_despot_probe.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_train_lib,examples/audit_train_lib.c,-fopenmp -lpthread))
+$(eval $(call LINK,trainlib_dump,tools/audit/trainlib_dump.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_sandbox,examples/audit_sandbox.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_sum_axis_nd,examples/audit_sum_axis_nd.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_v7_hardening,examples/audit_v7_hardening.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_train_bwd,examples/audit_train_bwd.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_train_converge,examples/audit_train_converge.c,-fopenmp -lpthread))
+$(eval $(call LINK,bench_kernels,examples/bench_kernels.c,-fopenmp -lpthread))
+
+# distill_prm800k is the one standalone gate binary: no liblancius.a (whole
+# point of V9 gate truth: it must not link so it cannot inherit a defect).
+$(BIN)/distill_prm800k: examples/distill_prm800k.c | $(BIN)
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+# test_diamond_memory is its own sanitizer build: ASan by construction, not
+# reached through the combined gate flags.
+$(BIN)/test_diamond_memory: examples/test_diamond_memory.c $(LIB) | $(BIN)
+	$(CC) -Wall -Wextra -fsanitize=address -fno-omit-frame-pointer -g -I./include -fopenmp -o $@ $< $(LIB) $(LDFLAGS) -fsanitize=address
+
+$(LIB): $(OBJS) | $(LIBD)
 	ar rcs $@ $(OBJS)
-train_mnist: examples/train_mnist.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-train_verifier: examples/train_verifier.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BIN) $(LIBD):
+	@mkdir -p $@
+
+$(OBJD)/%.o: %.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+# Default goal must precede any -include: depfiles define %-targets that
+# would otherwise hijack the default goal.
+.DEFAULT_GOAL := all
+
+# ---- the old root-level target names stay typed the same way; their
+# products simply moved into build/bin. Scripts and docs that reference the
+# products point at build/ now. ------------------------------------------
+BINS = $(addprefix $(BIN)/,lancius train_mnist train_cifar10 fuzz_lancius \
+        test_path_bg run_edge test_grad_check test_torture stress_test \
+        audit_internals audit_memory_pool audit_ffi audit_flash_attention \
+        audit_modern_llm audit_threadpool_parity audit_nan_injection \
+        test_diamond_memory soak_fuzz parity_runner run_trained_batch \
+        audit_known_answer audit_regression_13c \
+        audit_transformer_known_answer audit_fp32_path \
+        audit_fault_injection audit_despot_probe train_verifier_head \
+        distill_prm800k audit_train_lib trainlib_dump audit_sandbox \
+        train_micromodel eval_verifier audit_sum_axis_nd audit_train_bwd \
+        audit_train_converge audit_v7_hardening train_verifier)
+
+all: $(LIB) $(BINS)
+	@echo "build ready."
+	@echo "  library : $(LIB)"
+	@echo "  binaries: $(BIN)/  ($$(ls $(BIN) | wc -l) binaries — 'make help' for the map)"
+
 clean:
-	rm -f $(OBJS) liblancius.a
-	rm -f $(OBJS:.o=.d) src/*/*.d *.d
-	rm -f src/runtime/lancius_memory_planner.o src/core/lancius_stable_api.o
-	rm -f train_mnist train_cifar10 fuzz_lancius test_path_bg run_edge test_grad_check
-	rm -f test_torture stress_test audit_internals
-	rm -f audit_memory_pool audit_flash_attention audit_modern_llm audit_ffi
-	rm -f audit_threadpool_parity audit_nan_injection test_diamond_memory soak_fuzz
-	rm -f parity_runner run_trained_batch
-	rm -f audit_regression_13c regression_roundtrip.lancius regression_bad_*.lancius regression_trunc_*.lancius regression_huge_*.lancius
-	rm -f audit_known_answer audit_transformer_known_answer audit_fp32_path audit_fault_injection audit_flash_attention
-	rm -f audit_despot_probe train_verifier_head distill_prm800k lancius train_verifier
-	rm -f audit_train_lib trainlib_dump audit_sandbox train_micromodel eval_verifier audit_sum_axis_nd audit_train_bwd audit_train_converge audit_train_converge audit_train_bwd audit_v7_hardening
-	rm -f temp/mutation/_t temp/phys/* temp/audit/physics temp/audit/physics_probe_out.txt
-	rm -f bench_kernels
-.PHONY: all clean check check-long check-sanitizers ldfd-test ldfd-build \
-        check-oracle check-mutation check-ubstrict check-physics bench_kernels
-train_cifar10: examples/train_cifar10.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-fuzz_lancius: examples/fuzz_lancius.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp
-test_path_bg: examples/test_path_bg.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS)
-run_edge: examples/run_edge.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS)
-test_grad_check: examples/test_grad_check.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS)
-test_torture: examples/test_torture.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS)
+	rm -rf $(BUILD)
+	# legacy root-level products from before the build/ tree existed; a
+	# clean tree should not half-remember them.
+	rm -f $(notdir $(BINS))
+	rm -f test_model.lancius regression_roundtrip.lancius regression_bad_*.lancius \
+	      regression_trunc_*.lancius regression_huge_*.lancius temp/mutation/_t
+	rm -f *.o *.d bench_kernels
+	rm -rf temp/phys temp/audit/physics
+	rm -f temp/audit/physics_probe_out.txt
+	@echo "build tree, legacy root binaries and gate scratch removed."
 
-stress_test: examples/stress_test.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS)
+.PHONY: all clean help env check check-long check-sanitizers ldfd-test \
+        ldfd-build check-oracle check-mutation check-ubstrict check-physics \
+        install uninstall
 
-audit_internals: examples/audit_internals.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS)
+# ---- terminal friendliness: know where things are without searching -----
+help:
+	@echo "Lancius v12R2 — outputs all live under build/ ($(BUILD)/bin, $(BUILD)/lib, $(BUILD)/obj)"
+	@echo
+	@echo "  make               build everything (library + all binaries)"
+	@echo '  make env           print eval-able:  eval $$(make env)'
+	@echo "  make help          this map"
+	@echo
+	@echo "run:"
+	@echo "  lancius                        the CLI: build/bin/lancius run|info|eval <model>"
+	@echo "  train_verifier                 unified verifier trainer (CE, persistent graph)"
+	@echo "  train_mnist train_cifar10 train_micromodel train_verifier_head"
+	@echo "  eval_verifier                  score a .lancius verifier"
+	@echo "  distill_prm800k                standalone PRM distiller (links nothing)"
+	@echo
+	@echo "language gates:"
+	@echo "  make check                     full suite + LDFD bridge + CLI self-test"
+	@echo "  make check-long                + soak_fuzz, fuzz_lancius"
+	@echo "  make check-sanitizers          instrumented lib + all audits under ASan/UBSan/LSan"
+	@echo "  make check-ubstrict            strict UBSan sweep (abort on first finding)"
+	@echo "  make check-oracle              external NumPy/torch oracle"
+	@echo "  make check-physics             independent IEEE/libm/CRC reference"
+	@echo "  make check-mutation            injects defects, demands red"
+	@echo
+	@echo "measurement (never a gate):"
+	@echo "  make bench_kernels             build/bin/bench_kernels"
+	@echo
+	@echo "data feeding framework (own deps: libcurl, zlib):"
+	@echo "  make ldfd-build                build 3463-LDFD"
+	@echo "  make ldfd-test                 run its suites"
+	@echo
+	@echo "install:"
+	@echo "  make install [PREFIX=/usr/local]   headers + lib + CLI"
+	@echo "  make uninstall"
+	@echo
+	@echo "consumers link: $(LIB)"
+	@echo "examples compile: gcc -I./include your.c $(LIB) -fopenmp -lpthread -lm"
 
-# --- v11A1: memory planner is now part of liblancius.a ---
+env:
+	@echo 'export PATH="$(CURDIR)/$(BIN):$${PATH}"'
 
-audit_memory_pool: examples/audit_memory_pool.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS)
+install: $(LIB) $(BIN)/lancius
+	@mkdir -p $(PREFIX)/include/lancius $(PREFIX)/lib $(PREFIX)/bin
+	@cp -r include/lancius/*.h $(PREFIX)/include/lancius/
+	@cp include/lancius.h $(PREFIX)/include/ 2>/dev/null || true
+	@cp $(LIB) $(PREFIX)/lib/
+	@cp $(BIN)/lancius $(PREFIX)/bin/
+	@echo "installed: $(PREFIX)/include/lancius, $(PREFIX)/lib/liblancius.a, $(PREFIX)/bin/lancius"
 
-audit_flash_attention: examples/audit_flash_attention.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
+uninstall:
+	@rm -rf $(PREFIX)/include/lancius
+	@rm -f $(PREFIX)/include/lancius.h
+	@rm -f $(PREFIX)/lib/liblancius.a
+	@rm -f $(PREFIX)/bin/lancius
+	@echo "Lancius uninstalled from $(PREFIX)."
 
-audit_modern_llm: examples/audit_modern_llm.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
+# Dependency tracking (must trail all explicit targets so included
+# depfiles never become the default goal).
+-include $(OBJS:.o=.d)
 
-# --- v11A1: stable API is now part of liblancius.a ---
-
-audit_ffi: examples/audit_ffi.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-# --- P1 RED TEAM: Sanitizer Gauntlet ---
+# ---- v10S Adversarial Alpha: sanitizer gauntlet entry points -------------
 test_asan: CFLAGS := -Wall -Wextra -g -O0 -fsanitize=address -fno-omit-frame-pointer -fopenmp -std=c11 -I./include -fPIC
 test_asan: LDFLAGS := -fsanitize=address -fopenmp -lm -lpthread
 test_asan: stress_test test_torture fuzz_lancius
-	@echo "✅ ASan Build Complete. Run ./stress_test && ./test_torture"
+	@echo "✅ ASan Build Complete — binaries in $(BUILD)/bin/"
 
 test_ubsan: CFLAGS := -Wall -Wextra -g -O0 -fsanitize=undefined -fopenmp -std=c11 -I./include -fPIC
 test_ubsan: LDFLAGS := -fsanitize=undefined -fopenmp -lm -lpthread
 test_ubsan: stress_test test_torture fuzz_lancius
-	@echo "✅ UBSan Build Complete. Run ./stress_test && ./test_torture"
+	@echo "✅ UBSan Build Complete — binaries in $(BUILD)/bin/"
 
-# --- V1.0 Red Team: Threadpool & NaN Audits ---
-audit_threadpool_parity: examples/audit_threadpool_parity.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
+# stress_test/test_torture/fuzz_lancius keep their bare names callable from
+# the targets above; they are aliases onto the build/bin products.
+stress_test fuzz_lancius test_torture: %: $(BIN)/%
+	@true
 
-audit_nan_injection: examples/audit_nan_injection.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-# --- v10S Adversarial Alpha: Diamond Graph Test ---
-test_diamond_memory: examples/test_diamond_memory.c liblancius.a
-	$(CC) $(CFLAGS) -fsanitize=address -fno-omit-frame-pointer -g -o $@ $< liblancius.a $(LDFLAGS) -fsanitize=address
-
-# --- v10S Ecosystem Mandate: System Installation ---
-PREFIX ?= /usr/local
-
-install: liblancius.a
-	@echo "📦 Installing Lancius headers to $(PREFIX)/include/lancius..."
-	@mkdir -p $(PREFIX)/include/lancius
-	@cp -r include/lancius/*.h $(PREFIX)/include/lancius/
-	@cp include/lancius.h $(PREFIX)/include/ 2>/dev/null || true
-	@echo "📦 Installing Lancius static library to $(PREFIX)/lib..."
-	@mkdir -p $(PREFIX)/lib
-	@cp liblancius.a $(PREFIX)/lib/
-	@echo "✅ Lancius v12R2 installed successfully."
-
-uninstall:
-	@echo "🗑️  Removing Lancius from $(PREFIX)..."
-	@rm -rf $(PREFIX)/include/lancius
-	@rm -f $(PREFIX)/include/lancius.h
-	@rm -f $(PREFIX)/lib/liblancius.a
-	@echo "✅ Lancius uninstalled."
-
-# --- v10S Adversarial Soak Gauntlet ---
-soak_fuzz: examples/soak_fuzz.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp
-
-# --- v11A1 repair: missing parity/trained-batch targets ---
-parity_runner: examples/parity_runner.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-run_trained_batch: examples/run_trained_batch.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-# --- v11A1 Task 13a: validation gates ---
-# ---------------------------------------------------------------- 3463-LDFD
+# ------------------------------------------------------------------ 3463-LDFD
 #
 # The Live Data Feeding Framework is a separate component with its own
 # makefile and its own dependencies (libcurl, zlib). It is wired in as a
@@ -165,69 +252,55 @@ ldfd-build:
 	$(MAKE) -C $(LDFD_DIR) all
 
 check: all
-	./stress_test
-	./test_torture
-	./test_path_bg
-	./test_grad_check
-	./audit_internals
-	./audit_ffi
-	./audit_threadpool_parity
-	./audit_nan_injection
-	./audit_memory_pool
-	./test_diamond_memory
-	./audit_flash_attention
-	./audit_modern_llm
-	./audit_known_answer
-	./audit_regression_13c
-	./audit_transformer_known_answer
-	./audit_fp32_path
-	./audit_fault_injection
-	./audit_despot_probe
-	./train_verifier_head
-	./distill_prm800k --selftest
-	./audit_train_lib
-	./audit_sum_axis_nd
-	./audit_train_bwd
-	./audit_train_converge
-	./audit_sandbox
-	./audit_v7_hardening
-	./train_micromodel
-	./eval_verifier
+	$(BIN)/stress_test
+	$(BIN)/test_torture
+	$(BIN)/test_path_bg
+	$(BIN)/test_grad_check
+	$(BIN)/audit_internals
+	$(BIN)/audit_ffi
+	$(BIN)/audit_threadpool_parity
+	$(BIN)/audit_nan_injection
+	$(BIN)/audit_memory_pool
+	$(BIN)/test_diamond_memory
+	$(BIN)/audit_flash_attention
+	$(BIN)/audit_modern_llm
+	$(BIN)/audit_known_answer
+	$(BIN)/audit_regression_13c
+	$(BIN)/audit_transformer_known_answer
+	$(BIN)/audit_fp32_path
+	$(BIN)/audit_fault_injection
+	$(BIN)/audit_despot_probe
+	$(BIN)/train_verifier_head
+	$(BIN)/distill_prm800k --selftest
+	$(BIN)/audit_train_lib
+	$(BIN)/audit_sum_axis_nd
+	$(BIN)/audit_train_bwd
+	$(BIN)/audit_train_converge
+	$(BIN)/audit_sandbox
+	$(BIN)/audit_v7_hardening
+	$(BIN)/train_micromodel
+	$(BIN)/eval_verifier
 	python3 audit_text_pipeline.py
 	python3 audit_abi.py
 	python3 audit_binding_smoke.py
 	@echo "--- LDFD bridge (3463) ---"
 	@$(MAKE) --no-print-directory ldfd-test
-	./lancius info test_model.lancius
-	./lancius run test_model.lancius --mode static --fill zero
-	./lancius eval test_model.lancius --mode static
+	$(BIN)/lancius info test_model.lancius
+	$(BIN)/lancius run test_model.lancius --mode static --fill zero
+	$(BIN)/lancius eval test_model.lancius --mode static
 	@echo "v12R2 check complete."
 
 check-long: check
-	./soak_fuzz
-	./fuzz_lancius 12345
+	$(BIN)/soak_fuzz
+	$(BIN)/fuzz_lancius 12345
 	@echo "v12R2 long check complete."
 
-# --- v11A1 Task 13b: known-answer audit ---
-audit_known_answer: examples/audit_known_answer.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-# --- v11A1 Task 13c: regression audit ---
-audit_regression_13c: examples/audit_regression_13c.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-# --- v13A1 Task 13c: sanitizer gate ---
-# V7 truth: this gate used to rebuild exactly three binaries
-# (stress_test, test_torture, fuzz_lancius) against a liblancius.a that was
-# NOT instrumented, so nothing inside the library was ever checked, and 25 of
-# the gate's 28 audits never ran under a sanitizer at all. audit_fault_injection
-# (which leaks 72 bytes on its GQA fail-loud path) was one of the 25.
-# check-sanitizers now instruments the LIBRARY and every audit in the gate and
-# runs them all under ASan + UBSan + LeakSanitizer.
+# --- v11A1 Task 13b/c (known-answer + regression audits) live in the LINK
+# table above; the following is the V7 truth block on sanitizers. ---
 SAN_FLAGS = -fsanitize=address,undefined -fno-omit-frame-pointer
 SAN_CFLAGS = -Wall -Wextra -g -O1 $(SAN_FLAGS) -fopenmp -std=c11 -I./include -fPIC
 SAN_LDFLAGS = $(SAN_FLAGS) -fopenmp -lm -lpthread
-SAN_DIR = temp/sanitized
+SAN_DIR = $(BUILD)/san
 SAN_AUDITS = stress_test test_torture fuzz_lancius test_path_bg test_grad_check \
              audit_internals audit_ffi audit_threadpool_parity audit_nan_injection \
              audit_memory_pool test_diamond_memory audit_flash_attention audit_modern_llm \
@@ -291,64 +364,4 @@ check-mutation:
 check-physics:
 	@./tools/audit/physics_gate.sh
 
-audit_transformer_known_answer: examples/audit_transformer_known_answer.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-# --- V10: throughput harness. Measurement, not a claim, and deliberately not
-# a gate member: timing is machine-dependent and must never fail the suite. ---
-bench_kernels: examples/bench_kernels.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-audit_fp32_path: examples/audit_fp32_path.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-# --- v12R1: despot probe pins the P0 fixes (broadcast, planner, CE truth) ---
-audit_despot_probe: examples/audit_despot_probe.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-# --- v12R2: verifier-head training example (models-side, tanh + MSE) ---
-train_verifier_head: examples/train_verifier_head.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-# --- v12R2: PRM800k step distiller in C (retires distill_prm800k.py) ---
-distill_prm800k: examples/distill_prm800k.c
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
-
-# --- v12R2 training + sandbox + micromodel gates ---
-audit_train_lib: examples/audit_train_lib.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-trainlib_dump: tools/audit/trainlib_dump.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-audit_sandbox: examples/audit_sandbox.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-train_micromodel: examples/train_micromodel.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-eval_verifier: examples/eval_verifier.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-audit_fault_injection: examples/audit_fault_injection.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-# --- R3: N-dim reduction training gate ---
-audit_sum_axis_nd: examples/audit_sum_axis_nd.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-# --- V7: mutation-test closures (see docs/DESPOT_TRUTH_V2.md section 16) ---
-audit_v7_hardening: examples/audit_v7_hardening.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-# --- R3: norm/activation/batched backward gate ---
-audit_train_bwd: examples/audit_train_bwd.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-# --- R3: end-to-end training convergence gate ---
-audit_train_converge: examples/audit_train_converge.c liblancius.a
-	$(CC) $(CFLAGS) -o $@ $< liblancius.a $(LDFLAGS) -fopenmp -lpthread
-
-# Dependency tracking (must trail all explicit targets so included
-# depfiles never become the default goal).
--include $(OBJS:.o=.d)
+PREFIX ?= /usr/local
