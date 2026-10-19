@@ -63,6 +63,17 @@ Both trainers minimising mean-MSE-on-logits also cap the achievable CE at
 `ln(1 + (C-1)/e)` (~0.555 for C=3) because the MSE optimum is a hard one-hot
 logit vector, not a calibrated distribution.
 
+**Resolved (superseded).** `examples/train_verifier.c` is now the canonical
+verifier trainer and sidesteps this entire class of defect: it trains the
+framework's own fused softmax cross-entropy (`lancius_cross_entropy`, exact VJP
+`(softmax-y)/R`), reads the loss every step, clips global grad norm, and uses
+the framework's `lancius_lr_warmup_cosine`. Gradient-checked against central
+differences (worst scale-relative error < 1e-7). `train_verifier5.c`,
+`train_gen1.c` and `train_prm_verifier.c` are legacy and superseded by it; a
+corpus consumed by the new trainer must carry a `corpus.hdr` (FEAT, NCLASS,
+NTRAIN, NTEST) and graphs are built once per run (persistent training graph,
+buffers bound by pointer).
+
 ## Backend Support
 
 Primary supported environment:

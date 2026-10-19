@@ -13,20 +13,29 @@ Two factors, varied separately so their effects are not confounded:
 Each configuration is exported to .lancius and its round-trip is verified, so
 no configuration is compared on numbers the export path cannot reproduce.
 
+The sweep drives examples/train_verifier.c (the unified trainer). The swept
+"width" H maps to H1=H with H2=64 pinned, so capacity varies in the first
+hidden layer while the readout stays narrow (the legacy single-hidden
+trainers had no second layer).
+
+    make train_verifier
     python3 tools/prm/sweep_configs.py --out data_vec/v5/sweep
 """
 import subprocess, sys, os, re, statistics, argparse
 
-TRAINER = "temp/train_v5"
+TRAINER = "./train_verifier"
+H2_PIN = 64
 
 
 def run(h, seed, data, epochs, batch, outdir):
-    os.makedirs(outdir, exist_ok=True)
+    sd = os.path.join(outdir, f"cfg_h{h}_s{seed}")
+    os.makedirs(sd, exist_ok=True)
     lan = os.path.join(outdir, f"v5_h{h}_s{seed}.lancius")
-    cmd = [TRAINER, data, str(h), str(epochs), str(batch),
+    cmd = [TRAINER, data, str(h), str(H2_PIN), str(epochs), str(batch),
            "--seed", str(seed),
            "--export-lancius", lan,
-           "--verify-lancius", "--lancius-rows", "256"]
+           "--verify-lancius",
+           "--save-dir", sd]
     p = subprocess.run(cmd, capture_output=True, text=True)
     if p.returncode != 0:
         return None, p.stderr.strip()[:200]
@@ -36,12 +45,12 @@ def run(h, seed, data, epochs, batch, outdir):
         return float(m.group(1)) if m else float("nan")
     rec = dict(
         h=h, seed=seed,
-        epoch=num(r"selected epoch (\d+)"),
-        val=num(r"val exact=([0-9.]+)"),
+        score=num(r"selected best score ([0-9.]+)"),
+        val=num(r"selected best score ([0-9.]+)"),
         exact=num(r"overall\s+n=\d+\s+exact=([0-9.]+)"),
         within1=num(r"overall\s+n=\d+\s+exact=[0-9.]+\s+within1=([0-9.]+)"),
         macroF1=num(r"overall\s+n=\d+\s+exact=[0-9.]+\s+within1=[0-9.]+\s+macroF1=([0-9.]+)"),
-        mae=num(r"overall\s+n=\d+.*?MAE\(level\)=([0-9.]+)"),
+        mae=num(r"overall\s+n=\d+.*?MAE=([0-9.]+)"),
         kappa=num(r"overall\s+n=\d+.*?kappa=([0-9.]+)"),
         rt=num(r"max \|diff\| = ([0-9.e+-]+)"),
         lan=lan,
@@ -74,9 +83,7 @@ def main():
     args = ap.parse_args()
 
     if not os.path.exists(TRAINER):
-        sys.exit(f"missing {TRAINER}; build it first:\n"
-                 f"  gcc -O2 -fopenmp -std=c11 -I./include -o {TRAINER} "
-                 f"examples/train_verifier5.c liblancius.a -fopenmp -lm -lpthread")
+        sys.exit(f"missing {TRAINER}; build it first:\n  make train_verifier")
 
     # full 3x3 so the width effect is not itself a seed artefact -- the first
     # pass ran width and seed separately and found H=64 best, which is exactly
@@ -84,7 +91,7 @@ def main():
     seeds = [args.seed, 11, 22]
     configs = [(h, sd) for sd in seeds for h in (64, 96, 128)]
 
-    print(f"{'H':>4} {'seed':>9} {'ep':>4} {'val':>7} {'test':>7} "
+    print(f"{'H':>4} {'seed':>9} {'score':>7} {'test':>7} "
           f"{'MAE':>7} {'kappa':>7} {'macroF1':>8} {'rt diff':>10} {'bytes':>8}")
     print("-" * 84)
     recs = []
@@ -94,8 +101,8 @@ def main():
             print(f"{h:>4} {sd:>9}   FAILED: {err}")
             continue
         recs.append(rec)
-        print(f"{rec['h']:>4} {rec['seed']:>9} {int(rec['epoch']):>4} "
-              f"{rec['val']:>7.4f} {rec['exact']:>7.4f} {rec['mae']:>7.4f} "
+        print(f"{rec['h']:>4} {rec['seed']:>9} {rec['val']:>7.4f} "
+              f"{rec['exact']:>7.4f} {rec['mae']:>7.4f} "
               f"{rec['kappa']:>7.4f} {rec['macroF1']:>8.4f} {rec['rt']:>10.2e} "
               f"{rec['bytes']:>8}")
 

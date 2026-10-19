@@ -12,14 +12,17 @@ set of each algorithm, SWEEP over N sets cycling veracity levels), but
     the exact C-mirror of examples/train_gen1.c
 
 USAGE
-    python3 generation_1/run_tests_gen1.py [params_per_algo] [model] [outdir]
-      defaults: 25, temp/gen1-runs/gen1-10M.lancius, generation_1/results
+    python3 generation_1/I1/run_tests_gen1.py [params_per_algo] [model] [outdir]
+      defaults: 25, temp/gen1-runs/gen1-lr002.lancius, generation_1/results
+      (levels and cell seeds are randomised per run; every invocation draws an
+       independent data feed)
 """
 import sys
 import os
+import random
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(HERE)  # generation_1/ lives at repo root
+REPO = os.path.dirname(os.path.dirname(HERE))  # generation_1/ lives at repo root
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(REPO, "tools", "prm"))
 sys.path.insert(0, REPO)
@@ -32,6 +35,7 @@ from bench_gen1 import PyRng, load_gen1, compute_musd, fwd_batch, LEVELS, LVLNAM
 ALL = list(ALGORITHMS) + list(EXT_ALGOS)
 TIERS = ["base", "big", "neg"]
 FALLBACKS = 0
+SUB = random.Random()
 
 
 def build_cell(algo, tier, seed):
@@ -59,7 +63,7 @@ def main():
     import numpy as np
     per_algo = int(sys.argv[1]) if len(sys.argv) > 1 else 25
     model_path = (sys.argv[2] if len(sys.argv) > 2
-                  else os.path.join(REPO, "temp", "gen1-runs", "gen1-10M.lancius"))
+                  else os.path.join(REPO, "temp", "gen1-runs", "gen1-lr002.lancius"))
     outdir = sys.argv[3] if len(sys.argv) > 3 else os.path.join(HERE, "results")
     data_dir = (sys.argv[4] if len(sys.argv) > 4
                 else os.path.join(REPO, "data_vec", "v5"))
@@ -101,13 +105,15 @@ def main():
     print("\n###### SECTION 2 -- SWEEP ######")
     orows, olabs, ometa = [], [], []
     srows, slabs, smeta = [], [], []
-    sb = 7000
+    # per-cell random seed and per-cell random level: every cell draws its own
+    # sub-seed and level from SUB so each run is an independent data feed.
     for ai, algo in enumerate(ALL):
         for ti, tier in enumerate(TIERS):
             for k in range(per_algo):
-                lv = LEVELS[(k + ai + ti) % len(LEVELS)]
-                a, params, steps = build_cell(algo, tier, sb + ai * 100000 + ti * 20000 + k)
-                rng = PyRng(sb + ai * 100000 + ti * 20000 + k + 1)
+                cell_seed = SUB.randrange(2 ** 30)
+                lv = SUB.choice(LEVELS)
+                a, params, steps = build_cell(algo, tier, cell_seed)
+                rng = PyRng(cell_seed + 1)
                 rep, struct, kind = V.make_candidate(a, params, steps, rng, lv)
                 chk = V.check(a, params, steps, rep, struct)
                 orows.append(V.row_features(a, chk, -1))
