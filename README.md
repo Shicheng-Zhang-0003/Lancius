@@ -222,17 +222,25 @@ make clean
 make
 ```
 
-This builds:
+This builds (everything lands under `build/` — binaries in `build/bin`, the
+static library in `build/lib`, object files and depfiles in `build/obj`; the
+repo root stays clean):
 
-- `liblancius.a`
-- internal examples
-- audit binaries
-- test binaries
+- `build/lib/liblancius.a`
+- `build/bin/` — internal examples, audit binaries, test binaries
 
 For a parallel build:
 
 ```bash
 make -j$(nproc)
+```
+
+`make help` prints the full map of binaries and gates; `make env` prints an
+eval-able `export PATH=...build/bin` line so `lancius`, `train_verifier` and
+friends can be run by bare name:
+
+```bash
+eval $(make env)
 ```
 
 ### Build with CMake

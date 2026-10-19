@@ -153,9 +153,9 @@ history-weight without information.
 ```sh
 make train_verifier                       # the unified trainer
 printf 'FEAT 65\nNCLASS 5\nNTRAIN 33351\nNTEST 8338\n' > data_vec/v5/corpus.hdr
-./train_verifier data_vec/v5 4096 2560 5 \
+build/bin/train_verifier data_vec/v5 4096 2560 5 \
     --export-lancius verifier5.lancius --verify-lancius
-./train_verifier data_vec/v5 512 256 1    # then --resume its last.bin
+build/bin/train_verifier data_vec/v5 512 256 1    # then --resume its last.bin
 python3 tools/prm/sweep_configs.py --epochs 10   # 3x3 wire sweep
 python3 generation_1/I2/chat.py --alus 4 --demo    # the conglomeration (needs ollama)
 python3 generation_1/I2/orchestrator/fabric_test_chat.py --part all

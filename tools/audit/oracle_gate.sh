@@ -18,10 +18,10 @@ CFLAGS="-Wall -Wextra -O2 -fopenmp -std=c11 -I${ROOT}/include"
 LDFLAGS="-fopenmp -lm -lpthread"
 
 echo "=== building the dump probes against the real library ==="
-make -C "$ROOT" liblancius.a >/dev/null
+make -C "$ROOT" build/lib/liblancius.a >/dev/null
 for p in kernel_oracle_dump graph_oracle_dump autodiff_leak_probe trainlib_dump; do
   $CC $CFLAGS -c "$ROOT/tools/audit/$p.c" -o "$OUT/build/$p.o"
-  $CC -o "$OUT/build/$p" "$OUT/build/$p.o" "$ROOT/liblancius.a" $LDFLAGS
+  $CC -o "$OUT/build/$p" "$OUT/build/$p.o" "$ROOT/build/lib/liblancius.a" $LDFLAGS
 done
 
 echo "=== producing dumps ==="
@@ -30,8 +30,8 @@ rm -f "$OUT/dumps"/*
 "$OUT/build/graph_oracle_dump"  "$OUT/dumps" >/dev/null
 # train-lib layer: the four entry points section 17 never checked against a
 # primary source (sgd, sgdm, clip_grad_norm, lr_warmup_cosine)
-make -C "$ROOT" trainlib_dump >/dev/null
-"$ROOT/trainlib_dump" "$OUT/dumps/trainlib" >/dev/null
+make -C "$ROOT" build/bin/trainlib_dump >/dev/null
+"$ROOT/build/bin/trainlib_dump" "$OUT/dumps/trainlib" >/dev/null
 
 echo "=== independent NumPy / PyTorch / finite-difference comparison ==="
 rc=0

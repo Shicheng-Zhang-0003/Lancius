@@ -29,7 +29,7 @@ ACTIVE_MUT_BAK=""
 restore_active() {
     if [ -n "$ACTIVE_MUT_FILE" ] && [ -n "$ACTIVE_MUT_BAK" ] && [ -f "$ACTIVE_MUT_BAK" ]; then
         cp "$ACTIVE_MUT_BAK" "$ACTIVE_MUT_FILE"
-        ( cd "$ROOT" && make liblancius.a >/dev/null 2>&1 ) || true
+        ( cd "$ROOT" && make build/lib/liblancius.a >/dev/null 2>&1 ) || true
         printf '\n[trap] restored %s -- the run was interrupted mid-mutation\n' \
             "$ACTIVE_MUT_FILE" >&2
     fi
@@ -74,7 +74,7 @@ run_gate() {
     src="$ROOT/examples/$b.c"
     [ -f "$src" ] || continue
     gcc -w -O1 -fopenmp -std=c11 -I"$ROOT/include" \
-        -o "$WORK/$b" "$src" "$ROOT/liblancius.a" -fopenmp -lm -lpthread \
+        -o "$WORK/$b" "$src" "$ROOT/build/lib/liblancius.a" -fopenmp -lm -lpthread \
         2>"$LOG/$tag.$b.build" || { buildfail=$((buildfail+1)); continue; }
     ( cd "$ROOT" && timeout 300 "$WORK/$b" ) >"$LOG/$tag.$b.run" 2>&1
     rc=$?
@@ -103,7 +103,7 @@ try() {
   ACTIVE_MUT_FILE="$ROOT/$file"
   ACTIVE_MUT_BAK="$WORK/orig.c"
   # rebuild the library only; audits relink against it
-  ( cd "$ROOT" && make liblancius.a >/dev/null 2>&1 ) || { echo "  lib rebuild failed"; cp "$WORK/orig.c" "$ROOT/$file"; ACTIVE_MUT_FILE=""; ACTIVE_MUT_BAK=""; return; }
+  ( cd "$ROOT" && make build/lib/liblancius.a >/dev/null 2>&1 ) || { echo "  lib rebuild failed"; cp "$WORK/orig.c" "$ROOT/$file"; ACTIVE_MUT_FILE=""; ACTIVE_MUT_BAK=""; return; }
   local r detected buildfail
   r=$(run_gate "$tag")
   detected="${r%%|*}"; buildfail="${r##*|}"
@@ -113,7 +113,7 @@ try() {
   # sanitizer in it.
   for lsan_a in audit_fault_injection audit_v7_hardening; do
     if gcc -w -g -O0 -fopenmp -std=c11 -I"$ROOT/include" -fsanitize=address \
-        -o "$WORK/$lsan_a.san" "$ROOT/examples/$lsan_a.c" "$ROOT/liblancius.a" \
+        -o "$WORK/$lsan_a.san" "$ROOT/examples/$lsan_a.c" "$ROOT/build/lib/liblancius.a" \
         -fsanitize=address -fopenmp -lm -lpthread 2>/dev/null; then
       ( cd "$ROOT" && ASAN_OPTIONS=detect_leaks=1 timeout 300 "$WORK/$lsan_a.san" ) \
         >"$LOG/$tag.$lsan_a.san" 2>&1
@@ -127,7 +127,7 @@ try() {
   cp "$WORK/orig.c" "$ROOT/$file"
   ACTIVE_MUT_FILE=""
   ACTIVE_MUT_BAK=""
-  ( cd "$ROOT" && make liblancius.a >/dev/null 2>&1 )
+  ( cd "$ROOT" && make build/lib/liblancius.a >/dev/null 2>&1 )
   if [ "$detected" -gt 0 ]; then
     printf "  %-46s CAUGHT by %d audit(s)%s\n" "$name" "$detected" \
       "$([ "$buildfail" -gt 0 ] && echo " (+$buildfail build failures)")"
@@ -146,7 +146,7 @@ try() {
 }
 
 echo "=== baseline: is the unmutated tree green under this harness? ==="
-make -C "$ROOT" liblancius.a >/dev/null 2>&1
+make -C "$ROOT" build/lib/liblancius.a >/dev/null 2>&1
 r=$(run_gate baseline)
 echo "baseline failing audits: ${r%%|*} (must be 0)"
 if [ "${r%%|*}" != "0" ]; then

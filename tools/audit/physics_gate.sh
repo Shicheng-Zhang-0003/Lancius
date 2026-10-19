@@ -29,7 +29,7 @@ mkdir -p temp/audit
 CC=${CC:-gcc}
 CFLAGS="-Wall -Wextra -g -Werror -O3 -mavx2 -mfma -fopenmp -std=c11"
 if ! $CC $CFLAGS -I./include -o "$BUILD" \
-        tools/audit/physics_probe.c liblancius.a -lm -fopenmp -lpthread; then
+        tools/audit/physics_probe.c build/lib/liblancius.a -lm -fopenmp -lpthread; then
     echo "[physics-gate] FAIL: probe did not compile" >&2
     exit 1
 fi

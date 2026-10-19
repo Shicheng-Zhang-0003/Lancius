@@ -23,7 +23,7 @@ trainers had no second layer).
 """
 import subprocess, sys, os, re, statistics, argparse
 
-TRAINER = "./train_verifier"
+TRAINER = "build/bin/train_verifier"
 H2_PIN = 64
 
 
