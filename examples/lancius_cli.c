@@ -336,8 +336,8 @@ static int cmd_doctor(void) {
     }
     printf("-- python interop (pip install onnx numpy for conversion) --\n");
     {
-        const char *pys[] = {"manage_datasets.py", "onnx_to_lancius.py",
-            "export_lancius_onnx.py", "export_lancius_pytorch.py", NULL};
+        const char *pys[] = {"tools/data/manage_datasets.py", "tools/onnx/onnx_to_lancius.py",
+            "tools/onnx/export_lancius_onnx.py", "tools/onnx/export_lancius_pytorch.py", NULL};
         int i;
         for (i = 0; pys[i]; i++) {
             int ok = file_exists(pys[i]);
@@ -357,7 +357,7 @@ static int cmd_doctor(void) {
     }
     printf("-- training data (optional for inference; needed for train) --\n");
     {
-        const char *data[] = {"train-images-idx3-ubyte", "cifar-10-batches-bin",
+        const char *data[] = {"datasets/mnist/train-images-idx3-ubyte", "datasets/cifar10/cifar-10-batches-bin",
             "data_text/prm800k_phase1_train.jsonl", NULL};
         int i;
         for (i = 0; data[i]; i++) {
@@ -410,8 +410,8 @@ static int cmd_status(void) {
         printf("python onnx/numpy: %s\n", rc == 0 ? "OK" : "MISSING (pip install onnx numpy)");
     }
     {
-        const char *mn = "train-images-idx3-ubyte";
-        const char *cf = "cifar-10-batches-bin/data_batch_1.bin";
+        const char *mn = "datasets/mnist/train-images-idx3-ubyte";
+        const char *cf = "datasets/cifar10/cifar-10-batches-bin/data_batch_1.bin";
         const char *pm = "data_text/prm800k_phase1_train.jsonl";
         printf("data: mnist %s, cifar10 %s, prm800k %s\n",
             file_exists(mn) ? "present" : "absent",
@@ -634,8 +634,8 @@ static int cmd_datasets(int argc, char **argv) {
         return 0;
     }
     if (strcmp(argv[0], "status") == 0) {
-        const char *paths[] = {"train-images-idx3-ubyte", "t10k-images-idx3-ubyte",
-            "cifar-10-batches-bin/data_batch_1.bin", "data_text/gsm8k_train.jsonl",
+        const char *paths[] = {"datasets/mnist/train-images-idx3-ubyte", "datasets/mnist/t10k-images-idx3-ubyte",
+            "datasets/cifar10/cifar-10-batches-bin/data_batch_1.bin", "data_text/gsm8k_train.jsonl",
             "data_text/prm800k_phase1_train.jsonl", "data_text/svamp.json",
             "data_text/miniF2F-v1", NULL};
         int i;
@@ -658,8 +658,8 @@ static int cmd_datasets(int argc, char **argv) {
             printf("try: mnist cifar10 vision gsm8k math prm800k svamp minif2f proofwriter ruletaker logic all\n");
             return 2;
         }
-        if (!file_exists("manage_datasets.py")) {
-            printf("FAIL: manage_datasets.py missing in this directory\n");
+        if (!file_exists("tools/data/manage_datasets.py")) {
+            printf("FAIL: tools/data/manage_datasets.py missing (run from the repository root)\n");
             return 1;
         }
         net = net_online();
@@ -671,7 +671,7 @@ static int cmd_datasets(int argc, char **argv) {
         }
         {
             char *xa[5];
-            xa[0] = "python3"; xa[1] = "manage_datasets.py";
+            xa[0] = "python3"; xa[1] = "tools/data/manage_datasets.py";
             xa[2] = "download"; xa[3] = argv[1]; xa[4] = NULL;
             return run_argv(xa[0], xa);
         }
@@ -733,14 +733,14 @@ static void print_train_help(void) {
 
 static int train_data_ok(const char *target, char *hint, size_t hintcap) {
     if (strcmp(target, "mnist") == 0) {
-        if (!file_exists("train-images-idx3-ubyte")) {
+        if (!file_exists("datasets/mnist/train-images-idx3-ubyte")) {
             snprintf(hint, hintcap, "lancius datasets pull mnist  (or vision)");
             return 0;
         }
         return 1;
     }
     if (strcmp(target, "cifar10") == 0) {
-        if (!file_exists("cifar-10-batches-bin/data_batch_1.bin")) {
+        if (!file_exists("datasets/cifar10/cifar-10-batches-bin/data_batch_1.bin")) {
             snprintf(hint, hintcap, "lancius datasets pull cifar10  (or vision)");
             return 0;
         }
@@ -1322,8 +1322,8 @@ static int cmd_convert(int argc, char **argv) {
             printf("FAIL: no such input %s\n", argv[1]);
             return 1;
         }
-        if (!file_exists("onnx_to_lancius.py")) {
-            printf("FAIL: onnx_to_lancius.py missing in this directory\n");
+        if (!file_exists("tools/onnx/onnx_to_lancius.py")) {
+            printf("FAIL: tools/onnx/onnx_to_lancius.py missing (run from the repository root)\n");
             return 1;
         }
         if (!have_py("onnx") || !have_py("numpy")) {
@@ -1333,7 +1333,7 @@ static int cmd_convert(int argc, char **argv) {
         {
             /* Despot truth: no shell (was: injection via filenames). */
             char *xa[5];
-            xa[0] = "python3"; xa[1] = "onnx_to_lancius.py";
+            xa[0] = "python3"; xa[1] = "tools/onnx/onnx_to_lancius.py";
             xa[2] = argv[1]; xa[3] = argv[2]; xa[4] = NULL;
             return run_argv(xa[0], xa);
         }
@@ -1347,8 +1347,8 @@ static int cmd_convert(int argc, char **argv) {
             printf("FAIL: no such input %s (try lancius models)\n", argv[1]);
             return 1;
         }
-        if (!file_exists("export_lancius_onnx.py")) {
-            printf("FAIL: export_lancius_onnx.py missing in this directory\n");
+        if (!file_exists("tools/onnx/export_lancius_onnx.py")) {
+            printf("FAIL: tools/onnx/export_lancius_onnx.py missing (run from the repository root)\n");
             return 1;
         }
         if (!have_py("onnx") || !have_py("numpy")) {
@@ -1357,7 +1357,7 @@ static int cmd_convert(int argc, char **argv) {
         }
         {
             char *xa[5];
-            xa[0] = "python3"; xa[1] = "export_lancius_onnx.py";
+            xa[0] = "python3"; xa[1] = "tools/onnx/export_lancius_onnx.py";
             xa[2] = argv[1]; xa[3] = argv[2]; xa[4] = NULL;
             return run_argv(xa[0], xa);
         }
@@ -1385,8 +1385,8 @@ static int cmd_export(int argc, char **argv) {
         printf("FAIL: no such input %s (try lancius models)\n", argv[1]);
         return 1;
     }
-    if (!file_exists("export_lancius_pytorch.py")) {
-        printf("FAIL: export_lancius_pytorch.py missing in this directory\n");
+    if (!file_exists("tools/onnx/export_lancius_pytorch.py")) {
+        printf("FAIL: tools/onnx/export_lancius_pytorch.py missing (run from the repository root)\n");
         return 1;
     }
     /* Despot truth: no shell + no silent truncation (was: both). */
@@ -1398,7 +1398,7 @@ static int cmd_export(int argc, char **argv) {
             return 1;
         }
         xa[ac++] = "python3";
-        xa[ac++] = "export_lancius_pytorch.py";
+        xa[ac++] = "tools/onnx/export_lancius_pytorch.py";
         for (i = 1; i < argc; i++) {
             if (strlen(argv[i]) > 1024) {
                 printf("FAIL: export arg too long\n");
@@ -1545,8 +1545,8 @@ static void tui_header(void) {
     printf("== lancius operator (TUI) %s ==\n", LANCIUS_VERSION_STRING);
     printf("models here: %d (.lancius) | data: mnist %s, cifar10 %s | type help, 0 to quit\n",
         n,
-        file_exists("train-images-idx3-ubyte") ? "yes" : "no",
-        file_exists("cifar-10-batches-bin/data_batch_1.bin") ? "yes" : "no");
+        file_exists("datasets/mnist/train-images-idx3-ubyte") ? "yes" : "no",
+        file_exists("datasets/cifar10/cifar-10-batches-bin/data_batch_1.bin") ? "yes" : "no");
 }
 
 static void tui_menu(void) {

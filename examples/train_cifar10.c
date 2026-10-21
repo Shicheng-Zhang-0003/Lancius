@@ -39,12 +39,12 @@ static int cifar_step(const char* cmd) {
 }
 
 void download_cifar10() {
-    if (access("cifar-10-batches-bin/data_batch_1.bin", F_OK) == 0) return;
+    if (access("datasets/cifar10/cifar-10-batches-bin/data_batch_1.bin", F_OK) == 0) return;
     printf("[1/5] Downloading CIFAR-10 Binary Dataset...\n");
-    if (!cifar_step("curl -s -L https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz -o cifar.tar.gz")) exit(1);
+    if (!cifar_step("curl -s -L https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz -o datasets/cifar10/cifar-10-binary.tar.gz")) exit(1);
     /* Despot V6 truth: tar-slip validated (was blind extract of MITM archive). */
     mk_scratch_dir();
-    if (!cifar_step("tar -tzf cifar.tar.gz > temp/scratch/tarlist.txt")) exit(1);
+    if (!cifar_step("tar -tzf datasets/cifar10/cifar-10-binary.tar.gz > temp/scratch/tarlist.txt")) exit(1);
     {
         FILE* lf = fopen("temp/scratch/tarlist.txt", "r");
         if (!lf) { fprintf(stderr, "FATAL: cannot list archive\n"); exit(1); }
@@ -57,9 +57,9 @@ void download_cifar10() {
         }
         fclose(lf);
     }
-    if (!cifar_step("tar -xzf cifar.tar.gz")) exit(1);
-    if (!cifar_step("rm cifar.tar.gz")) exit(1);
-    if (access("cifar-10-batches-bin/data_batch_1.bin", F_OK) != 0) { fprintf(stderr, "FATAL: CIFAR-10 download incomplete\n"); exit(1); }
+    if (!cifar_step("tar -xzf datasets/cifar10/cifar-10-binary.tar.gz -C datasets/cifar10")) exit(1);
+    if (!cifar_step("rm datasets/cifar10/cifar-10-binary.tar.gz")) exit(1);
+    if (access("datasets/cifar10/cifar-10-batches-bin/data_batch_1.bin", F_OK) != 0) { fprintf(stderr, "FATAL: CIFAR-10 download incomplete\n"); exit(1); }
 }
 
 void load_cifar10(uint8_t* X, uint8_t* Y, const char** files, int num_files) {
@@ -112,11 +112,11 @@ int main() {
     uint8_t* te_Y = (uint8_t*)malloc(NUM_TEST); CIFAR_NEED(te_Y, "te_Y");
 
     const char* train_files[] = {
-        "cifar-10-batches-bin/data_batch_1.bin", "cifar-10-batches-bin/data_batch_2.bin",
-        "cifar-10-batches-bin/data_batch_3.bin", "cifar-10-batches-bin/data_batch_4.bin",
-        "cifar-10-batches-bin/data_batch_5.bin"
+        "datasets/cifar10/cifar-10-batches-bin/data_batch_1.bin", "datasets/cifar10/cifar-10-batches-bin/data_batch_2.bin",
+        "datasets/cifar10/cifar-10-batches-bin/data_batch_3.bin", "datasets/cifar10/cifar-10-batches-bin/data_batch_4.bin",
+        "datasets/cifar10/cifar-10-batches-bin/data_batch_5.bin"
     };
-    const char* test_files[] = { "cifar-10-batches-bin/test_batch.bin" };
+    const char* test_files[] = { "datasets/cifar10/cifar-10-batches-bin/test_batch.bin" };
 
     load_cifar10(tr_X, tr_Y, train_files, 5);
     load_cifar10(te_X, te_Y, test_files, 1);
