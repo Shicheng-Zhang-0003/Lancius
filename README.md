@@ -412,8 +412,8 @@ python3 -m pip install onnx onnxruntime numpy
 Example workflow:
 
 ```bash
-python3 export_pytorch_onnx.py
-python3 audit_pytorch_parity.py
+python3 tools/onnx/export_pytorch_onnx.py
+python3 tools/audit/audit_pytorch_parity.py
 ```
 
 > Passing `make check` is the minimum development gate.
@@ -485,8 +485,8 @@ The following table describes the current status of major subsystems.
 
 | Area | Status | Notes |
 |---|---|---|
-| Stress testing | Available | `./run_stress.sh` sweeps `fuzz_lancius` seeds, repeats the deterministic suites to catch cross-invocation state leaks, enforces a per-case timeout, and treats "prints FAIL but exits 0" as a failure. Results under `stress-logs/` |
-| Dataset acquisition | Development | `manage_datasets.py` fetches through the 3463-LDFD submodule when `libsnapshot.so` is present (streaming gzip + tar, atomic land, HTTP>=400 as error), else the hardened urllib path. `manage_datasets.py status` reports which is live |
+| Stress testing | Available | `tools/run_stress.sh` sweeps `fuzz_lancius` seeds, repeats the deterministic suites to catch cross-invocation state leaks, enforces a per-case timeout, and treats "prints FAIL but exits 0" as a failure. Results under `stress-logs/` |
+| Dataset acquisition | Development | `tools/data/manage_datasets.py` fetches through the 3463-LDFD submodule when `libsnapshot.so` is present (streaming gzip + tar, atomic land, HTTP>=400 as error), else the hardened urllib path. `manage_datasets.py status` reports which is live |
 | Core tensor ops | Development | Add/Sub/Mul (N-dim broadcast-correct), MatMul, ReLU, Softmax (zero-sum guarded), Sum, Broadcast, Transpose |
 | Vision ops | Development | Conv2D, MaxPool2D, Flatten, fused Conv2D+ReLU; `FLATTEN`/`RESHAPE` verify element equality |
 | Training ops | Development | N-dim broadcast reduction (`SUM_AXIS_ND`) with an exact VJP proven against central differences, batched-matmul/GELU/LayerNorm/RMSNorm backward incl. gamma/beta (finite-diff ~1e-9..1e-11), global-norm clip, XOR convergence + checkpoint-resume gates; attention/GQA/SwiGLU/RoPE backward staged (fail loud) |
@@ -554,7 +554,7 @@ PyTorch / ONNX model
         ↓
 ONNX export (static batch)
         ↓
-onnx_to_lancius.py (strict)
+tools/onnx/onnx_to_lancius.py (strict)
         ↓
 Lancius binary model
         ↓
@@ -586,25 +586,25 @@ PyTorch-based workflows additionally require PyTorch and torchvision.
 Generate a pure ONNX model:
 
 ```bash
-python3 build_pure_onnx.py
+python3 tools/onnx/build_pure_onnx.py
 ```
 
 or export a PyTorch LeNet-style model (static batch):
 
 ```bash
-python3 export_pytorch_onnx.py
+python3 tools/onnx/export_pytorch_onnx.py
 ```
 
 Convert the ONNX model to a Lancius binary:
 
 ```bash
-python3 onnx_to_lancius.py pytorch_lenet.onnx pytorch_lenet.lancius
+python3 tools/onnx/onnx_to_lancius.py datasets/samples/pytorch_lenet.onnx datasets/samples/pytorch_lenet.lancius
 ```
 
 Run parity validation against ONNX Runtime (fails non-zero on divergence):
 
 ```bash
-python3 audit_pytorch_parity.py
+python3 tools/audit/audit_pytorch_parity.py
 ```
 <!-- /SECTION:ONNX_INTEROPERABILITY -->
 

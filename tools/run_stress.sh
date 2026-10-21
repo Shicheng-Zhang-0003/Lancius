@@ -13,13 +13,13 @@
 # see state that leaks between invocations.
 #
 # Usage:
-#   ./run_stress.sh                     # tier: full (default)
-#   ./run_stress.sh --tier smoke        # ~1 min
-#   ./run_stress.sh --tier soak         # soak + long fuzz sweep
-#   ./run_stress.sh --seeds 200         # fuzz sweep size
-#   ./run_stress.sh --repeat 3          # repeat deterministic suites
-#   ./run_stress.sh --list              # show the plan and exit
-#   ./run_stress.sh --dry-run           # show the plan, run nothing
+#   tools/run_stress.sh                     # tier: full (default)
+#   tools/run_stress.sh --tier smoke        # ~1 min
+#   tools/run_stress.sh --tier soak         # soak + long fuzz sweep
+#   tools/run_stress.sh --seeds 200         # fuzz sweep size
+#   tools/run_stress.sh --repeat 3          # repeat deterministic suites
+#   tools/run_stress.sh --list              # show the plan and exit
+#   tools/run_stress.sh --dry-run           # show the plan, run nothing
 #
 # Exit codes:
 #   0  everything requested passed
@@ -31,7 +31,7 @@
 
 set -u -o pipefail
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_DIR" || exit 3
 
 # ----------------------------------------------------------------- defaults
@@ -56,7 +56,7 @@ BUILD_DIR=""             # non-empty => run these binaries instead of ./
 CORE_DIR=""              # where core files land (debug mode only)
 HAVE_GDB=0
 CORES_ONLY=0            # --cores alone: core dumps, no rebuild, no sanitizer
-LOG_ROOT="$REPO_DIR/stress-logs"
+LOG_ROOT="$REPO_DIR/temp/stress"
 
 # Binaries that report their own pass/fail via exit code.
 UNIT_TESTS=(stress_test test_torture soak_fuzz)
@@ -76,20 +76,20 @@ It also repeats the deterministic suites, because the bugs found during the
 see state that leaks between invocations.
 
 Usage:
-  ./run_stress.sh                     # tier: full (default)
-  ./run_stress.sh --tier smoke        # ~1 min
-  ./run_stress.sh --tier soak         # soak + long fuzz sweep
-  ./run_stress.sh --seeds 200         # fuzz sweep size
-  ./run_stress.sh --repeat 3          # repeat deterministic suites
-  ./run_stress.sh --jobs 4            # run cases in parallel
-  ./run_stress.sh --list              # show the plan and exit
-  ./run_stress.sh --dry-run           # show the plan, run nothing
+  tools/run_stress.sh                     # tier: full (default)
+  tools/run_stress.sh --tier smoke        # ~1 min
+  tools/run_stress.sh --tier soak         # soak + long fuzz sweep
+  tools/run_stress.sh --seeds 200         # fuzz sweep size
+  tools/run_stress.sh --repeat 3          # repeat deterministic suites
+  tools/run_stress.sh --jobs 4            # run cases in parallel
+  tools/run_stress.sh --list              # show the plan and exit
+  tools/run_stress.sh --dry-run           # show the plan, run nothing
 
 Debug run (sanitizers + core dumps + gdb recipes):
-  ./run_stress.sh --debug             # = --sanitize=address --cores -v
-  ./run_stress.sh --sanitize both     # address + undefined
-  ./run_stress.sh --cores             # core dumps only, no rebuild
-  ./run_stress.sh -v                  # verbose (prints each fuzz tally)
+  tools/run_stress.sh --debug             # = --sanitize=address --cores -v
+  tools/run_stress.sh --sanitize both     # address + undefined
+  tools/run_stress.sh --cores             # core dumps only, no rebuild
+  tools/run_stress.sh -v                  # verbose (prints each fuzz tally)
 
   --debug rebuilds the stress binaries into build-debug/ with -g -O0 and
   the chosen sanitizers. It never touches the release binaries or
@@ -284,7 +284,7 @@ done
 # the check is satisfied by the debug build rather than the release one.
 # Skipped for --list/--dry-run: those describe the plan and must not compile.
 if [ "$SANITIZE" != none ] && [ "$DRY_RUN" -eq 0 ] && [ "$LIST_ONLY" -eq 0 ]; then
-    BUILD_DIR="${BUILD_DIR:-$REPO_DIR/build-debug}"
+    BUILD_DIR="${BUILD_DIR:-$REPO_DIR/build/debug}"
     if ! build_debug_binaries "$BUILD_DIR"; then
         echo "run_stress.sh: debug build failed" >&2
         exit 3
@@ -299,7 +299,7 @@ if [ -n "$BUILD_DIR" ]; then
     done
 else
     for b in "${REQUIRED[@]}"; do
-        [ -x "./$b" ] || MISSING+=("$b")
+        [ -x "$REPO_DIR/build/bin/$b" ] || MISSING+=("$b")
     done
 fi
 
@@ -308,7 +308,7 @@ if [ "$LIST_ONLY" -eq 1 ]; then
     printf '  %s\n' "${CASES[@]}"
     if [ "$SANITIZE" != none ]; then
         echo
-        echo "would build debug binaries (sanitize=$SANITIZE) into: ${BUILD_DIR:-$REPO_DIR/build-debug}"
+        echo "would build debug binaries (sanitize=$SANITIZE) into: ${BUILD_DIR:-$REPO_DIR/build/debug}"
     fi
     if [ ${#MISSING[@]} -gt 0 ]; then
         echo
@@ -319,7 +319,7 @@ if [ "$LIST_ONLY" -eq 1 ]; then
 fi
 
 if [ ${#MISSING[@]} -gt 0 ]; then
-    echo "run_stress.sh: missing binaries: ${MISSING[*]}" >&2
+    echo "run_stress.sh: missing binaries in build/bin: ${MISSING[*]}" >&2
     echo "  build them first:  make ${REQUIRED[*]}" >&2
     exit 3
 fi
@@ -366,7 +366,7 @@ if [ "$SANITIZE" != none ] && [ "$TIMEOUT_S" -eq 1800 ]; then
 fi
 
 # Binaries under test: the debug build dir if there is one, else the repo root.
-if [ -n "$BUILD_DIR" ]; then BIN_PREFIX="$BUILD_DIR/"; else BIN_PREFIX="./"; fi
+if [ -n "$BUILD_DIR" ]; then BIN_PREFIX="$BUILD_DIR/"; else BIN_PREFIX="$REPO_DIR/build/bin/"; fi
 
 SUMMARY="$LOG_DIR/summary.tsv"
 # Header in both serial and parallel mode so the tsv is always parseable.
@@ -379,7 +379,7 @@ echo " logs: $LOG_DIR"
 if [ -n "$BUILD_DIR" ]; then
     echo " build: $BUILD_DIR (sanitize=$SANITIZE -O$OPT_LEVEL, release binaries untouched)"
 else
-    echo " build: repository root (release binaries)"
+    echo " build: build/bin (release binaries)"
 fi
 if [ "$SANITIZE" != none ]; then
     echo " ASAN_OPTIONS=$ASAN_OPTIONS"
@@ -395,7 +395,7 @@ echo "=============================================================="
 {
     echo "timestamp: $TS"
     echo "tier=$TIER seeds=$SEEDS repeat=$REPEAT jobs=$JOBS timeout=$TIMEOUT_S"
-    echo "sanitize=$SANITIZE build_dir=${BUILD_DIR:-<repo root>}"
+    echo "sanitize=$SANITIZE build_dir=${BUILD_DIR:-build/bin}"
     echo "ASAN_OPTIONS=${ASAN_OPTIONS:-}"
     echo "UBSAN_OPTIONS=${UBSAN_OPTIONS:-}"
     echo "--- uname ---"

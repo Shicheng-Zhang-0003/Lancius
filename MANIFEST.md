@@ -11,7 +11,7 @@
   present, `manage_datasets.py download` fetches through LDFD (streaming
   gzip inflate, tar extraction, atomic land, HTTP >= 400 treated as an
   error). Without it, the pre-existing hardened urllib path runs instead.
-  `manage_datasets.py status` reports which is active; behaviour of the
+  `tools/data/manage_datasets.py status` reports which is active; behaviour of the
   command is identical either way.
 - No model-format change, no operator change, no ABI change. `lancius_*`
   stable API, the v2 format, and CRC32 integrity are untouched.

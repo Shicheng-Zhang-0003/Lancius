@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.."))
 from algos import ALGORITHMS
 import verifier5 as V
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.parent / "onnx"))
 from export_lancius_onnx import parse_lancius
 
 LEVELS = [-1.0, -0.5, 0.0, 0.5, 1.0]

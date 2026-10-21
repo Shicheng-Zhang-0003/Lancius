@@ -61,6 +61,7 @@ $(eval $(call LINK,train_mnist,examples/train_mnist.c,-fopenmp -lpthread))
 $(eval $(call LINK,train_verifier,examples/train_verifier.c,-fopenmp -lpthread))
 $(eval $(call LINK,train_cifar10,examples/train_cifar10.c,-fopenmp -lpthread))
 $(eval $(call LINK,train_micromodel,examples/train_micromodel.c,-fopenmp -lpthread))
+$(eval $(call LINK,train_i3,examples/train_i3.c,-fopenmp -lpthread))
 $(eval $(call LINK,eval_verifier,examples/eval_verifier.c,-fopenmp -lpthread))
 $(eval $(call LINK,train_verifier_head,examples/train_verifier_head.c,-fopenmp -lpthread))
 $(eval $(call LINK,fuzz_lancius,examples/fuzz_lancius.c,-fopenmp))
@@ -104,6 +105,25 @@ $(BIN)/distill_prm800k: examples/distill_prm800k.c | $(BIN)
 $(BIN)/test_diamond_memory: examples/test_diamond_memory.c $(LIB) | $(BIN)
 	$(CC) -Wall -Wextra -fsanitize=address -fno-omit-frame-pointer -g -I./include -fopenmp -o $@ $< $(LIB) $(LDFLAGS) -fsanitize=address
 
+# ldfd_stream_train (experimental, v12R3): the LDFD -> Lancius stream plug.
+# It compiles every LDFD source directly into the binary, so one executable
+# owns BOTH the Lancius trainer and the live data path — no libsnapshot.so,
+# no shared state between the two frameworks. The curl_multi loop in fetch.c
+# reaches snap_pipeline_rearm (context.c) and pipeline construction reaches
+# the JSON parser vtables, so the FULL LDFD source set links here — same
+# dependency shape as the module itself (libcurl + cJSON + zlib).
+# Deliberately NOT part of `all` (needs libcurl dev headers, like every LDFD
+# consumer): build it explicitly via `make check-ldfd-stream`. A missing
+# dependency turns that build red, never a silent pass.
+LDFD_PLUG_SRC = 3463-LDFD/src/fetch.c 3463-LDFD/src/buffer.c \
+                3463-LDFD/src/parser_csv.c 3463-LDFD/src/parser_json.c \
+                3463-LDFD/src/context.c 3463-LDFD/src/config.c \
+                3463-LDFD/src/assoc.c 3463-LDFD/src/decompress.c \
+                3463-LDFD/src/output.c
+$(BIN)/ldfd_stream_train: examples/ldfd_stream_train.c $(LDFD_PLUG_SRC) $(LIB) | $(BIN)
+	$(CC) $(CFLAGS) -D_POSIX_C_SOURCE=200809L -I3463-LDFD/include -o $@ $< \
+	    $(LDFD_PLUG_SRC) $(LIB) $(LDFLAGS) -lcurl -lcjson -lz -fopenmp -lpthread
+
 $(LIB): $(OBJS) | $(LIBD)
 	ar rcs $@ $(OBJS)
 
@@ -145,14 +165,14 @@ clean:
 	rm -f $(notdir $(BINS))
 	rm -f test_model.lancius regression_roundtrip.lancius regression_bad_*.lancius \
 	      regression_trunc_*.lancius regression_huge_*.lancius temp/mutation/_t
-	rm -f *.o *.d bench_kernels
-	rm -rf temp/phys temp/audit/physics
+	rm -f *.o *.d bench_kernels liblancius.a
+	rm -rf build-debug stress-logs temp/phys temp/audit/physics
 	rm -f temp/audit/physics_probe_out.txt
 	@echo "build tree, legacy root binaries and gate scratch removed."
 
 .PHONY: all clean help env check check-long check-sanitizers ldfd-test \
-        ldfd-build check-oracle check-mutation check-ubstrict check-physics \
-        install uninstall
+        ldfd-build check-ldfd-stream check-oracle check-mutation \
+        check-ubstrict check-physics install uninstall
 
 # ---- terminal friendliness: know where things are without searching -----
 help:
@@ -184,6 +204,10 @@ help:
 	@echo "data feeding framework (own deps: libcurl, zlib):"
 	@echo "  make ldfd-build                build 3463-LDFD"
 	@echo "  make ldfd-test                 run its suites"
+	@echo "  make check-ldfd-stream         experimental LDFD -> Lancius plug:"
+	@echo "                                 train one tiny model from a live LDFD"
+	@echo "                                 stream AND from the predownloaded same"
+	@echo "                                 corpus, then gate parity + round-trip"
 	@echo
 	@echo "install:"
 	@echo "  make install [PREFIX=/usr/local]   headers + lib + CLI"
@@ -227,7 +251,7 @@ test_ubsan: stress_test test_torture fuzz_lancius
 
 # stress_test/test_torture/fuzz_lancius keep their bare names callable from
 # the targets above; they are aliases onto the build/bin products.
-stress_test fuzz_lancius test_torture: %: $(BIN)/%
+stress_test fuzz_lancius test_torture soak_fuzz: %: $(BIN)/%
 	@true
 
 # ------------------------------------------------------------------ 3463-LDFD
@@ -241,15 +265,20 @@ stress_test fuzz_lancius test_torture: %: $(BIN)/%
 LDFD_DIR = 3463-LDFD
 
 ldfd-test:
-	@echo "LDFD acquisition path: `python3 manage_datasets.py status | sed -n 's/.*LDFD (3463) *: //p'`"
+	@echo "LDFD acquisition path: `python3 tools/data/manage_datasets.py status | sed -n 's/.*LDFD (3463) *: //p'`"
 	@$(MAKE) -C $(LDFD_DIR) test
 	@# exit 77 = skipped (library not built); anything else is a failure
-	@python3 audit_ldfd_bridge.py; st=$$?; \
+	@python3 tools/audit/audit_ldfd_bridge.py; st=$$?; \
 	 if [ $$st -eq 77 ]; then echo "bridge audit skipped (no libsnapshot.so)"; \
 	 elif [ $$st -ne 0 ]; then echo "bridge audit FAILED"; exit $$st; fi
 
 ldfd-build:
 	$(MAKE) -C $(LDFD_DIR) all
+
+# v12R3 experimental plug: live LDFD stream and a predownloaded corpus both
+# train the same tiny model; servers/parsers/trainer in one binary.
+check-ldfd-stream: $(BIN)/ldfd_stream_train
+	$(BIN)/ldfd_stream_train
 
 check: all
 	$(BIN)/stress_test
@@ -280,9 +309,9 @@ check: all
 	$(BIN)/audit_v7_hardening
 	$(BIN)/train_micromodel
 	$(BIN)/eval_verifier
-	python3 audit_text_pipeline.py
-	python3 audit_abi.py
-	python3 audit_binding_smoke.py
+	python3 tools/audit/audit_text_pipeline.py
+	python3 tools/audit/audit_abi.py
+	python3 tools/audit/audit_binding_smoke.py
 	@echo "--- LDFD bridge (3463) ---"
 	@$(MAKE) --no-print-directory ldfd-test
 	$(BIN)/lancius info test_model.lancius

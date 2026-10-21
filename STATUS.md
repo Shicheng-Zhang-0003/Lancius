@@ -91,12 +91,12 @@ Full per-batch record lives in `CHANGELOG.md`; essence only here
 
 ## 3463-LDFD integration (live dataset acquisition)
 
-Datasets are no longer fetched by hand. `manage_datasets.py` routes through
+Datasets are no longer fetched by hand. `tools/data/manage_datasets.py` routes through
 the Lancius Live Data Feeding Framework (3463-LDFD, a submodule at
 `3463-LDFD/`, wired via `.gitmodules`) when `libsnapshot.so` is available,
 and falls back to the hardened urllib path when it is not:
 
-- `manage_datasets.py status` reports which path is live.
+- `tools/data/manage_datasets.py status` reports which path is live.
 - `make ldfd-test` runs the LDFD suites plus the bridge audit; SKIPs
   honestly when the library or its headers are absent, never silently
   passes.
@@ -218,7 +218,7 @@ byte-reproducible, so datasets are verified by content rather than digest.
 3463-LDFD evidence: `make -C 3463-LDFD test` = 4 dependency-free suites,
 92 checks, 0 failures, ASan/UBSan clean. The assoc regression suite fails
 15/20 against the pre-fix code, so the fixes are pinned rather than
-asserted. `make ldfd-test` additionally runs `audit_ldfd_bridge.py`, which
+asserted. `make ldfd-test` additionally runs `tools/audit/audit_ldfd_bridge.py`, which
 compiles against the C headers to prove the ctypes struct layout and enum
 values match, and exits 77 (skip) when the library is absent.
 
