@@ -57,6 +57,7 @@ test_model.lancius
 data/
 data_text/
 cifar-10-batches-bin/
+datasets/
 *.tar.gz
 *-images-idx3-ubyte
 *-labels-idx1-ubyte

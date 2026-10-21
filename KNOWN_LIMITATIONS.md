@@ -155,7 +155,7 @@ and do NOT abort.
 -   Bytecode VM materializes `CONST` nodes at execute time; graphs mixing
     `CONST` with computed ops execute identically to the scheduler on the
     2D MLP subset.
--   `export_lancius_onnx.py` refuses `checksum == 0` files unless passed
+-   `tools/onnx/export_lancius_onnx.py` refuses `checksum == 0` files unless passed
     `--allow-legacy` (mirrors the C loader default).
 -   Operator (`./lancius`): `quickstart`/`status`/`models`/`demo`/`doctor`/`eval` are
     informational or self-contained; `train` shells only fixed binaries,
@@ -174,7 +174,7 @@ and do NOT abort.
     success); OpenMP worker errors propagate via shared flags.
 -   `conv2d_bwd`/`conv2d_bwd_w`/`maxpool2d_bwd` builders + executors verify grad
     N/C/H_out/W_out (wrong-shaped grads rejected, never silently wrong).
--   RoPE `2*head_dim` overflow guarded; `vectors_to_lancius.py` raises
+-   RoPE `2*head_dim` overflow guarded; `tools/data/vectors_to_lancius.py` raises
     `ValueError` (no `assert`).
 
 ## v12R1 hardening batches V5/V6 — boundary impact only (enumeration in `CHANGELOG.md`)
