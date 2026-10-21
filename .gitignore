@@ -108,3 +108,4 @@ generation_1/results_big/
 generation_1/gen1_model.txt
 generation_1/**/__pycache__/
 generation_1/__pycache__/
+generation_1/I3/corpus/model_i3.txt
