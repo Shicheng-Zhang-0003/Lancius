@@ -24,7 +24,7 @@ class LeNet(nn.Module):
 model = LeNet()
 model.eval()
 dummy_input = torch.randn(1, 3, 32, 32)
-torch.onnx.export(model, dummy_input, "pytorch_lenet.onnx",
+torch.onnx.export(model, dummy_input, "datasets/samples/pytorch_lenet.onnx",
                   input_names=['input'], output_names=['output'],
                   opset_version=17, do_constant_folding=True)
-print("✅ Exported PyTorch model to pytorch_lenet.onnx")
+print("✅ Exported PyTorch model to datasets/samples/pytorch_lenet.onnx")

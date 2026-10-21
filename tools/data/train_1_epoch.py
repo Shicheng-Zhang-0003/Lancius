@@ -26,7 +26,7 @@ class LeNet(nn.Module):
 def main():
     print("🧠 Training LeNet on CIFAR-10 for 1 Epoch...")
     transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+    trainset = torchvision.datasets.CIFAR10(root='datasets/cifar10/torchvision', train=True, download=True, transform=transform)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=64, shuffle=True, num_workers=2)
 
     net = LeNet()
@@ -45,13 +45,15 @@ def main():
     print("✅ Training Complete.")
 
     net.eval()
-    dummy_input = torch.randn(1, 3, 32, 32)
+    # static batch of 100: the reality audit feeds 100 test images and the
+    # C engine replays them; a 1-batch export could never match.
+    dummy_input = torch.randn(100, 3, 32, 32)
     # Hostile fix: static batch export. Dynamic batch was silently frozen to 1 by the
     # converter (symbolic dim -> 1) producing a silently wrong model. Export static.
-    torch.onnx.export(net, dummy_input, "trained_lenet.onnx",
+    torch.onnx.export(net, dummy_input, "datasets/samples/trained_lenet.onnx",
                       input_names=['input'], output_names=['output'],
                       opset_version=17, do_constant_folding=True)
-    print("✅ Exported trained model to trained_lenet.onnx")
+    print("✅ Exported trained model to datasets/samples/trained_lenet.onnx")
 
 if __name__ == "__main__":
     main()

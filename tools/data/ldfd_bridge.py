@@ -68,6 +68,7 @@ _CANDIDATE_LIBS = (
     _HERE / "3463-LDFD" / "libsnapshot.so",
     _HERE / "libsnapshot.so",
     _HERE.parent / "3463-LDFD" / "libsnapshot.so",
+    _HERE.parent.parent / "3463-LDFD" / "libsnapshot.so",
 )
 
 _lib: Optional[ctypes.CDLL] = None
