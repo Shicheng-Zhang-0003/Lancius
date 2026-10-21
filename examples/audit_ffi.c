@@ -16,7 +16,7 @@ int main() {
         printf("  ❌ Failed to create context: %s\n", lancius_get_error_string(lancius_get_last_error()));
         return 1;
     }
-    printf("  ✅ Context Initialized (Opaque Pointer: %p)\n", ctx);
+    printf("  ✅ Context Initialized (Opaque Handle: %lu)\n", ctx);
 
     printf("[2/4] Building Graph via Stable API...\n");
     lancius_graph_handle g = lancius_graph_create_stable(ctx);

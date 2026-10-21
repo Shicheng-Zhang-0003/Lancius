@@ -26,9 +26,9 @@ extern "C" {
  *   (do NOT free; they die with it — destroy invalidates all).
  * - handles carry magic tags; wrong-type / stale / destroyed handles return
  *   INVALID_HANDLE instead of corrupting memory. NULL always fails loud. */
-typedef void* lancius_context;
-typedef void* lancius_graph_handle;
-typedef void* lancius_tensor_handle;
+typedef uint64_t lancius_context;
+typedef uint64_t lancius_graph_handle;
+typedef uint64_t lancius_tensor_handle;
 
 // Production Error Codes
 typedef enum {
@@ -67,12 +67,7 @@ LANCIUS_EXPORT lancius_tensor_handle lancius_add_relu(lancius_graph_handle g, la
 // Data Binding & Execution
 LANCIUS_EXPORT lancius_status lancius_bind_data(lancius_tensor_handle t, double* data_ptr);
 LANCIUS_EXPORT lancius_status lancius_compile_and_run(lancius_graph_handle g);
-LANCIUS_EXPORT lancius_status lancius_read_output(lancius_tensor_handle t, double* out_buffer, size_t buffer_size);
-
-#ifdef __cplusplus
-}
-#endif
-
+LANCIUS_EXPORT lancius_status lancius_read_output(lancius_tensor_handle t, double* out_buffer, size_t buffer_size_bytes);
 
 /* v11A3 stable API expansion: model I/O */
 LANCIUS_EXPORT lancius_graph_handle lancius_graph_load_stable(lancius_context ctx, const char* path);
@@ -83,5 +78,9 @@ LANCIUS_EXPORT size_t lancius_tensor_element_count(lancius_tensor_handle t);
 
 /* A3: dtype query API */
 LANCIUS_EXPORT int lancius_tensor_get_dtype(lancius_tensor_handle t);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // LANCIUS_STABLE_API_H

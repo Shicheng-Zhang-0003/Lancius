@@ -160,7 +160,13 @@ int main(void) {
        Phase 205 closed the oversized-input hole: 400M x 1 exceeds the element
        limit, so this must be NULL (no abort, no corrupt tensor). */
     lancius_tensor_handle t_bad = lancius_add_input(gh, 400000000, 1);
-    EXPECT_NULL(t_bad, "stable API rejects 400M x 1 oversized input");
+    if (t_bad != 0) {
+        printf("  ❌ FAIL: stable API rejects 400M x 1 oversized input (expected 0, got %lu)\n", t_bad);
+        failures++;
+    } else {
+        printf("  ✅ PASS: stable API rejects 400M x 1 oversized input\n");
+        checks++;
+    }
     lancius_graph_destroy_stable(gh);
     lancius_destroy_context(ctx);
     printf("  ✅ PASS: Stable API lifecycle survived\n");
