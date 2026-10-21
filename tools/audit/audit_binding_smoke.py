@@ -3,8 +3,8 @@ import ctypes
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-LIB = ROOT / "liblancius.a"
+ROOT = Path(__file__).resolve().parent.parent.parent
+LIB = ROOT / "build" / "lib" / "liblancius.a"
 
 def main() -> int:
     # Static lib exists after make; shared smoke via ctypes on liblancius.a is

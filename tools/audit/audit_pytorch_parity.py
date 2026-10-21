@@ -16,48 +16,39 @@ def main():
         print("❌ FATAL: onnxruntime is not installed. Run: pip install onnxruntime")
         sys.exit(1)
 
-    if not os.path.exists("pytorch_lenet.onnx"):
-        print("❌ FATAL: pytorch_lenet.onnx not found. Run export_pytorch_onnx.py first.")
+    if not os.path.exists("datasets/samples/pytorch_lenet.onnx"):
+        print("❌ FATAL: pytorch_lenet.onnx not found. Run tools/onnx/export_pytorch_onnx.py first.")
         sys.exit(1)
 
     # 1. Generate deterministic FP32 input
     print("[1/5] Generating deterministic FP32 input tensor...")
     np.random.seed(42)
     input_data = np.random.randn(1, 3, 32, 32).astype(np.float32)
-    input_data.tofile("parity_input.bin")
+    input_data.tofile("datasets/samples/parity_input.bin")
     print(f"      Input Shape: {input_data.shape} | Mean: {input_data.mean():.4f}")
 
     # 2. Run ONNX Runtime Baseline
     print("[2/5] Running ONNX Runtime (NVIDIA Math Baseline)...")
-    sess = ort.InferenceSession("pytorch_lenet.onnx")
+    sess = ort.InferenceSession("datasets/samples/pytorch_lenet.onnx")
     input_name = sess.get_inputs()[0].name
     baseline = sess.run(None, {input_name: input_data})[0]
-    baseline.tofile("baseline_out.bin")
+    baseline.tofile("datasets/samples/baseline_out.bin")
     print(f"      Baseline Logits: {baseline.flatten()[:5]}")
 
     # 3. Convert ONNX to Lancius
     print("[3/5] Converting ONNX to Lancius Binary...")
     # V10S FIX: Always regenerate to prevent stale artifact divergence
-    if os.path.exists("pytorch_lenet.lancius"):
-        os.remove("pytorch_lenet.lancius")
-    subprocess.run(["python3", "onnx_to_lancius.py"], check=True, timeout=60)
+    if os.path.exists("datasets/samples/pytorch_lenet.lancius"):
+        os.remove("datasets/samples/pytorch_lenet.lancius")
+    subprocess.run(["python3", "tools/onnx/onnx_to_lancius.py"], check=True, timeout=60)
 
     # 4. Compile and run C Parity Runner
     print("[4/5] Compiling and running Lancius C Engine...")
-    compile_cmd = [
-        "gcc", "-O3", "-fopenmp", "-std=c11",
-        "-I./include", "-o", "parity_runner",
-        "examples/parity_runner.c", "liblancius.a", "-lm", "-lpthread"
-    ]
-    result = subprocess.run(compile_cmd, capture_output=True, text=True, timeout=60)
-    if result.returncode != 0:
-        print(f"❌ FATAL: Compilation failed:\n{result.stderr}")
-        sys.exit(1)
-    subprocess.run(["./parity_runner"], check=True, timeout=60)
+    subprocess.run(["build/bin/parity_runner"], check=True, timeout=60)
 
     # 5. Differential Comparison
     print("[5/5] Performing Differential Math Comparison...")
-    lancius_raw = np.fromfile("lancius_out.bin", dtype=np.float32)
+    lancius_raw = np.fromfile("datasets/samples/lancius_out.bin", dtype=np.float32)
     if lancius_raw.size != baseline.size:
         print(f"❌ FATAL: Output size mismatch: Lancius {lancius_raw.size} vs ONNX {baseline.size}")
         sys.exit(1)

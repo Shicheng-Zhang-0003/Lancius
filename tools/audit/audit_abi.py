@@ -3,7 +3,7 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 
 def main() -> int:
     vh = (ROOT / "include" / "lancius" / "lancius_version.h").read_text()

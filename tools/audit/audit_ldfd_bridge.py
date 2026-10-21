@@ -11,7 +11,7 @@ Two tiers, both honest:
 Exits 0 on success, 1 on any failure, 77 when skipped (no library present).
 Stdlib only.
 
-Run:  python3 audit_ldfd_bridge.py
+Run:  python3 tools/audit/audit_ldfd_bridge.py
 """
 
 from __future__ import annotations
@@ -28,8 +28,9 @@ import tempfile
 import shutil
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent.parent
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent / "data"))
 
 import ldfd_bridge as ldfd  # noqa: E402
 
@@ -66,7 +67,7 @@ int main(void) {{
         src = Path(td) / "sz.c"
         out = Path(td) / "sz"
         src.write_text(prog)
-        inc = HERE / "3463-LDFD" / "include"
+        inc = ROOT / "3463-LDFD" / "include"
         cp = subprocess.run(
             ["cc", "-std=c17", "-I", str(inc), str(src), "-o", str(out)],
             capture_output=True, text=True)
@@ -105,7 +106,7 @@ int main(void) {
     with tempfile.TemporaryDirectory() as td:
         src, out = Path(td) / "o.c", Path(td) / "o"
         src.write_text(prog)
-        cp = subprocess.run(["cc", "-std=c17", "-I", str(HERE / "3463-LDFD" / "include"),
+        cp = subprocess.run(["cc", "-std=c17", "-I", str(ROOT / "3463-LDFD" / "include"),
                              str(src), "-o", str(out)], capture_output=True, text=True)
         if cp.returncode != 0:
             check("layout: snap_source_t offsets obtainable from C", False)
@@ -137,7 +138,7 @@ int main(void) {
     with tempfile.TemporaryDirectory() as td:
         src, out = Path(td) / "e.c", Path(td) / "e"
         src.write_text(prog)
-        cp = subprocess.run(["cc", "-std=c17", "-I", str(HERE / "3463-LDFD" / "include"),
+        cp = subprocess.run(["cc", "-std=c17", "-I", str(ROOT / "3463-LDFD" / "include"),
                              str(src), "-o", str(out)], capture_output=True, text=True)
         if cp.returncode != 0:
             check("errors: enum values obtainable from C", False)
