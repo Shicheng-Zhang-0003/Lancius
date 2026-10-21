@@ -6,7 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "data"))
 
 from text_tokenizer import CharTokenizer, verify_manifest, write_manifest
 
