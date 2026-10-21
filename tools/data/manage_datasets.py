@@ -63,6 +63,9 @@ CLEANUP_TARGETS = [
     "baseline_out.bin",
     "lancius_out.bin",
     "lancius_preds.bin",
+    "datasets/mnist",
+    "datasets/cifar10",
+    "datasets/samples",
     "fuzz.lancius",
     "garbage.lancius",
     "trunc.lancius",
@@ -264,6 +267,7 @@ def download_mnist():
     """MNIST idx files. LFD inflates the .gz in one pass so only the raw
     bytes train_mnist.c reads are ever written to disk."""
     print("📥 Downloading MNIST...")
+    os.makedirs("datasets/mnist", exist_ok=True)
     base_url = "https://ossci-datasets.s3.amazonaws.com/mnist/"
     files = [
         "train-images-idx3-ubyte.gz",
@@ -276,12 +280,12 @@ def download_mnist():
         raw_name = f[:-3]                     # strip .gz
         url = base_url + f
         # LDFD path: fetch + inflate, landing the decompressed file.
-        if _ldfd_fetch(url, raw_name, gzip_payload=True):
+        if _ldfd_fetch(url, os.path.join("datasets", "mnist", raw_name), gzip_payload=True):
             continue
         # urllib path: fetch the .gz, then expand it here.
         try:
             print(f"  Fetching {f}...")
-            with urllib.request.urlopen(url, timeout=60) as response, open(f, 'wb') as out:
+            with urllib.request.urlopen(url, timeout=60) as response, open(os.path.join("datasets", "mnist", f), 'wb') as out:
                 total = 0
                 while True:
                     chunk = response.read(65536)
@@ -294,8 +298,8 @@ def download_mnist():
             # Despot V9: decompressed size was uncapped (zip-bomb fills disk:
             # compressed capped at 2GB, inflate via copyfileobj unbounded).
             # Cap inflate at 8GB (MNIST raw is ~50MB; 8GB is 160x headroom).
-            with gzip.open(f, 'rb') as f_in:
-                with open(raw_name, 'wb') as f_out:
+            with gzip.open(os.path.join("datasets", "mnist", f), 'rb') as f_in:
+                with open(os.path.join("datasets", "mnist", raw_name), 'wb') as f_out:
                     _total_out = 0
                     while True:
                         _chunk = f_in.read(65536)
@@ -323,20 +327,21 @@ def download_cifar10():
     """CIFAR-10 binary. LDFD extracts the .tar.gz in place, so the archive
     itself never lands and train_cifar10.c finds cifar-10-batches-bin/."""
     print("📥 Downloading CIFAR-10 (Binary version for C)...")
+    os.makedirs("datasets/cifar10", exist_ok=True)
     url = "https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz"
-    marker = "cifar-10-batches-bin/data_batch_1.bin"
+    marker = os.path.join("datasets", "cifar10", "cifar-10-batches-bin", "data_batch_1.bin")
 
     if os.path.exists(marker):
         print("✅ CIFAR-10 ready.")
         return True
 
     # LDFD path: fetch + extract, atomically landing the batch directory.
-    if _ldfd_fetch(url, "cifar-10-batches-bin", tar=True):
+    if _ldfd_fetch(url, os.path.join("datasets", "cifar10", "cifar-10-batches-bin"), tar=True):
         print("✅ CIFAR-10 ready.")
         return True
 
     # urllib path: fetch, then extract with the existing safe extractor.
-    tar_name = "cifar-10-binary.tar.gz"
+    tar_name = os.path.join("datasets", "cifar10", "cifar-10-binary.tar.gz")
     try:
         print(f"  Fetching {tar_name}...")
         with urllib.request.urlopen(url, timeout=60) as response, open(tar_name, 'wb') as out:
@@ -592,8 +597,8 @@ def _usage():
     print("Math/proof/logic (Python-side derivational analysis):")
     print("  gsm8k, math, svamp, minif2f, proofwriter, ruletaker")
     print("Usage:")
-    print("  python3 manage_datasets.py status               # which fetch path is live")
-    print("  python3 manage_datasets.py clean")
+    print("  python3 tools/data/manage_datasets.py status               # which fetch path is live")
+    print("  python3 tools/data/manage_datasets.py clean")
     print("  python3 manage_datasets.py download all       # everything")
     print("  python3 manage_datasets.py download vision    # mnist + cifar10")
     print("  python3 manage_datasets.py download math      # gsm8k + math + svamp")

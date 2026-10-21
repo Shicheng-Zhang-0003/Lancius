@@ -4,6 +4,7 @@ import struct
 import io
 import zlib
 import numpy as np
+import os
 import sys
 
 # v11A1 Task 6c: this converter writes v2. C runtime writes/loads v2 and loads v1.
@@ -526,6 +527,16 @@ def convert(onnx_path, lancius_path):
     print(f"✅ Translated {len(nodes)} nodes to {lancius_path}")
 
 if __name__ == "__main__":
-    in_p = sys.argv[1] if len(sys.argv) > 1 else "pytorch_lenet.onnx"
-    out_p = sys.argv[2] if len(sys.argv) > 2 else "pytorch_lenet.lancius"
-    convert(in_p, out_p)
+    in_p = sys.argv[1] if len(sys.argv) > 1 else "datasets/samples/pytorch_lenet.onnx"
+    out_p = sys.argv[2] if len(sys.argv) > 2 else "datasets/samples/pytorch_lenet.lancius"
+    # External-tensor ONNX models store tensor locations relative to the
+    # model file, and the onnx C checker resolves them against the process
+    # CWD; run the whole conversion from the model's own directory.
+    _orig_cwd = os.getcwd()
+    in_abs = os.path.abspath(in_p)
+    out_abs = os.path.abspath(out_p)
+    os.chdir(os.path.dirname(in_abs))
+    try:
+        convert(in_abs, out_abs)
+    finally:
+        os.chdir(_orig_cwd)

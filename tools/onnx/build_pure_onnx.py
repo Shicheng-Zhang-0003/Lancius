@@ -53,5 +53,5 @@ model_def = helper.make_model(
     producer_name='lancius_pure_onnx',
     opset_imports=[helper.make_opsetid("", 17)]
 )
-onnx.save(model_def, 'pytorch_lenet.onnx')
-print("✅ Generated pure ONNX model: pytorch_lenet.onnx")
+onnx.save(model_def, 'datasets/samples/pytorch_lenet.onnx')
+print("✅ Generated pure ONNX model: datasets/samples/pytorch_lenet.onnx")
