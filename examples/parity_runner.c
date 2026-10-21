@@ -3,9 +3,9 @@
 #include <stdlib.h>
 
 int main() {
-    printf("  [C] Loading pytorch_lenet.lancius...\n");
+    printf("  [C] Loading datasets/samples/pytorch_lenet.lancius...\n");
     lancius_clear_error();
-    lancius_graph* g = lancius_graph_load("pytorch_lenet.lancius");
+    lancius_graph* g = lancius_graph_load("datasets/samples/pytorch_lenet.lancius");
     if(!g) { printf("  [C] FATAL: Failed to load model (err=%d: %s).\n", (int)lancius_get_error(), lancius_error_string(lancius_get_error())); return 1; }
 
     // Find Input (4D) and Output (2D, 10 classes)
@@ -43,7 +43,7 @@ if(!in_node || !out_node) {
     if (!lancius_node_elements_checked(in_node, &in_elems) || in_elems == 0 || in_elems > 64*1024*1024) { printf("  [C] FATAL: bad input shape\n"); lancius_graph_destroy(g); return 1; }
     float* temp_in = (float*)malloc(in_elems * sizeof(float));
     if (!temp_in) { printf("  [C] FATAL: OOM\n"); lancius_graph_destroy(g); return 1; }
-    FILE* f_in = fopen("parity_input.bin", "rb");
+    FILE* f_in = fopen("datasets/samples/parity_input.bin", "rb");
     if(!f_in) { printf("  [C] FATAL: Missing parity_input.bin\n"); free(temp_in); lancius_graph_destroy(g); return 1; }
     size_t _r = fread(temp_in, sizeof(float), in_elems, f_in);
     fclose(f_in);
@@ -71,7 +71,7 @@ if(!in_node || !out_node) {
     if (!out_node->runtime_data) { printf("  [C] FATAL: No output\n"); free(temp_out); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
     for(size_t i=0; i<out_elems; i++) temp_out[i] = (float)out_node->runtime_data[i];
 
-    FILE* f_out = fopen("lancius_out.bin", "wb");
+    FILE* f_out = fopen("datasets/samples/lancius_out.bin", "wb");
     if (!f_out) { printf("  [C] FATAL: Cannot write output\n"); free(temp_out); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
     size_t _w = fwrite(temp_out, sizeof(float), out_elems, f_out);
     if (fclose(f_out) != 0) _w = 0;

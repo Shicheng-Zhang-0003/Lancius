@@ -38,14 +38,14 @@ static int run_step(const char* cmd) {
 }
 
 void download_mnist() {
-    if (access("train-images-idx3-ubyte", F_OK) == 0) return;
+    if (access("datasets/mnist/train-images-idx3-ubyte", F_OK) == 0) return;
     printf("[1/5] Downloading MNIST Dataset...\n");
-    if (!run_step("curl -s -o train-images-idx3-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/train-images-idx3-ubyte.gz")) exit(1);
-    if (!run_step("curl -s -o train-labels-idx1-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/train-labels-idx1-ubyte.gz")) exit(1);
-    if (!run_step("curl -s -o t10k-images-idx3-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/t10k-images-idx3-ubyte.gz")) exit(1);
-    if (!run_step("curl -s -o t10k-labels-idx1-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/t10k-labels-idx1-ubyte.gz")) exit(1);
-    if (!run_step("gunzip -f train-images-idx3-ubyte.gz train-labels-idx1-ubyte.gz t10k-images-idx3-ubyte.gz t10k-labels-idx1-ubyte.gz")) exit(1);
-    if (access("train-images-idx3-ubyte", F_OK) != 0) { fprintf(stderr, "FATAL: MNIST download incomplete\n"); exit(1); }
+    if (!run_step("curl -s -o datasets/mnist/train-images-idx3-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/train-images-idx3-ubyte.gz")) exit(1);
+    if (!run_step("curl -s -o datasets/mnist/train-labels-idx1-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/train-labels-idx1-ubyte.gz")) exit(1);
+    if (!run_step("curl -s -o datasets/mnist/t10k-images-idx3-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/t10k-images-idx3-ubyte.gz")) exit(1);
+    if (!run_step("curl -s -o datasets/mnist/t10k-labels-idx1-ubyte.gz https://ossci-datasets.s3.amazonaws.com/mnist/t10k-labels-idx1-ubyte.gz")) exit(1);
+    if (!run_step("cd datasets/mnist && gunzip -f train-images-idx3-ubyte.gz train-labels-idx1-ubyte.gz t10k-images-idx3-ubyte.gz t10k-labels-idx1-ubyte.gz && cd ../..")) exit(1);
+    if (access("datasets/mnist/train-images-idx3-ubyte", F_OK) != 0) { fprintf(stderr, "FATAL: MNIST download incomplete\n"); exit(1); }
 }
 
 uint8_t* load_images(const char* path, int* num) {
@@ -110,10 +110,10 @@ int main() {
     download_mnist();
 
     int tr_n, te_n;
-    uint8_t* tr_X = load_images("train-images-idx3-ubyte", &tr_n);
-    uint8_t* tr_Y = load_labels("train-labels-idx1-ubyte", &tr_n);
-    uint8_t* te_X = load_images("t10k-images-idx3-ubyte", &te_n);
-    uint8_t* te_Y = load_labels("t10k-labels-idx1-ubyte", &te_n);
+    uint8_t* tr_X = load_images("datasets/mnist/train-images-idx3-ubyte", &tr_n);
+    uint8_t* tr_Y = load_labels("datasets/mnist/train-labels-idx1-ubyte", &tr_n);
+    uint8_t* te_X = load_images("datasets/mnist/t10k-images-idx3-ubyte", &te_n);
+    uint8_t* te_Y = load_labels("datasets/mnist/t10k-labels-idx1-ubyte", &te_n);
     printf("[2/5] Loaded %d training images, %d test images.\n", tr_n, te_n);
 
     lancius_graph* g = lancius_graph_create();

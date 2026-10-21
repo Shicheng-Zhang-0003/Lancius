@@ -3,8 +3,8 @@
 #include <stdlib.h>
 
 int main() {
-    lancius_graph* g = lancius_graph_load("trained_lenet.lancius");
-    if(!g) { printf("FATAL: Failed to load trained_lenet.lancius\n"); return 1; }
+    lancius_graph* g = lancius_graph_load("datasets/samples/trained_lenet.lancius");
+    if(!g) { printf("FATAL: Failed to load datasets/samples/trained_lenet.lancius\n"); return 1; }
 
     lancius_node* in_node = NULL;
     lancius_node* out_node = NULL;
@@ -20,47 +20,53 @@ int main() {
     if (!lancius_node_elements_checked(in_node, &in_elems) || in_elems == 0 || in_elems > 64*1024*1024) { printf("FATAL: bad input shape\n"); lancius_graph_destroy(g); return 1; }
     float* temp_in = (float*)malloc(in_elems * sizeof(float));
     if (!temp_in) { printf("FATAL: OOM\n"); lancius_graph_destroy(g); return 1; }
-    FILE* f_in = fopen("test_batch.bin", "rb");
-    if (!f_in) { printf("FATAL: missing test_batch.bin\n"); free(temp_in); lancius_graph_destroy(g); return 1; }
+    FILE* f_in = fopen("datasets/samples/test_batch.bin", "rb");
+    if (!f_in) { printf("FATAL: missing datasets/samples/test_batch.bin (regenerate with tools/audit/audit_trained_reality.py)\n"); free(temp_in); lancius_graph_destroy(g); return 1; }
 
     lancius_schedule* sched = lancius_ir_schedule(g);
     if (!sched) { printf("FATAL: schedule failed\n"); free(temp_in); fclose(f_in); lancius_graph_destroy(g); return 1; }
     lancius_arena* scratch = lancius_arena_create(16 * 1024 * 1024);
     if (!scratch) { printf("FATAL: OOM\n"); free(temp_in); fclose(f_in); lancius_schedule_destroy(sched); lancius_graph_destroy(g); return 1; }
-    FILE* f_out = fopen("lancius_preds.bin", "wb");
+    FILE* f_out = fopen("datasets/samples/lancius_preds.bin", "wb");
     if (!f_out) { printf("FATAL: cannot write output\n"); free(temp_in); fclose(f_in); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
     int32_t pred;
+    int nimg = 0;
 
     in_node->runtime_data = (double*)malloc(in_elems * sizeof(double));
     if (!in_node->runtime_data) { printf("FATAL: OOM\n"); free(temp_in); fclose(f_in); fclose(f_out); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
 
-    int nimg = 0;
-    for(int img=0; img<100; img++) {
-        size_t rd = fread(temp_in, sizeof(float), in_elems, f_in);
-        if (rd != in_elems) { if (img == 0) { printf("FATAL: short read\n"); fclose(f_in); fclose(f_out); free(temp_in); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; } break; }
-        for(size_t i=0; i<in_elems; i++) in_node->runtime_data[i] = (double)temp_in[i];
+    /* The exported model is a single static batch (batch 100, matching the
+     * reality audit and the ONNX Runtime baseline); the file holds exactly
+     * in_elems floats and one execute predicts all rows. Argmax walks the
+     * row-major [batch, 10] output. */
+    size_t rd = fread(temp_in, sizeof(float), in_elems, f_in);
+    if (rd != in_elems) { printf("FATAL: short read (%zu of %zu)\n", rd, in_elems); fclose(f_in); fclose(f_out); free(temp_in); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
+    for(size_t i=0; i<in_elems; i++) in_node->runtime_data[i] = (double)temp_in[i];
 
-        for(uint32_t w=0; w<sched->wave_count; w++) {
-            for(uint32_t k=0; k<sched->waves[w].node_count; k++) {
-                lancius_node* n = sched->waves[w].nodes[k];
-                if (n->op != LANCIUS_OP_INPUT && n->op != LANCIUS_OP_CONST) n->runtime_data = NULL;
-            }
+    for(uint32_t w=0; w<sched->wave_count; w++) {
+        for(uint32_t k=0; k<sched->waves[w].node_count; k++) {
+            lancius_node* n = sched->waves[w].nodes[k];
+            if (n->op != LANCIUS_OP_INPUT && n->op != LANCIUS_OP_CONST) n->runtime_data = NULL;
         }
+    }
 
-        lancius_schedule_execute(sched, scratch);
+    lancius_schedule_execute(sched, scratch);
 
-        if (!out_node->runtime_data) { printf("FATAL: no output\n"); fclose(f_in); fclose(f_out); free(temp_in); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
+    if (!out_node->runtime_data) { printf("FATAL: no output\n"); fclose(f_in); fclose(f_out); free(temp_in); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
+    uint32_t batch = (out_node->ndim == 2) ? out_node->shape[0] : 1;
+    if (batch == 0) { printf("FATAL: empty batch\n"); fclose(f_in); fclose(f_out); free(temp_in); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
+    for(uint32_t r=0; r<batch; r++) {
+        const double* row = out_node->runtime_data + (size_t)r * 10;
         double max_logit = -1e9;
         pred = 0;
         for(int c=0; c<10; c++) {
-            if(out_node->runtime_data[c] > max_logit) {
-                max_logit = out_node->runtime_data[c];
+            if(row[c] > max_logit) {
+                max_logit = row[c];
                 pred = c;
             }
         }
         if (fwrite(&pred, sizeof(int32_t), 1, f_out) != 1) { printf("FATAL: short write\n"); fclose(f_in); fclose(f_out); free(temp_in); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
-        nimg++;
-        lancius_arena_reset(scratch);
+        nimg++;  /* one row per prediction record */
     }
     if (nimg == 0) { printf("FATAL: no images\n"); fclose(f_in); fclose(f_out); free(temp_in); lancius_schedule_destroy(sched); lancius_arena_destroy(scratch); lancius_graph_destroy(g); return 1; }
 
