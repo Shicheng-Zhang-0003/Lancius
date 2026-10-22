@@ -30,7 +30,7 @@ ar rcs "$OUT/liblancius_san.a" "$OUT"/obj/*.o || exit 2
 echo "=== building every gate binary ==="
 BINS="stress_test test_torture fuzz_lancius test_path_bg test_grad_check \
 parity_runner soak_fuzz \
-audit_internals audit_ffi audit_threadpool_parity audit_nan_injection \
+audit_internals audit_ffi audit_stable_lifetime audit_threadpool_parity audit_nan_injection \
 audit_memory_pool test_diamond_memory audit_flash_attention \
 audit_modern_llm audit_known_answer audit_regression_13c \
 audit_transformer_known_answer audit_fp32_path audit_fault_injection \

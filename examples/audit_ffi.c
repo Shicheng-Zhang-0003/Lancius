@@ -36,8 +36,11 @@ int main() {
     double data_A[6] = {-1.0, 2.0, 3.0,  4.0, -5.0, 6.0};
     double data_B[12] = {1.0, 1.0, 1.0, 1.0,  1.0, 1.0, 1.0, 1.0,  1.0, 1.0, 1.0, 1.0};
 
-    lancius_bind_data(A, data_A);
-    lancius_bind_data(B, data_B);
+    if (lancius_bind_data(A, data_A) != LANCIUS_OK ||
+        lancius_bind_data(B, data_B) != LANCIUS_OK) {
+        printf("  ❌ Bind Failed: %s\n", lancius_get_error_string(lancius_get_last_error()));
+        return 1;
+    }
 
     lancius_status exec_status = lancius_compile_and_run(g);
     if (exec_status != LANCIUS_OK) {
@@ -48,7 +51,15 @@ int main() {
 
     printf("[4/4] Extracting Output via FFI Boundary...\n");
     double out_buffer[8] = {0};
-    lancius_read_output(D, out_buffer, sizeof(out_buffer));
+    lancius_status read_status = lancius_read_output(D, out_buffer, sizeof(out_buffer));
+    if (read_status != LANCIUS_OK) {
+        printf("  ❌ Read Output Failed: %s\n", lancius_get_error_string(read_status));
+        _failures++;
+    }
+    if (lancius_tensor_element_count(D) != 8) {
+        printf("  ❌ Tensor element count is not 8\n");
+        _failures++;
+    }
 
     // Math check:
     // A = [-1, 2, 3; 4, -5, 6]
@@ -66,7 +77,7 @@ int main() {
            out_buffer[4], out_buffer[5], out_buffer[6], out_buffer[7]);
 
     if (math_pass) printf("  ✅ FFI Math Verified.\n");
-    else printf("  ❌ FFI Math Corrupted.\n");
+    else { printf("  ❌ FFI Math Corrupted.\n"); _failures++; }
 
     
 printf("\n[5/5] Testing FFI Error Boundary (Intentional Shape Mismatch)...\n");

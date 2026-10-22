@@ -24,8 +24,11 @@ extern "C" {
  *   be destroyed first); destroy each graph with lancius_graph_destroy_stable.
  * - tensor handles are magic-tagged wrappers borrowed from their graph
  *   (do NOT free; they die with it — destroy invalidates all).
- * - handles carry magic tags; wrong-type / stale / destroyed handles return
- *   INVALID_HANDLE instead of corrupting memory. NULL always fails loud. */
+ * - handles are generation-counted table entries, not pointers. A wrong-type,
+ *   stale or destroyed handle returns INVALID_HANDLE instead of dereferencing
+ *   freed memory. The table is internally locked, so handles for independent
+ *   graphs may be created/destroyed from different threads; using one handle
+ *   concurrently with its own destroy is still the caller's responsibility. */
 typedef uint64_t lancius_context;
 typedef uint64_t lancius_graph_handle;
 typedef uint64_t lancius_tensor_handle;

@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
 
 // Thread-Local Error State (Production Standard)
 static _Thread_local lancius_status g_last_error = LANCIUS_OK;
@@ -93,108 +94,150 @@ default: return "Unknown Error";
 #define HANDLE_TYPE_GRAPH 0x02
 #define HANDLE_TYPE_TENSOR 0x03
 
+/* 64-bit handle layout:
+ *   bits 63..40  index       (24 bits -> at most 16,777,215 live/reused rows)
+ *   bits 39..8   generation  (32 bits -> 4,294,967,295 registrations)
+ *   bits 7..0    type        (8 bits)
+ * The generation field is changed on every registration of a row, so a
+ * handle from a destroyed object can never match a later object that reuses
+ * the same row.  The index field limits the table to 16M rows, far beyond
+ * any real graph; registration fails closed (returns 0) if that is reached. */
+#define HANDLE_IDX_MASK  0xFFFFFFu
+#define HANDLE_GEN_MASK  0xFFFFFFFFu
+#define HANDLE_TYPE_MASK 0xFFu
+#define HANDLE_FREE_NONE UINT32_MAX
+
 typedef struct {
     void* ptr;
     uint32_t gen;
-    uint8_t type;   // HANDLE_TYPE_*
+    uint32_t next_free;
+    uint8_t type;   /* HANDLE_TYPE_* */
 } handle_entry_t;
 
 typedef struct {
     handle_entry_t* entries;
     size_t cap;
-    size_t count;
+    size_t count;      /* high-water mark of rows ever used */
+    uint32_t free_head;/* index of first reusable row, or HANDLE_FREE_NONE */
     uint32_t next_gen;
 } handle_table_t;
 
 static handle_table_t g_handle_table = {0};
+static pthread_mutex_t g_handle_lock = PTHREAD_MUTEX_INITIALIZER;
 
-static void __attribute__((used)) handle_table_ensure(void) {
-    if (g_handle_table.entries == NULL) {
-        g_handle_table.cap = HANDLE_TABLE_INIT_CAP;
-        g_handle_table.entries = calloc(g_handle_table.cap, sizeof(handle_entry_t));
-        g_handle_table.count = 0;
-        g_handle_table.next_gen = 1;
-    }
+/* Caller must hold g_handle_lock. */
+static int handle_table_ensure_locked(void) {
+    if (g_handle_table.entries != NULL) return 1;
+    g_handle_table.cap = HANDLE_TABLE_INIT_CAP;
+    g_handle_table.entries = calloc(g_handle_table.cap, sizeof(handle_entry_t));
+    if (!g_handle_table.entries) { g_handle_table.cap = 0; return 0; }
+    g_handle_table.count = 0;
+    g_handle_table.free_head = HANDLE_FREE_NONE;
+    g_handle_table.next_gen = 1;
+    return 1;
 }
 
-static void __attribute__((used)) handle_table_grow(void) {
-    size_t new_cap = g_handle_table.cap * 2;
+/* Caller must hold g_handle_lock. */
+static int handle_table_grow_locked(void) {
+    if (g_handle_table.cap >= (size_t)HANDLE_IDX_MASK + 1u) return 0;
+    size_t new_cap = g_handle_table.cap ? g_handle_table.cap * 2 : HANDLE_TABLE_INIT_CAP;
+    if (new_cap > (size_t)HANDLE_IDX_MASK + 1u) new_cap = (size_t)HANDLE_IDX_MASK + 1u;
     handle_entry_t* new_entries = realloc(g_handle_table.entries, new_cap * sizeof(handle_entry_t));
-    if (!new_entries) return;
+    if (!new_entries) return 0;
     memset(new_entries + g_handle_table.cap, 0, (new_cap - g_handle_table.cap) * sizeof(handle_entry_t));
     g_handle_table.entries = new_entries;
     g_handle_table.cap = new_cap;
+    return 1;
 }
 
-static uint64_t __attribute__((used)) handle_encode(size_t idx, uint32_t gen, uint8_t type) {
-    // Layout: idx in bits 63..40 (24 bits), gen in bits 39..16 (24 bits), type in bits 15..0 (16 bits)
-    uint64_t h = ((uint64_t)idx << 40) | ((uint64_t)gen << 16) | (uint64_t)type;
-    return h;
+static uint64_t handle_encode(size_t idx, uint32_t gen, uint8_t type) {
+    return ((uint64_t)(idx & HANDLE_IDX_MASK) << 40) |
+           ((uint64_t)(gen & HANDLE_GEN_MASK) << 8) |
+           (uint64_t)(type & HANDLE_TYPE_MASK);
 }
 
 static int handle_decode(uint64_t h, size_t* out_idx, uint32_t* out_gen, uint8_t* out_type) {
     if (h == 0) return 0;
-    *out_idx = (size_t)(h >> 40);
-    *out_gen = (uint32_t)((h >> 16) & 0xFFFFFF);
-    *out_type = (uint8_t)(h & 0xFFFF);
+    *out_idx = (size_t)((h >> 40) & HANDLE_IDX_MASK);
+    *out_gen = (uint32_t)((h >> 8) & HANDLE_GEN_MASK);
+    *out_type = (uint8_t)(h & HANDLE_TYPE_MASK);
     return 1;
 }
 
 static int handle_validate(uint64_t h, uint8_t expected_type, void** out_ptr) {
     if (h == 0) return 0;
-    if (g_handle_table.entries == NULL) return 0;
     size_t idx; uint32_t gen; uint8_t type;
     if (!handle_decode(h, &idx, &gen, &type)) return 0;
     if (type != expected_type) return 0;
-    if (idx >= g_handle_table.count) return 0;
-    handle_entry_t* e = &g_handle_table.entries[idx];
-    if (e->ptr == NULL) return 0;
-    if (e->gen != gen) return 0;  // stale handle: generation mismatch
-    if (e->type != expected_type) return 0;
-    if (out_ptr) *out_ptr = e->ptr;
-    return 1;
+    int ok = 0;
+    pthread_mutex_lock(&g_handle_lock);
+    if (g_handle_table.entries != NULL && idx < g_handle_table.count) {
+        handle_entry_t* e = &g_handle_table.entries[idx];
+        if (e->ptr != NULL && e->gen == gen && e->type == expected_type) {
+            if (out_ptr) *out_ptr = e->ptr;
+            ok = 1;
+        }
+    }
+    pthread_mutex_unlock(&g_handle_lock);
+    return ok;
 }
 
 static uint64_t handle_register(void* ptr, uint8_t type) {
-    if (g_handle_table.entries == NULL) {
-        g_handle_table.cap = HANDLE_TABLE_INIT_CAP;
-        g_handle_table.entries = calloc(g_handle_table.cap, sizeof(handle_entry_t));
-        g_handle_table.count = 0;
-        g_handle_table.next_gen = 1;
+    if (ptr == NULL) return 0;
+    uint64_t h = 0;
+    pthread_mutex_lock(&g_handle_lock);
+    if (!handle_table_ensure_locked()) goto out;
+    size_t idx;
+    if (g_handle_table.free_head != HANDLE_FREE_NONE) {
+        idx = g_handle_table.free_head;
+        g_handle_table.free_head = g_handle_table.entries[idx].next_free;
+    } else {
+        if (g_handle_table.count >= (size_t)HANDLE_IDX_MASK + 1u) goto out;
+        if (g_handle_table.count >= g_handle_table.cap && !handle_table_grow_locked()) goto out;
+        idx = g_handle_table.count++;
     }
-    if (g_handle_table.count >= g_handle_table.cap) {
-        size_t new_cap = g_handle_table.cap * 2;
-        handle_entry_t* new_entries = realloc(g_handle_table.entries, new_cap * sizeof(handle_entry_t));
-        if (!new_entries) return 0;
-        memset(new_entries + g_handle_table.cap, 0, (new_cap - g_handle_table.cap) * sizeof(handle_entry_t));
-        g_handle_table.entries = new_entries;
-        g_handle_table.cap = new_cap;
-    }
-    size_t idx = g_handle_table.count;
+    uint32_t gen = g_handle_table.next_gen++;
+    if (g_handle_table.next_gen == 0) g_handle_table.next_gen = 1;
     handle_entry_t* e = &g_handle_table.entries[idx];
     e->ptr = ptr;
-    e->gen = g_handle_table.next_gen++;
-    if (g_handle_table.next_gen == 0) g_handle_table.next_gen = 1;
+    e->gen = gen;
+    e->next_free = HANDLE_FREE_NONE;
     e->type = type;
-    g_handle_table.count++;
-    return ((uint64_t)idx << 40) | ((uint64_t)e->gen << 16) | (uint64_t)type;
+    h = handle_encode(idx, gen, type);
+out:
+    pthread_mutex_unlock(&g_handle_lock);
+    return h;
 }
 
 static void handle_unregister(uint64_t h, uint8_t expected_type) {
     size_t idx; uint32_t gen; uint8_t type;
     if (!handle_decode(h, &idx, &gen, &type)) return;
     if (type != expected_type) return;
-    if (idx >= g_handle_table.count) return;
-    handle_entry_t* e = &g_handle_table.entries[idx];
-    if (e->gen != gen) return;  // already unregistered or stale
-    e->ptr = NULL;
-    e->gen = 0;
-    e->type = 0;
+    pthread_mutex_lock(&g_handle_lock);
+    if (g_handle_table.entries != NULL && idx < g_handle_table.count) {
+        handle_entry_t* e = &g_handle_table.entries[idx];
+        if (e->ptr != NULL && e->gen == gen && e->type == expected_type) {
+            e->ptr = NULL;
+            e->gen = 0;
+            e->type = 0;
+            e->next_free = g_handle_table.free_head;
+            g_handle_table.free_head = (uint32_t)idx;
+        }
+    }
+    pthread_mutex_unlock(&g_handle_lock);
 }
 
-#define HANDLE_TYPE_CTX   0x01
-#define HANDLE_TYPE_GRAPH 0x02
-#define HANDLE_TYPE_TENSOR 0x03
+/* Diagnostic used only by the lifetime regression audit.  It reports the
+ * number of rows currently holding a live object (not the high-water mark),
+ * so a create/destroy loop can prove that rows are recycled. */
+size_t lancius_debug_live_handle_count(void) {
+    size_t live = 0;
+    pthread_mutex_lock(&g_handle_lock);
+    for (size_t i = 0; i < g_handle_table.count; i++)
+        if (g_handle_table.entries[i].ptr != NULL) live++;
+    pthread_mutex_unlock(&g_handle_lock);
+    return live;
+}
 
 /* ============================================================================
  * Internal types
@@ -223,22 +266,28 @@ struct lancius_tensor_internal {
     uint64_t cookie;
     lancius_node* node;
     lancius_graph_internal* owner;
+    lancius_tensor_handle handle;
 };
 
-/* Per-process secret for handle cookies */
+/* Per-process secret for handle cookies.  pthread_once makes the lazy
+ * initialisation safe when independent graphs are created concurrently. */
 static uint64_t lancius_handle_secret = 0;
+static pthread_once_t lancius_handle_secret_once = PTHREAD_ONCE_INIT;
+
+static void lancius_handle_secret_init_once(void) {
+    uint64_t t = (uint64_t)time(NULL);
+    uint64_t p = (uint64_t)getpid();
+    uint64_t a = (uint64_t)(uintptr_t)&lancius_handle_secret;
+    uint64_t x = t ^ (p * 0x9E3779B97F4A7C15ULL) ^ (a >> 3);
+    x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ULL;
+    x ^= x >> 27; x *= 0x94D049BB133111EBULL;
+    x ^= x >> 31;
+    if (x == 0) x = 0xA5A5A5A5A5A5A5A5ULL;
+    lancius_handle_secret = x;
+}
+
 static uint64_t lancius_handle_secret_init(void) {
-    if (lancius_handle_secret == 0) {
-        uint64_t t = (uint64_t)time(NULL);
-        uint64_t p = (uint64_t)getpid();
-        uint64_t a = (uint64_t)(uintptr_t)&lancius_handle_secret;
-        uint64_t x = t ^ (p * 0x9E3779B97F4A7C15ULL) ^ (a >> 3);
-        x ^= x >> 30; x *= 0xBF58476D1CE4E5B9ULL;
-        x ^= x >> 27; x *= 0x94D049BB133111EBULL;
-        x ^= x >> 31;
-        if (x == 0) x = 0xA5A5A5A5A5A5A5A5ULL;
-        lancius_handle_secret = x;
-    }
+    (void)pthread_once(&lancius_handle_secret_once, lancius_handle_secret_init_once);
     return lancius_handle_secret;
 }
 
@@ -282,21 +331,27 @@ static void __attribute__((used)) handle_unregister_tensor(lancius_tensor_handle
  * magic catches forged/cross-type handles, graph-destroy invalidates all. */
 static uint64_t wrap_tensor(lancius_graph_internal* w, lancius_node* n) {
     if (!w || !n) return 0;
+    if (w->ntensors >= w->ctensors) {
+        size_t nc = w->ctensors ? w->ctensors * 2 : 16;
+        lancius_tensor_internal** nl = (lancius_tensor_internal**)realloc(w->tensors, nc * sizeof(*nl));
+        if (!nl) { set_error(LANCIUS_ERR_OOM); return 0; }
+        w->tensors = nl;
+        w->ctensors = nc;
+    }
     lancius_tensor_internal* t = (lancius_tensor_internal*)malloc(sizeof(*t));
     if (!t) { set_error(LANCIUS_ERR_OOM); return 0; }
     t->magic = 0x7E5507E5u;
     t->cookie = lancius_handle_secret_init();
     t->node = n;
     t->owner = w;
-    if (w->ntensors >= w->ctensors) {
-        size_t nc = w->ctensors ? w->ctensors * 2 : 16;
-        lancius_tensor_internal** nl = (lancius_tensor_internal**)realloc(w->tensors, nc * sizeof(*nl));
-        if (!nl) { free(t); set_error(LANCIUS_ERR_OOM); return 0; }
-        w->tensors = nl;
-        w->ctensors = nc;
+    t->handle = handle_register_tensor(t);
+    if (t->handle == 0) {
+        free(t);
+        set_error(LANCIUS_ERR_OOM);
+        return 0;
     }
     w->tensors[w->ntensors++] = t;
-    return handle_register_tensor(t);
+    return t->handle;
 }
 
 static lancius_node* unwrap_tensor(lancius_tensor_handle t) {
@@ -322,8 +377,15 @@ LANCIUS_EXPORT lancius_context lancius_create_context(void) {
     ctx->cookie = lancius_handle_secret_init();
     ctx->arena = lancius_arena_create(64 * 1024 * 1024);
     if (!ctx->arena) { free(ctx); set_error(LANCIUS_ERR_OOM); return 0; }
+    lancius_context h = handle_register(ctx, HANDLE_TYPE_CTX);
+    if (h == 0) {
+        lancius_arena_destroy(ctx->arena);
+        free(ctx);
+        set_error(LANCIUS_ERR_OOM);
+        return 0;
+    }
     set_error(LANCIUS_OK);
-    return handle_register(ctx, HANDLE_TYPE_CTX);
+    return h;
 }
 
 LANCIUS_EXPORT void lancius_destroy_context(lancius_context ctx) {
@@ -359,8 +421,17 @@ LANCIUS_EXPORT lancius_graph_handle lancius_graph_create_stable(lancius_context 
     wrapper->ntensors = 0;
     wrapper->ctensors = 0;
 
+    lancius_graph_handle h = handle_register(wrapper, HANDLE_TYPE_GRAPH);
+    if (h == 0) {
+        lancius_schedule_destroy(wrapper->sched);
+        lancius_arena_destroy(wrapper->scratch);
+        lancius_graph_destroy(wrapper->g);
+        free(wrapper);
+        set_error(LANCIUS_ERR_OOM);
+        return 0;
+    }
     set_error(LANCIUS_OK);
-    return handle_register(wrapper, HANDLE_TYPE_GRAPH);
+    return h;
 }
 
 LANCIUS_EXPORT void lancius_graph_destroy_stable(lancius_graph_handle g) {
@@ -372,7 +443,13 @@ LANCIUS_EXPORT void lancius_graph_destroy_stable(lancius_graph_handle g) {
     wrapper->magic = 0;
     wrapper->cookie = 0;
     for (size_t i = 0; i < wrapper->ntensors; i++) {
-        if (wrapper->tensors[i]) { wrapper->tensors[i]->magic = 0; wrapper->tensors[i]->cookie = 0; handle_unregister_tensor((lancius_tensor_handle)wrapper->tensors[i]); free(wrapper->tensors[i]); }
+        lancius_tensor_internal* t = wrapper->tensors[i];
+        if (t) {
+            t->magic = 0;
+            t->cookie = 0;
+            handle_unregister_tensor(t->handle);
+            free(t);
+        }
     }
     free(wrapper->tensors);
     if (wrapper->sched) lancius_schedule_destroy(wrapper->sched);
@@ -535,8 +612,16 @@ LANCIUS_EXPORT lancius_graph_handle lancius_graph_load_stable(lancius_context ct
     wrapper->ntensors = 0;
     wrapper->ctensors = 0;
     if (!wrapper->scratch) { lancius_graph_destroy(g); free(wrapper); set_error(LANCIUS_ERR_OOM); return 0; }
+    lancius_graph_handle h = handle_register(wrapper, HANDLE_TYPE_GRAPH);
+    if (h == 0) {
+        lancius_arena_destroy(wrapper->scratch);
+        lancius_graph_destroy(g);
+        free(wrapper);
+        set_error(LANCIUS_ERR_OOM);
+        return 0;
+    }
     set_error(LANCIUS_OK);
-    return handle_register(wrapper, HANDLE_TYPE_GRAPH);
+    return h;
 }
 
 LANCIUS_EXPORT lancius_status lancius_graph_save_stable(lancius_graph_handle g, const char* path) {
