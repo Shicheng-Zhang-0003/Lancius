@@ -209,6 +209,80 @@ static void test_permute(void) {
     finish(s, g);
 }
 
+static void test_all_permutations(void) {
+    /* One hand-written permutation (above) can miss an index-coordinate bug
+     * that only appears when two axes have distinct extents. Exhaust all 24
+     * permutations of [2,3,4,5] and compare every output value with a
+     * separately computed row-major reference. */
+    const size_t S[4] = {2, 3, 4, 5};
+    double x[120];
+    for (int i = 0; i < 120; i++) x[i] = (double)(i + 1);
+
+    int perm_count = 0;
+    for (uint32_t a0 = 0; a0 < 4; a0++) {
+        for (uint32_t a1 = 0; a1 < 4; a1++) {
+            if (a1 == a0) continue;
+            for (uint32_t a2 = 0; a2 < 4; a2++) {
+                if (a2 == a0 || a2 == a1) continue;
+                for (uint32_t a3 = 0; a3 < 4; a3++) {
+                    if (a3 == a0 || a3 == a1 || a3 == a2) continue;
+                    uint32_t axes[4] = {a0, a1, a2, a3};
+                    size_t O[4] = {S[a0], S[a1], S[a2], S[a3]};
+                    char msg[128];
+                    snprintf(msg, sizeof msg, "permute [%u,%u,%u,%u]", a0, a1, a2, a3);
+
+                    lancius_graph* g = lancius_graph_create();
+                    lancius_node* X = lancius_input_4d(g, S[0], S[1], S[2], S[3]);
+                    lancius_node* P = lancius_permute(g, X, a0, a1, a2, a3);
+                    lancius_node_bind_external(X, x);
+                    lancius_schedule* s = run(g);
+
+                    int shape_ok = P && P->runtime_data;
+                    for (int d = 0; d < 4 && shape_ok; d++) shape_ok = (P->shape[d] == O[d]);
+                    int vals_ok = shape_ok;
+                    if (shape_ok) {
+                        for (size_t p = 0; p < 120 && vals_ok; p++) {
+                            size_t rem = p, oc[4];
+                            for (int d = 3; d >= 0; d--) { oc[d] = rem % O[d]; rem /= O[d]; }
+                            size_t ic[4] = {0, 0, 0, 0};
+                            for (int d = 0; d < 4; d++) ic[axes[d]] = oc[d];
+                            size_t ii = ((ic[0] * S[1] + ic[1]) * S[2] + ic[2]) * S[3] + ic[3];
+                            if (!close_d(P->runtime_data[p], x[ii], 1e-12)) vals_ok = 0;
+                        }
+                    }
+                    CHECK(shape_ok, msg);
+                    snprintf(msg, sizeof msg, "permute values [%u,%u,%u,%u]", a0, a1, a2, a3);
+                    CHECK(vals_ok, msg);
+
+                    finish(s, g);
+                    perm_count++;
+                }
+            }
+        }
+    }
+    CHECK(perm_count == 24, "all 24 permutations enumerated");
+}
+
+static void test_reshape(void) {
+    lancius_graph* g = lancius_graph_create();
+    lancius_node* X = lancius_input_4d(g, 1, 2, 3, 4);
+    lancius_node* R = lancius_reshape(g, X, 4, 1, 4, 3, 2);
+    double x[24];
+    for (int i = 0; i < 24; i++) x[i] = (double)(i + 1);
+    lancius_node_bind_external(X, x);
+    lancius_schedule* s = run(g);
+
+    CHECK(R && R->runtime_data, "reshape output allocated");
+    if (R && R->runtime_data) {
+        CHECK(R->shape[0] == 1 && R->shape[1] == 4 && R->shape[2] == 3 && R->shape[3] == 2,
+              "reshape shape == [1,4,3,2]");
+        for (int i = 0; i < 24; i++) {
+            CHECK(close_d(R->runtime_data[i], x[i], 1e-12), "reshape preserves flat values");
+        }
+    }
+    finish(s, g);
+}
+
 static void test_matmul_batched(void) {
     lancius_graph* g = lancius_graph_create();
 
@@ -304,6 +378,89 @@ static void test_flatten(void) {
     finish(s, g);
 }
 
+static void test_cross_entropy_bwd(void) {
+    lancius_graph* g = lancius_graph_create();
+    lancius_node* logits = lancius_input(g, 2, 3);
+    lancius_node* targets = lancius_input(g, 2, 3);
+    lancius_node* grad = lancius_input(g, 1, 1);
+    lancius_node* dx = lancius_cross_entropy_bwd(g, logits, targets, grad);
+
+    double l[6] = {1.0, 2.0, 3.0, 0.5, -1.0, 0.25};
+    double t[6] = {0.0, 1.0, 0.0, 1.0, 0.0, 0.0};
+    double go[1] = {0.5};
+    lancius_node_bind_external(logits, l);
+    lancius_node_bind_external(targets, t);
+    lancius_node_bind_external(grad, go);
+
+    lancius_schedule* s = run(g);
+
+    CHECK(dx && dx->runtime_data, "cross_entropy_bwd output allocated");
+    if (dx && dx->runtime_data) {
+        CHECK(dx->shape[0] == 2 && dx->shape[1] == 3, "cross_entropy_bwd shape == [2,3]");
+        for (int r = 0; r < 2; r++) {
+            double max_val = l[r * 3];
+            for (int c = 1; c < 3; c++) if (l[r * 3 + c] > max_val) max_val = l[r * 3 + c];
+            double sum_exp = 0.0;
+            for (int c = 0; c < 3; c++) sum_exp += exp(l[r * 3 + c] - max_val);
+            for (int c = 0; c < 3; c++) {
+                double sm = exp(l[r * 3 + c] - max_val) / sum_exp;
+                double want = (sm - t[r * 3 + c]) * (go[0] / 2.0);
+                CHECK(close_d(dx->runtime_data[r * 3 + c], want, 1e-12),
+                      "cross_entropy_bwd matches (softmax - target) * scale");
+            }
+        }
+    }
+
+    finish(s, g);
+
+    /* Corrupt labels must fail loud, mirroring the forward op. */
+    lancius_clear_error();
+    g = lancius_graph_create();
+    logits = lancius_input(g, 1, 2);
+    targets = lancius_input(g, 1, 2);
+    grad = lancius_input(g, 1, 1);
+    dx = lancius_cross_entropy_bwd(g, logits, targets, grad);
+    double bad_l[2] = {0.0, 0.0};
+    double bad_t[2] = {-1.0, 2.0};
+    double one[1] = {1.0};
+    lancius_node_bind_external(logits, bad_l);
+    lancius_node_bind_external(targets, bad_t);
+    lancius_node_bind_external(grad, one);
+    s = run(g);
+    CHECK(lancius_get_error() == LANCIUS_ERROR_NUMERICAL,
+          "cross_entropy_bwd rejects negative targets");
+    finish(s, g);
+    lancius_clear_error();
+}
+
+static void test_mse_bwd(void) {
+    lancius_graph* g = lancius_graph_create();
+    lancius_node* pred = lancius_input(g, 2, 3);
+    lancius_node* target = lancius_input(g, 2, 3);
+    lancius_node* grad = lancius_input(g, 1, 1);
+    lancius_node* dx = lancius_mse_bwd(g, pred, target, grad);
+
+    double p[6] = {1.0, 2.0, 3.0, -1.0, 0.5, 4.0};
+    double t[6] = {0.0, 2.5, 1.0, 0.5, -1.0, 3.0};
+    double go[1] = {0.25};
+    lancius_node_bind_external(pred, p);
+    lancius_node_bind_external(target, t);
+    lancius_node_bind_external(grad, go);
+
+    lancius_schedule* s = run(g);
+
+    CHECK(dx && dx->runtime_data, "mse_bwd output allocated");
+    if (dx && dx->runtime_data) {
+        CHECK(dx->shape[0] == 2 && dx->shape[1] == 3, "mse_bwd shape == [2,3]");
+        for (int k = 0; k < 6; k++) {
+            double want = (2.0 * go[0] / 6.0) * (p[k] - t[k]);
+            CHECK(close_d(dx->runtime_data[k], want, 1e-12), "mse_bwd matches 2*g/pe*(p-t)");
+        }
+    }
+
+    finish(s, g);
+}
+
 /* v12R2 generic primitives: bounded activation + regression loss.
  * Framework only: tanh saturates the fluid scale, MSE grounds step labels. */
 static void test_tanh_mse(void) {
@@ -378,11 +535,15 @@ int main(void) {
     before = failures; test_softmax();         report("Softmax", before);
     before = failures; test_transpose();       report("Transpose", before);
     before = failures; test_permute();         report("Permute", before);
+    before = failures; test_all_permutations(); report("All 24 Permutations", before);
+    before = failures; test_reshape();         report("Reshape", before);
     before = failures; test_matmul_batched();  report("MatMulBatched", before);
     before = failures; test_conv2d();          report("Conv2D", before);
     before = failures; test_maxpool2d();       report("MaxPool2D", before);
     before = failures; test_flatten();         report("Flatten", before);
     before = failures; test_cross_entropy();   report("CrossEntropy", before);
+    before = failures; test_cross_entropy_bwd(); report("CrossEntropyBwd", before);
+    before = failures; test_mse_bwd();         report("MSEBwd", before);
     before = failures; test_tanh_mse();        report("Tanh/MSE", before);
 
     lancius_arena_destroy(scratch);

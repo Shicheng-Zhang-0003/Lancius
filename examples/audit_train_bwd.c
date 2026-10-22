@@ -200,6 +200,59 @@ static void t_rmsnorm(void) {
     free(X->runtime_data); free(Gm->runtime_data); free(Y->runtime_data);
     lancius_graph_destroy(g);
 }
+static void t_broadcast_vjp(void) {
+    /* NumPy trailing-rank broadcast VJP. The 4-D path exercises both a middle
+     * and a trailing reduction (d=1 and d=3), which the old implicit 2-D
+     * broadcast gradient path never reached. */
+    {
+        lancius_graph* g = lancius_graph_create();
+        lancius_node* X = lancius_input_3d(g, 2, 1, 4);
+        lancius_node* Y = lancius_input_3d(g, 2, 3, 4);
+        double xd[8], yd[24];
+        for (int i = 0; i < 8; i++) xd[i] = 0.1 * ((double)i - 3.0);
+        for (int i = 0; i < 24; i++) yd[i] = 0.05 * ((double)i - 7.0);
+        X->runtime_data = malloc(sizeof(xd)); memcpy(X->runtime_data, xd, sizeof(xd));
+        Y->runtime_data = malloc(sizeof(yd)); memcpy(Y->runtime_data, yd, sizeof(yd));
+        size_t shape3[3] = {2, 3, 4};
+        lancius_node* B = lancius_broadcast_to_shape(g, X, shape3, 3);
+        CHECK(B && B->ndim == 3 && B->shape[0] == 2 && B->shape[1] == 3 && B->shape[2] == 4,
+              "broadcast3 builds");
+        lancius_node* L = lancius_mse(g, B, Y);
+        lancius_schedule* fs = lancius_ir_schedule(g);
+        lancius_training_graph* tg = lancius_ir_autodiff(g, L);
+        CHECK(tg != NULL, "broadcast3 trains");
+        if (tg) {
+            gradcheck(g, fs, tg, X, 8, "broadcast3-x");
+            lancius_training_graph_destroy(tg);
+        }
+        lancius_schedule_destroy(fs);
+        free(X->runtime_data); free(Y->runtime_data); lancius_graph_destroy(g);
+    }
+    {
+        lancius_graph* g = lancius_graph_create();
+        lancius_node* X = lancius_input_4d(g, 2, 1, 4, 1);
+        lancius_node* Y = lancius_input_4d(g, 2, 3, 4, 5);
+        double xd[8], yd[120];
+        for (int i = 0; i < 8; i++) xd[i] = 0.01 * ((double)i - 3.0);
+        for (int i = 0; i < 120; i++) yd[i] = 0.003 * ((double)i - 7.0);
+        X->runtime_data = malloc(sizeof(xd)); memcpy(X->runtime_data, xd, sizeof(xd));
+        Y->runtime_data = malloc(sizeof(yd)); memcpy(Y->runtime_data, yd, sizeof(yd));
+        size_t shape4[4] = {2, 3, 4, 5};
+        lancius_node* B = lancius_broadcast_to_shape(g, X, shape4, 4);
+        CHECK(B && B->ndim == 4 && B->shape[0] == 2 && B->shape[1] == 3
+              && B->shape[2] == 4 && B->shape[3] == 5, "broadcast4 builds");
+        lancius_node* L = lancius_mse(g, B, Y);
+        lancius_schedule* fs = lancius_ir_schedule(g);
+        lancius_training_graph* tg = lancius_ir_autodiff(g, L);
+        CHECK(tg != NULL, "broadcast4 trains");
+        if (tg) {
+            gradcheck(g, fs, tg, X, 8, "broadcast4-x");
+            lancius_training_graph_destroy(tg);
+        }
+        lancius_schedule_destroy(fs);
+        free(X->runtime_data); free(Y->runtime_data); lancius_graph_destroy(g);
+    }
+}
 static void t_matmul_batched(void) {
     lancius_graph* g = lancius_graph_create();
     lancius_node* A = lancius_input_3d(g, 2, 2, 3);
@@ -233,6 +286,7 @@ int main(void) {
     t_layernorm();
     t_rmsnorm();
     t_matmul_batched();
+    t_broadcast_vjp();
     lancius_arena_destroy(sc);
     printf("TRAIN BACKWARD AUDIT COMPLETE: %d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;
