@@ -41,7 +41,7 @@ trap 'restore_active; exit 129' HUP
 
 RUNS=(
   stress_test test_torture test_path_bg test_grad_check
-  audit_internals audit_ffi audit_threadpool_parity audit_nan_injection
+  audit_internals audit_ffi audit_stable_lifetime audit_threadpool_parity audit_nan_injection
   audit_memory_pool audit_flash_attention audit_modern_llm
   audit_known_answer audit_regression_13c audit_transformer_known_answer
   audit_fp32_path audit_fault_injection audit_despot_probe
@@ -161,6 +161,11 @@ fi
 
 echo
 echo "=== mutations ==="
+
+try "stable api: graph destroy forgets tensor handles" \
+    src/core/lancius_stable_api.c \
+    '            handle_unregister_tensor(t->handle);' \
+    '            /* mutation: handle_unregister_tensor(t->handle); */'
 
 try "kernels: matmul wrong stride (b[k*N+c] -> b[k*N+c+1])" \
     src/math/lancius_kernels.c \

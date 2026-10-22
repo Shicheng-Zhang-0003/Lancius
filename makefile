@@ -74,6 +74,7 @@ $(eval $(call LINK,stress_test,examples/stress_test.c,))
 $(eval $(call LINK,audit_internals,examples/audit_internals.c,))
 $(eval $(call LINK,audit_memory_pool,examples/audit_memory_pool.c,))
 $(eval $(call LINK,audit_ffi,examples/audit_ffi.c,-fopenmp -lpthread))
+$(eval $(call LINK,audit_stable_lifetime,examples/audit_stable_lifetime.c,-fopenmp -lpthread))
 $(eval $(call LINK,audit_flash_attention,examples/audit_flash_attention.c,-fopenmp -lpthread))
 $(eval $(call LINK,audit_modern_llm,examples/audit_modern_llm.c,-fopenmp -lpthread))
 $(eval $(call LINK,audit_threadpool_parity,examples/audit_threadpool_parity.c,-fopenmp -lpthread))
@@ -143,7 +144,8 @@ $(OBJD)/%.o: %.c
 # products point at build/ now. ------------------------------------------
 BINS = $(addprefix $(BIN)/,lancius train_mnist train_cifar10 fuzz_lancius \
         test_path_bg run_edge test_grad_check test_torture stress_test \
-        audit_internals audit_memory_pool audit_ffi audit_flash_attention \
+        audit_internals audit_memory_pool audit_ffi audit_stable_lifetime \
+        audit_flash_attention \
         audit_modern_llm audit_threadpool_parity audit_nan_injection \
         test_diamond_memory soak_fuzz parity_runner run_trained_batch \
         audit_known_answer audit_regression_13c \
@@ -287,6 +289,7 @@ check: all
 	$(BIN)/test_grad_check
 	$(BIN)/audit_internals
 	$(BIN)/audit_ffi
+	$(BIN)/audit_stable_lifetime
 	$(BIN)/audit_threadpool_parity
 	$(BIN)/audit_nan_injection
 	$(BIN)/audit_memory_pool
@@ -331,7 +334,7 @@ SAN_CFLAGS = -Wall -Wextra -g -O1 $(SAN_FLAGS) -fopenmp -std=c11 -I./include -fP
 SAN_LDFLAGS = $(SAN_FLAGS) -fopenmp -lm -lpthread
 SAN_DIR = $(BUILD)/san
 SAN_AUDITS = stress_test test_torture fuzz_lancius test_path_bg test_grad_check \
-             audit_internals audit_ffi audit_threadpool_parity audit_nan_injection \
+             audit_internals audit_ffi audit_stable_lifetime audit_threadpool_parity audit_nan_injection \
              audit_memory_pool test_diamond_memory audit_flash_attention audit_modern_llm \
              audit_known_answer audit_regression_13c \
              audit_transformer_known_answer audit_fp32_path \
