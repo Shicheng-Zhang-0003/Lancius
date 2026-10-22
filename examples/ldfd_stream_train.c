@@ -184,7 +184,7 @@ static void live_fetch_rows(const char *url, rowsink *s) {
     csvp = snap_csv_parser;
     if (csvp.init(&csvp.ctx, "delimiter=,") != SNAP_OK) die("csv parser init");
     snap_csv_set_callback(csvp.ctx, on_row, s);
-    snap_error_t rc = snap_fetch_once(url, NULL, &csvp, csvp.ctx);
+    snap_error_t rc = snap_fetch_once(url, NULL, &csvp, csvp.ctx, 0L);
     csvp.free(csvp.ctx);
     if (rc != SNAP_OK) die("snap_fetch_once failed");
 }
