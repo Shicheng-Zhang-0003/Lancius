@@ -26,7 +26,7 @@ generation_1/
     gen1_mu_sd.txt    PINNED normalizer: the stats the I3 weights were fitted under
     chat.py           ENTRY POINT (I2-style chatbot with the I3 ALU pool)
     paths.py          repo resolution + pinned MU/SD loader + lancius locator
-    alu_pool/         8 clones of the I3 verifier (warm-started; 150-algo trained)
+    alu_pool/         12 clones of the I3 verifier (warm-started; 150-algo trained)
     models/           Lancius v2 constructors + 3344-dim demo model (I3 seed)
     bus/ isa/         same bare-metal dispatch + LAIS-CU manual as I2
     orchestrator/     fabric_net / fabric_live / fabric_coherent /

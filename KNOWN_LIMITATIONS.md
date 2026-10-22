@@ -140,7 +140,7 @@ and do NOT abort.
     instead of training as zero — staged scope, not silent. BROADCAST
     backward reduces over broadcast dimensions. See
     `docs/DESPOT_TRUTH_V2.md`.
--   GELU is tanh-approx (GPT-2/BERT variant, ~2e-3 vs erf-exact), not erf-exact.
+-   GELU is tanh-approx (GPT-2/BERT variant; measured max deviation 4.74e-04, rms 1.42e-04 vs erf-exact), not erf-exact.
 -   Norm eps pinned to `LANCIUS_NORM_EPS=1e-5`; not per-node tunable.
 -   Optimizer moments are caller-owned arrays (the train lib is stateless:
     no alloc/I/O by contract); weight checkpoints persist via v2 models

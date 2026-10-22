@@ -60,7 +60,7 @@ unjudgeable and when the script fails to express a level at all; run_big_i3.py d
   wherever verifier5-compatible rows are produced, with equal 65/MU/SD front-end semantics.
 * Basis for warm-starting further generations (it exported `generation_1/I3/corpus/model_i3.txt` at the
   end of training for that purpose) — the preferred lineage head going into gen 4.
-* **The I3 fabric**: deployed as 8 clones in `generation_1/I3/alu_pool/`, driven by the I2-style
+* **The I3 fabric**: deployed as 12 clones in `generation_1/I3/alu_pool/`, driven by the I2-style
   combined-model protocol (LAIS-CU manual + `phi4-mini:3.8b` control unit via Ollama). The CU may quote
   only packet-delivered numbers (anti-hallucination contract holds in the I3 fork unchanged).
 

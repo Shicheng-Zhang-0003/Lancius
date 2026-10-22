@@ -4,7 +4,7 @@ Every I3 module derives REPO from this rather than from its own relative
 depth, because the package now lives at generation_1/I3/.
 
 I3 fabric specifics (vs I2):
-  * ALU_POOL points at generation_1/I3/alu_pool — 8 clones of the I3 verifier
+  * ALU_POOL points at generation_1/I3/alu_pool — 12 clones of the I3 verifier
     (150-algorithm trained, warm-started from the I2 basis).
   * MU_SD pins the normalizer the I3 ALUs were trained under
     (generation_1/I3/gen1_mu_sd.txt, the gen1 fit). compute_musd(data_vec/v5)
