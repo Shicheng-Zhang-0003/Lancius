@@ -411,6 +411,13 @@ break;
 
     for (int i = fwd_g->node_count - 1; i >= 0; i--) {
         lancius_node* fwd_n = fwd_g->nodes[i];
+        /* Despot truth: a corrupt graph must fail loud, not dereference NULL.
+         * The forward scheduler rejects NULL nodes, but autodiff is a separate
+         * entry point and clang's analyzer flags this dereference. */
+        if (!fwd_n) {
+            lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID);
+            autodiff_abort(tg, fwd_to_full, grad_map);return NULL;
+        }
         lancius_node* grad_out = grad_map[fwd_n->id];
         if (!grad_out) continue;
         if (fwd_n->op == LANCIUS_OP_INPUT || fwd_n->op == LANCIUS_OP_CONST) continue;

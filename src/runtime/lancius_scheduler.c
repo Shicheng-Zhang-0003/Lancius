@@ -256,6 +256,12 @@ static void execute_node_math(lancius_node* n) {
             if (!lancius_node_elements_checked(n->inputs[0], &xe) || !lancius_node_elements_checked(n->inputs[1], &ye) || xe != ye || xe != R * C) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
             if (!lancius_node_elements_checked(n->inputs[2], &ge) || ge != 1) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
         }
+        /* Consistency with forward: NaN/Inf/negative targets are corrupt
+         * labels, not valid soft targets. Previously the backward pass
+         * differentiated them silently while the forward rejected them. */
+        for (size_t k = 0; k < R * C; k++) {
+            if (!isfinite(y[k]) || y[k] < 0.0) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
+        }
         double scale = g[0] / R;
         for(size_t r=0; r<R; r++) {
             double max_val = x[r*C];
@@ -565,6 +571,13 @@ static void execute_node_math(lancius_node* n) {
         size_t ax_extent = in->shape[axis];
         if (ax_extent == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
         if (out_elems > SIZE_MAX / sizeof(double)) { lancius_set_error(LANCIUS_ERROR_OVERFLOW); return; }
+        /* Explicit invariant check: the projection loop below divides by every
+         * output stride. A zero dim is rejected above via out_elems==0, but
+         * keep this local proof so a future shape-validation change can never
+         * turn the loop into a divide-by-zero. */
+        for (uint8_t i = 0; i < n->ndim; i++) {
+            if (out_str[i] == 0) { lancius_set_error(LANCIUS_ERROR_INVALID_SHAPE); return; }
+        }
         memset(n->runtime_data, 0, out_elems * sizeof(double));
         /* Strides are overflow-safe here: every partial product divides the
          * validated in_elems/out_elems totals (<=100M), and every dim >= 1

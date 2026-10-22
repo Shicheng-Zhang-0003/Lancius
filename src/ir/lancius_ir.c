@@ -923,6 +923,11 @@ lancius_memory_owner lancius_node_get_owner(const lancius_node* n) {
 void lancius_node_bind_external(lancius_node* n, void* data) {
     if (!n) return;
 
+    /* Rebinding must not orphan a graph-owned allocation. */
+    if (n->rt && n->rt->buffer_owner == LANCIUS_MEMORY_OWNED_HEAP &&
+        n->runtime_data && (void*)n->runtime_data != data) {
+        free(n->runtime_data);
+    }
     n->runtime_data = (double*)data;
 
     if (n->rt) {
@@ -936,6 +941,10 @@ void lancius_node_bind_external(lancius_node* n, void* data) {
 void lancius_node_bind_external_int8(lancius_node* n, int8_t* data) {
     if (!n) return;
 
+    if (n->rt && n->rt->int8_owner == LANCIUS_MEMORY_OWNED_HEAP &&
+        n->runtime_data_int8 && n->runtime_data_int8 != data) {
+        free(n->runtime_data_int8);
+    }
     n->runtime_data_int8 = data;
 
     if (n->rt) {
@@ -952,6 +961,10 @@ void lancius_node_bind_owned_heap(lancius_node* n, void* data) {
         return;
     }
 
+    if (n->rt && n->rt->buffer_owner == LANCIUS_MEMORY_OWNED_HEAP &&
+        n->runtime_data && (void*)n->runtime_data != data) {
+        free(n->runtime_data);
+    }
     n->runtime_data = (double*)data;
 
     if (n->rt) {
@@ -970,6 +983,10 @@ void lancius_node_bind_owned_heap_int8(lancius_node* n, int8_t* data) {
         return;
     }
 
+    if (n->rt && n->rt->int8_owner == LANCIUS_MEMORY_OWNED_HEAP &&
+        n->runtime_data_int8 && n->runtime_data_int8 != data) {
+        free(n->runtime_data_int8);
+    }
     n->runtime_data_int8 = data;
 
     if (n->rt) {
@@ -982,6 +999,10 @@ void lancius_node_bind_owned_heap_int8(lancius_node* n, int8_t* data) {
 void lancius_node_bind_external_f32(lancius_node* n, float* data) {
     if (!n) return;
 
+    if (n->rt && n->rt->f32_owner == LANCIUS_MEMORY_OWNED_HEAP &&
+        n->runtime_data_f32 && n->runtime_data_f32 != data) {
+        free(n->runtime_data_f32);
+    }
     n->runtime_data_f32 = data;
 
     if (n->rt) {
@@ -1001,6 +1022,10 @@ void lancius_node_bind_owned_heap_f32(lancius_node* n, float* data) {
         return;
     }
 
+    if (n->rt && n->rt->f32_owner == LANCIUS_MEMORY_OWNED_HEAP &&
+        n->runtime_data_f32 && n->runtime_data_f32 != data) {
+        free(n->runtime_data_f32);
+    }
     n->runtime_data_f32 = data;
 
     if (n->rt) {

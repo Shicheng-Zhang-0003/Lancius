@@ -40,6 +40,17 @@ int main() {
     for(size_t i=0; i<w2_sz; i++) W2->runtime_data[i] = 0.02;
     for(size_t i=0; i<b1_sz; i++) b1->runtime_data[i] = 0.0;
 
+    /* Ownership rebind: replacing a graph-owned heap buffer with external
+     * storage must free the old allocation, not leak it. */
+    double* owned_probe = (double*)malloc(sizeof(double));
+    double external_probe = 3.0;
+    lancius_node* own_probe = lancius_input(g, 1, 1);
+    if (owned_probe) *owned_probe = 2.0;
+    lancius_node_bind_owned_heap(own_probe, owned_probe);
+    lancius_node_bind_external(own_probe, &external_probe);
+    int bind_ok = own_probe->runtime_data == &external_probe &&
+                  lancius_node_get_owner(own_probe) == LANCIUS_MEMORY_EXTERNAL;
+
     printf("[1/3] Compiling Schedule & Profiling Topology...\n");
     lancius_schedule* sched = lancius_ir_schedule(g);
 
@@ -84,9 +95,9 @@ int main() {
 
     /* v12R1: this audit runs in `make check`, so its claim must be executable.
        Softmax rows must sum to 1 within tight tolerance, or the gate fails. */
-    int internals_pass = (S1->runtime_data != NULL) && (fabs(sum - 1.0) < 1e-9);
-    if (internals_pass) printf("  ✅ Softmax normalization verified (|sum-1| < 1e-9).\n");
-    else printf("  ❌ Softmax normalization violated.\n");
+    int internals_pass = (S1->runtime_data != NULL) && (fabs(sum - 1.0) < 1e-9) && bind_ok;
+    if (internals_pass) printf("  ✅ Softmax normalization and ownership rebind verified.\n");
+    else printf("  ❌ Softmax normalization or ownership rebind violated.\n");
 
     printf("\n================================================================\n");
     printf("  INTERNAL X-RAY COMPLETE. INSPECT THE NUMBERS.                \n");
