@@ -6,8 +6,9 @@
 #include <time.h>
 
 // Naive O(N^2) Attention for mathematical verification
-void naive_attention(double* out, const double* q, const double* k, const double* v, size_t seq_len, size_t n_heads, size_t head_dim) {
+static int naive_attention(double* out, const double* q, const double* k, const double* v, size_t seq_len, size_t n_heads, size_t head_dim) {
     double* scores = (double*)malloc(seq_len * seq_len * sizeof(double)); // The O(N^2) bottleneck!
+    if (!scores) return -1;
     double scale = 1.0 / sqrt((double)head_dim);
 
     for (size_t i = 0; i < seq_len; i++) {
@@ -46,6 +47,7 @@ void naive_attention(double* out, const double* q, const double* k, const double
         }
     }
     free(scores);
+    return 0;
 }
 
 int main() {
@@ -69,6 +71,12 @@ int main() {
     double* out_naive = (double*)malloc(total_elems * sizeof(double));
     double* out_flash = (double*)malloc(total_elems * sizeof(double));
 
+    if (!q || !k || !v || !out_naive || !out_flash) {
+        printf("  ❌ ALLOC FAILURE: cannot allocate attention audit buffers.\n");
+        free(q); free(k); free(v); free(out_naive); free(out_flash);
+        return 1;
+    }
+
     srand(42);
     for(size_t i=0; i<total_elems; i++) {
         q[i] = ((double)rand() / RAND_MAX) * 2.0 - 1.0;
@@ -77,20 +85,31 @@ int main() {
     }
 
     printf("[2/3] Running Naive Attention (O(N^2) Memory)...\n");
-    naive_attention(out_naive, q, k, v, seq_len, n_heads, head_dim);
+    if (naive_attention(out_naive, q, k, v, seq_len, n_heads, head_dim) != 0) {
+        printf("  ❌ ALLOC FAILURE: naive attention scratchpad.\n");
+        free(q); free(k); free(v); free(out_naive); free(out_flash);
+        return 1;
+    }
 
     printf("[3/3] Running Flash Attention (Online Softmax / Zero Alloc)...\n");
     kernel_attention(out_flash, q, k, v, seq_len, n_heads, head_dim);
 
-    // Verify Math
+    // Verify Math. A NaN vs NaN comparison is false, so the old loop could
+    // leave max_diff==0 and claim parity for two non-finite outputs. Require
+    // every value on both sides to be finite and fail closed otherwise.
     double max_diff = 0.0;
+    int all_finite = 1;
     for(size_t i=0; i<total_elems; i++) {
+        if (!isfinite(out_naive[i]) || !isfinite(out_flash[i])) all_finite = 0;
         double diff = fabs(out_naive[i] - out_flash[i]);
         if (diff > max_diff) max_diff = diff;
     }
 
     printf("\n================================================================\n");
-    if (max_diff < 1e-5) {
+    if (!all_finite) {
+        printf("  ❌ NON-FINITE ATTENTION OUTPUT DETECTED.\n");
+        printf("  📉 MAX ERROR: %e\n", max_diff);
+    } else if (max_diff < 1e-5) {
         printf("  ✅ MATHEMATICAL PARITY VERIFIED.\n");
         printf("  📉 MAX ERROR: %e (Threshold: < 1e-5)\n", max_diff);
         printf("  🧠 FLASH ATTENTION SUCCESSFULLY ELIMINATED O(N^2) BOTTLENECK.\n");
@@ -100,7 +119,7 @@ int main() {
     }
     printf("================================================================\n");
 
-    int _rc = (max_diff < 1e-5) ? 0 : 1;
+    int _rc = (all_finite && max_diff < 1e-5) ? 0 : 1;
     free(q); free(k); free(v); free(out_naive); free(out_flash);
     return _rc;
 }
