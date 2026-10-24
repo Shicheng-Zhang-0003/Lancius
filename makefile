@@ -62,6 +62,7 @@ $(eval $(call LINK,train_verifier,examples/train_verifier.c,-fopenmp -lpthread))
 $(eval $(call LINK,train_cifar10,examples/train_cifar10.c,-fopenmp -lpthread))
 $(eval $(call LINK,train_micromodel,examples/train_micromodel.c,-fopenmp -lpthread))
 $(eval $(call LINK,train_i3,examples/train_i3.c,-fopenmp -lpthread))
+$(eval $(call LINK,train_i4,examples/train_i4.c,-fopenmp -lpthread))
 $(eval $(call LINK,eval_verifier,examples/eval_verifier.c,-fopenmp -lpthread))
 $(eval $(call LINK,train_verifier_head,examples/train_verifier_head.c,-fopenmp -lpthread))
 $(eval $(call LINK,fuzz_lancius,examples/fuzz_lancius.c,-fopenmp))
@@ -153,7 +154,7 @@ BINS = $(addprefix $(BIN)/,lancius train_mnist train_cifar10 fuzz_lancius \
         audit_fault_injection audit_despot_probe train_verifier_head \
         distill_prm800k audit_train_lib trainlib_dump audit_sandbox \
         train_micromodel eval_verifier audit_sum_axis_nd audit_train_bwd \
-        audit_train_converge audit_v7_hardening train_verifier)
+        audit_train_converge audit_v7_hardening train_i3 train_i4 train_verifier)
 
 all: $(LIB) $(BINS)
 	@echo "build ready."

@@ -1,0 +1,29 @@
+{
+  "method": "Platt scaling on logit(validation probability)",
+  "fit_split": "val 2022",
+  "val_rows": 29022,
+  "val_positives": 97,
+  "slope": 0.5860785258803861,
+  "intercept": -4.366592538266709,
+  "test_probabilities": "results/test.prob.bin (calibrated)",
+  "test_raw_probabilities": "results/test.raw.prob.bin",
+  "note": "AP and ROC-AUC are invariant to this monotone calibration; Brier, log-loss and ECE use calibrated test probabilities.",
+  "test_metrics": {
+    "raw": {
+      "mean_prob": 0.12328232159496369,
+      "ap": 0.03668283575066221,
+      "roc_auc": 0.8844356712351185,
+      "brier": 0.06080198297061899,
+      "logloss": 0.19444665079466664,
+      "ece_10": 0.11630485622386591
+    },
+    "calibrated": {
+      "mean_prob": 0.004315902324679736,
+      "ap": 0.03668283575066221,
+      "roc_auc": 0.8844356712351185,
+      "brier": 0.006832039931240274,
+      "logloss": 0.03518241808980033,
+      "ece_10": 0.0026966709574766106
+    }
+  }
+}

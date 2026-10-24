@@ -109,3 +109,17 @@ generation_1/gen1_model.txt
 generation_1/**/__pycache__/
 generation_1/__pycache__/
 generation_1/I3/corpus/model_i3.txt
+# I4 (fire-risk): sources/specs/cards/results-metrics are tracked; the 157MB
+# corpus, 172MB raw feature data, ASCII weight dump, checkpoints and
+# probability dumps are reproducible outputs and live outside history.
+generation_1/I4/corpus/*
+generation_1/I4/data/
+generation_1/I4/models/i4/
+generation_1/I4/results/*.bin
+generation_1/I4/results/*.npy
+# Small artifacts the I4 card lists as evidence stay tracked beside the
+# ignored roots they live under.
+!generation_1/I4/corpus/qc.json
+!generation_1/I4/corpus/corpus.hdr
+!generation_1/I4/corpus/feature_manifest.json
+!generation_1/I4/corpus/metadata.json

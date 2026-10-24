@@ -1,0 +1,88 @@
+{
+  "id": "i4_fire_next_year_v0.1",
+  "created": "2026-10-23T08:52:09",
+  "target_spec": "targets/i4_fire_next_year_v0.1.json",
+  "target_spec_sha256": "dfaff423e4c5c7fe3f98dbbcda0459b12b0a513f3f0e5947a41849a281db3ebf",
+  "feature_count": 77,
+  "mask_cells": 29022,
+  "study_cells_inside_bbox": 48147,
+  "grid_cells": 83400,
+  "label_threshold": 0.01,
+  "feature_years": [
+    2015,
+    2023
+  ],
+  "label_years": [
+    2016,
+    2024
+  ],
+  "group_counts": {
+    "static": 16,
+    "climate": 22,
+    "modis": 17,
+    "invasion": 15,
+    "fire_history": 7
+  },
+  "group_coverage": {
+    "static": 1.0,
+    "climate": 1.0,
+    "modis": 0.9762256084295754,
+    "invasion": 1.0,
+    "fire_history": 1.0
+  },
+  "splits": {
+    "train": {
+      "years": [
+        2016,
+        2021
+      ],
+      "rows": 174132,
+      "positives": 1420,
+      "prevalence": 0.00815473319091264,
+      "fold_counts": {
+        "0": 34830,
+        "1": 34824,
+        "2": 34830,
+        "3": 34824,
+        "4": 34824
+      }
+    },
+    "val": {
+      "years": [
+        2022,
+        2022
+      ],
+      "rows": 29022,
+      "positives": 97,
+      "prevalence": 0.0033422920543036316,
+      "fold_counts": {
+        "0": 5805,
+        "1": 5804,
+        "2": 5805,
+        "3": 5804,
+        "4": 5804
+      }
+    },
+    "test": {
+      "years": [
+        2023,
+        2024
+      ],
+      "rows": 58044,
+      "positives": 405,
+      "prevalence": 0.006977465371097788,
+      "fold_counts": {
+        "0": 11610,
+        "1": 11608,
+        "2": 11610,
+        "3": 11608,
+        "4": 11608
+      }
+    }
+  },
+  "spatial_folds": {
+    "n": 5,
+    "method": "contiguous x-quantile blocks",
+    "status": "provisional"
+  }
+}
