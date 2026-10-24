@@ -53,6 +53,13 @@ in R-series numbering), built on the `v11S` stable baseline via `v12R1`.
 
 > This is a development milestone.
 > Binary compatibility is guaranteed for v2 models written by v11S+.
+
+**RC3.x model line (starts at `V1.2-RC3.1`).** Point releases on this cycle
+are **model, dataset and fabric iterations** cut from an unchanged `v12R2`
+codebase — no format break, no stable-API change, no numerical behaviour
+change; `src/` is frozen at the RC3 line for them. The rules and per-release
+asset provenance live in `MANIFEST.md` and
+`docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.1.md`.
 <!-- /SECTION:RELEASE_IDENTITY -->
 
 <!-- SECTION:HIGHLIGHTS -->
@@ -626,7 +633,8 @@ Each document owns one thing; start here, then follow pointers:
 - `docs/releases/v12R1/GITHUB_RELEASE_v12R1.md` — v12R1 release notes
 - `docs/releases/v11S/GITHUB_RELEASE_v11S.md` — v11S release notes
 - `docs/releases/v10S/RELEASE_NOTES_v10S.md` — historical v10S notes
-- `docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.md` — current release notes
+- `docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.1.md` — current release notes
+  (the RC3.x model line); `GITHUB_RELEASE_V1.2-RC3.md` is the previous point
   (trained models are attached to the GitHub release page — `*.lancius` is
   gitignored, so release assets are the only model distribution)
 - `docs/v11A3_SCOPE.md`, `docs/v11A2_SCOPE.md`, `docs/v11A1_SCOPE.md` — frozen history
