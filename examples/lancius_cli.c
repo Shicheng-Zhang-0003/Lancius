@@ -16,6 +16,7 @@
  */
 #define _POSIX_C_SOURCE 200112L
 #include <lancius.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -77,6 +78,38 @@ static long file_size(const char *p) {
     struct stat st;
     if (!p || stat(p, &st) != 0) return -1;
     return (long)st.st_size;
+}
+
+/* RC3.1: resolve an example/trainer binary by identity, not by the layout the
+ * printer assumed. The reorg moved every binary from the repo root into
+ * build/bin while doctor/status/train kept probing literal "./name", so a
+ * fully built tree reported "binaries 0/5 present" — the documented defect
+ * class of a path that outlives the thing it names (DESPOT_TRUTH_V2 §18.6.2).
+ * Probe order: next to the running CLI (siblings — `make` lands lancius in
+ * build/bin beside its trainers), then ./name (old layout, or a build/bin
+ * cwd), then build/bin/name (repo-root cwd). 0 = found, out = first hit.
+ * 1 = nothing exists, out = the most likely location so the failure message
+ * names where to look instead of re-narrating the stale path. */
+static int bin_path(const char *name, char *out, size_t outsz) {
+    char self[PATH_MAX] = {0};
+    ssize_t n = readlink("/proc/self/exe", self, sizeof(self) - 1);
+    if (n > 0 && n < (ssize_t)sizeof(self)) {
+        self[n] = '\0';
+        char *slash = strrchr(self, '/');
+        if (slash) {
+            int dirlen = (int)(slash - self);
+            if (snprintf(out, outsz, "%.*s/%s", dirlen, self, name) > 0
+                && file_exists(out)) return 0;
+        }
+    }
+    if (snprintf(out, outsz, "./%s", name) > 0 && file_exists(out)) return 0;
+    if (snprintf(out, outsz, "build/bin/%s", name) > 0 && file_exists(out)) return 0;
+    if (self[0] != '\0' && strrchr(self, '/')) {
+        char *slash = strrchr(self, '/');
+        if (snprintf(out, outsz, "%.*s/%s", (int)(slash - self), self, name) > 0) return 1;
+    }
+    (void)snprintf(out, outsz, "build/bin/%s", name);
+    return 1;
 }
 
 static int run_shell(const char *cmd) {
@@ -324,11 +357,12 @@ static int cmd_doctor(void) {
     printf("version: %s\n", LANCIUS_VERSION_STRING);
     printf("-- binaries (run `make` if MISSING) --\n");
     {
-        const char *bins[] = {"./train_mnist", "./train_cifar10", "./train_verifier_head",
-            "./run_edge", "./distill_prm800k", NULL};
+        const char *bins[] = {"train_mnist", "train_cifar10", "train_verifier_head",
+            "run_edge", "distill_prm800k", NULL};
         int i;
         for (i = 0; bins[i]; i++) {
-            int ok = file_exists(bins[i]);
+            char bp[PATH_MAX];
+            int ok = bin_path(bins[i], bp, sizeof(bp)) == 0;
             printf("  %-24s %s%s%s\n", bins[i],
                 ok ? c_ok() : c_bad(), ok ? "OK" : "MISSING (make)", c_off());
             if (!ok) core_bad = 1;
@@ -399,10 +433,14 @@ static int cmd_status(void) {
     printf("version: %s\n", LANCIUS_VERSION_STRING);
     if (getcwd(cwd, sizeof(cwd)) != NULL) printf("cwd: %s\n", cwd);
     {
-        const char *bins[] = {"./train_mnist", "./train_cifar10", "./train_verifier_head",
-            "./run_edge", "./distill_prm800k", NULL};
+        const char *bins[] = {"train_mnist", "train_cifar10", "train_verifier_head",
+            "run_edge", "distill_prm800k", NULL};
         int i, okc = 0, tot = 0;
-        for (i = 0; bins[i]; i++) { tot++; if (file_exists(bins[i])) okc++; }
+        for (i = 0; bins[i]; i++) {
+            char bp[PATH_MAX];
+            tot++;
+            if (bin_path(bins[i], bp, sizeof(bp)) == 0) okc++;
+        }
         printf("binaries: %d/%d present%s\n", okc, tot, okc == tot ? "" : " (run `make`)");
     }
     {
@@ -750,7 +788,6 @@ static int train_data_ok(const char *target, char *hint, size_t hintcap) {
 }
 
 static int cmd_train(int argc, char **argv) {
-    const char *bin = NULL;
     const char *est = "";
     int dry = 0;
     int i;
@@ -773,21 +810,23 @@ static int cmd_train(int argc, char **argv) {
             return 2;
         }
     }
+    const char *name;
     if (strcmp(argv[0], "mnist") == 0) {
-        bin = "./train_mnist";
+        name = "train_mnist";
         est = "10 epochs, minutes";
     } else if (strcmp(argv[0], "cifar10") == 0) {
-        bin = "./train_cifar10";
+        name = "train_cifar10";
         est = "30 epochs, hours — long; try verifier first";
     } else if (strcmp(argv[0], "verifier") == 0) {
-        bin = "./train_verifier_head";
+        name = "train_verifier_head";
         est = "~300 iters, seconds";
     } else {
         printf("unknown train target '%s' (mnist|cifar10|verifier)\n", argv[0]);
         return 2;
     }
-    if (!file_exists(bin)) {
-        printf("FAIL: %s missing — run `make` first.\n", bin);
+    char bin[PATH_MAX];
+    if (bin_path(name, bin, sizeof(bin)) != 0) {
+        printf("FAIL: %s missing — run `make` first (looked at %s).\n", name, bin);
         return 1;
     }
     if (!train_data_ok(argv[0], hint, sizeof(hint))) {
