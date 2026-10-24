@@ -22,6 +22,17 @@
   RuleTaker git clone remain Python-side. Kafka/S3/HTTP sinks, websocket
   and SSE sources, checkpointing, and schema registry remain roadmap.
 
+## V1.2RC3.1 model-release line (2026-10-24)
+
+RC3.1 and later RC3.x points are **model/dataset/fabric iterations** cut
+from an unchanged `v12R2` codebase: no format break, no API change, no
+numerical behaviour change, so the contract below is untouched by them.
+The code edits RC3.1 carries are composition layer only (I2 Python path
+locator, operator-CLI binary resolution, example-binary BINS registration,
+and documentation drift in `generation_1/`); `src/` is untouched. Assets
+live on the GitHub release page; provenance in
+`docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.1.md`.
+
 ## v12R2 Milestone (development, current) + v12R1 baseline (2026-09-21) + despot truth V2/V3 (2026-09-28) + hardening V4 (2026-09-28) + V5 (2026-09-30) + despot audit V6 (2026-10-01) + despot audit V7 (2026-10-03) + despot audit V9 (2026-10-09) + despot audit V10 (2026-10-11)
 
 v12R2 is the second development milestone of the v12 cycle, not a stable

@@ -25,6 +25,20 @@ Live v12R2 gate is Validation batch below (`make check/long/sanitizers`
 + despot probes + `probe_v6`); historical checklist above is not the
 current gate.
 
+## V1.2RC3.1 (2026-10-24): shell fixes + model-release lineage
+
+The RC3.x line starts: model/dataset/fabric iterations cut from an unchanged
+`v12R2` core — no format break, no ABI change, no numerical change, so no
+MANIFEST contract movement and no `v12S` scope claim. This first point
+release fixes four composition-layer defects only (I2's removed-sentinel repo
+resolution + CLI locator backport, the CLI's three stale root-relative binary
+probes reporting 0/5 on a built tree, the `train_i3`/`train_i4` missing-BINS
+makefile omission, and the `generation_1` README/card count drift including
+the I1 58M claim and the "12 clones" pool wording), and puts I4 in the tree
+ahead of its release assets. Verified per fix in `CHANGELOG.md`; `make check`
+RC=0 with the batch in tree. The I3 verifier and the I4 export are the RC3.1
+assets; provenance blocks in `docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.1.md`.
+
 ## v12R2 theme: mute mathematician learns (R2-1..R2-6)
 
 v12R1 honesty kept; R2 proves learning: R2-1 train-lib (SGD/SGDM/AdamW-decoupled/clip/cosine),

@@ -1,5 +1,51 @@
 # Lancius Changelog
 
+## V1.2RC3.1 (2026-10-24) — shell fixes + model-release lineage (no format break, no ABI change, no numerical behaviour change)
+
+The RC3.x line exists for an explicitly limited purpose: **model, dataset and
+fabric iterations**, cut from an unchanged `v12R2` codebase — no format
+change, no stable-API change, no numerical change, so no `V1.2RC4` and no
+`v12S` scope moves. RC3.1 is the first of them and carries four
+composition-layer repairs (none in `src/`) plus the first two model-lineage
+assets that postdate RC3 (the I3 verifier and the I4 fire-risk export):
+
+- **The I2 fabric was dead on arrival at any cwd but the repo root.**
+  `paths._find_repo()` walked up on a repo-root `lancius` sentinel that the
+  build reorganization had removed, fell back to `os.getcwd()`, and `bus.py`
+  hardcoded the same removed root layout — so every foreign-cwd verdict died
+  on `FileNotFoundError`. I3's fix (`makefile` sentinel + three-candidate
+  `find_lancius()` naming everywhere it looked) is backported unchanged.
+  Verified: `generation_1/I2/bus/bus.py` runs its dispatch → aggregate round
+  trip from `/tmp/opencode` with no overrides.
+- **`lancius doctor`/`status`/`train` probed stale root-relative paths** and
+  reported `binaries: 0/5 present` against a built tree — the documented
+  §18.6.2 defect class, in the operator's first-contact tool, at three call
+  sites. `lancius_cli.c` gains `bin_path()` (sibling of the running CLI →
+  `./name` → `build/bin/name`; the miss case names where it looked).
+  Verified: doctor `OK ×5` and status `5/5` from the repo root and
+  `/tmp/opencode`; `train verifier --dry` resolves the `build/bin` sibling.
+- **A makefile omission of the same class:** the in-flight `train_i4` edit
+  added the `LINK` rule without `BINS` membership, so plain `make` never built
+  it — and had never built `train_i3` either. Both registered; plain `make`
+  produces 41 binaries now.
+- **Documentation drift in the release-adjacent lineage entry point:**
+  `generation_1/README.md` still described two generations and a
+  "58M-parameter" I1 (the card owns 10,771,461); the I2 `chat.py` docstring
+  carried the same 58M; and `MODEL_CARD_I3.md` said "12 clones" where the I3
+  README has always said 11 champion clones + 1 diverse sibling (`alu_01`,
+  seed 20261021) — confirmed by sha256 across the pool (11 × `0ca8…`,
+  `alu_01` = `9222…`). All three corrected beside the originals.
+- **I4 entered the tree**: `examples/train_i4.c` (921 lines, the unified
+  trainer contract with validation-AP selection and 20× positive
+  oversampling), the frozen task spec, the tool pipeline, evidence JSONs and
+  the card; the 157MB corpus / 172MB raw data / weight dumps / probability
+  dumps are gitignored reproducible outputs, and `i4_mlp.lancius`
+  (sha256 `7d7481a0…e3f0ced6`) ships as a release asset.
+
+Gates after the batch: `make check` RC=0 with the edits in tree; -Werror
+build clean; `docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.1.md` carries the
+asset provenance blocks.
+
 ## V1.2RC3 (2026-10-19) — training-framework repair: one canonical trainer, the debt of the example driver lineage retired
 
 The framework library (`src/train/lancius_train.c`) grew exact optimizers,
