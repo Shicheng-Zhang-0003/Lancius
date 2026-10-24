@@ -15,8 +15,9 @@ MODEL CONGLOMERATION v1 — the combined model set as one chatbot.
     |   - anti-hallucination guard + retraction filter           |
     +----------------------------------------------------------+
 
-Generation-1 (I1) heritage: the 58M-parameter verifier weights came from
-the I1 training pipeline (run_big benchmark: 93.5% overall exact).
+Generation-1 (I1) heritage: the 10,771,461-parameter verifier weights came
+from the I1 training pipeline (run_big benchmark: 93.5% overall exact; the
+count and architecture are owned by generation_1/I1/MODEL_CARD_GEN1.md).
 Generation-2 (I2) fabric: construction, bus, ISA, orchestration, chat.
 
 usage:  python3 generation_1/I2/chat.py [--alus K] [--demo t1 "t2" ...]
