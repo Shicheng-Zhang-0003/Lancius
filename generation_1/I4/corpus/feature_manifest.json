@@ -1,0 +1,700 @@
+{
+  "total": 77,
+  "features": [
+    {
+      "index": 0,
+      "name": "static/aspect_cos",
+      "group": "static",
+      "median": -0.137650728225708,
+      "mean": -0.09956210637962838,
+      "std": 0.5256956520593694,
+      "coverage": 1.0
+    },
+    {
+      "index": 1,
+      "name": "static/aspect_sin",
+      "group": "static",
+      "median": -0.018920764327049255,
+      "mean": -0.025874681354013673,
+      "std": 0.5258702227342561,
+      "coverage": 1.0
+    },
+    {
+      "index": 2,
+      "name": "static/bare",
+      "group": "static",
+      "median": 0.0,
+      "mean": 0.06109119561003688,
+      "std": 0.16047332841772716,
+      "coverage": 1.0
+    },
+    {
+      "index": 3,
+      "name": "static/built",
+      "group": "static",
+      "median": 0.0,
+      "mean": 0.005005237988489958,
+      "std": 0.041286815523669446,
+      "coverage": 1.0
+    },
+    {
+      "index": 4,
+      "name": "static/built_5km",
+      "group": "static",
+      "median": 0.00015578800230287015,
+      "mean": 0.005299951616844635,
+      "std": 0.029513706381061267,
+      "coverage": 1.0
+    },
+    {
+      "index": 5,
+      "name": "static/crop",
+      "group": "static",
+      "median": 0.0,
+      "mean": 0.24893476391598257,
+      "std": 0.35592049641449525,
+      "coverage": 1.0
+    },
+    {
+      "index": 6,
+      "name": "static/dist_built_km",
+      "group": "static",
+      "median": 15.231546401977539,
+      "mean": 19.583542392605647,
+      "std": 16.195283948228315,
+      "coverage": 1.0
+    },
+    {
+      "index": 7,
+      "name": "static/elevation",
+      "group": "static",
+      "median": 984.9342041015625,
+      "mean": 1169.3769480976227,
+      "std": 495.89565418406744,
+      "coverage": 1.0
+    },
+    {
+      "index": 8,
+      "name": "static/grass",
+      "group": "static",
+      "median": 0.3768254220485687,
+      "mean": 0.4656456640957054,
+      "std": 0.35549821690011596,
+      "coverage": 1.0
+    },
+    {
+      "index": 9,
+      "name": "static/rangeland",
+      "group": "static",
+      "median": 0.9827332496643066,
+      "mean": 0.7757106855456214,
+      "std": 0.28929264060279636,
+      "coverage": 1.0
+    },
+    {
+      "index": 10,
+      "name": "static/ruggedness",
+      "group": "static",
+      "median": 11.448034286499023,
+      "mean": 43.33532588229525,
+      "std": 62.46570076479634,
+      "coverage": 1.0
+    },
+    {
+      "index": 11,
+      "name": "static/shrub",
+      "group": "static",
+      "median": 0.0,
+      "mean": 3.906163088479718e-05,
+      "std": 0.0008807589376862742,
+      "coverage": 1.0
+    },
+    {
+      "index": 12,
+      "name": "static/slope",
+      "group": "static",
+      "median": 1.2127766609191895,
+      "mean": 4.4447941904456005,
+      "std": 6.11050021309041,
+      "coverage": 1.0
+    },
+    {
+      "index": 13,
+      "name": "static/tree",
+      "group": "static",
+      "median": 0.0,
+      "mean": 0.18491320431125435,
+      "std": 0.27172197799546816,
+      "coverage": 1.0
+    },
+    {
+      "index": 14,
+      "name": "static/water",
+      "group": "static",
+      "median": 0.0,
+      "mean": 0.013462843657139399,
+      "std": 0.05523731304940359,
+      "coverage": 1.0
+    },
+    {
+      "index": 15,
+      "name": "static/wetland",
+      "group": "static",
+      "median": 0.0,
+      "mean": 4.6084194493250066e-05,
+      "std": 0.001485555198963982,
+      "coverage": 1.0
+    },
+    {
+      "index": 16,
+      "name": "climate/dayl_mean",
+      "group": "climate",
+      "median": 52715.70703125,
+      "mean": 52705.199933186464,
+      "std": 227.58930756518913,
+      "coverage": 1.0
+    },
+    {
+      "index": 17,
+      "name": "climate/dry_days",
+      "group": "climate",
+      "median": 285.18231201171875,
+      "mean": 273.5591332163502,
+      "std": 32.71417150485123,
+      "coverage": 1.0
+    },
+    {
+      "index": 18,
+      "name": "climate/dry_spell",
+      "group": "climate",
+      "median": 20.702449798583984,
+      "mean": 21.822880334526946,
+      "std": 10.114866723969444,
+      "coverage": 1.0
+    },
+    {
+      "index": 19,
+      "name": "climate/frost_days",
+      "group": "climate",
+      "median": 193.76504516601562,
+      "mean": 194.19823543994696,
+      "std": 26.224881719738892,
+      "coverage": 1.0
+    },
+    {
+      "index": 20,
+      "name": "climate/gdd",
+      "group": "climate",
+      "median": 1613.472412109375,
+      "mean": 1492.1739628108992,
+      "std": 400.2158362621953,
+      "coverage": 1.0
+    },
+    {
+      "index": 21,
+      "name": "climate/precip_fall",
+      "group": "climate",
+      "median": 67.16117858886719,
+      "mean": 89.22810307037159,
+      "std": 66.22954353180734,
+      "coverage": 1.0
+    },
+    {
+      "index": 22,
+      "name": "climate/precip_spring",
+      "group": "climate",
+      "median": 99.92845153808594,
+      "mean": 128.62778706562975,
+      "std": 94.65861325993816,
+      "coverage": 1.0
+    },
+    {
+      "index": 23,
+      "name": "climate/precip_sum",
+      "group": "climate",
+      "median": 397.1470947265625,
+      "mean": 525.5549339072911,
+      "std": 333.34933567285486,
+      "coverage": 1.0
+    },
+    {
+      "index": 24,
+      "name": "climate/precip_summer",
+      "group": "climate",
+      "median": 136.9827880859375,
+      "mean": 155.35106032729556,
+      "std": 77.41422287282583,
+      "coverage": 1.0
+    },
+    {
+      "index": 25,
+      "name": "climate/precip_winter",
+      "group": "climate",
+      "median": 74.07490539550781,
+      "mean": 156.67768703919907,
+      "std": 164.37466306848316,
+      "coverage": 1.0
+    },
+    {
+      "index": 26,
+      "name": "climate/rh_mean",
+      "group": "climate",
+      "median": 32.024200439453125,
+      "mean": 33.75187557879989,
+      "std": 8.537245627732469,
+      "coverage": 1.0
+    },
+    {
+      "index": 27,
+      "name": "climate/snow_free_days",
+      "group": "climate",
+      "median": 51.156097412109375,
+      "mean": 46.75379264164001,
+      "std": 29.621228515472602,
+      "coverage": 1.0
+    },
+    {
+      "index": 28,
+      "name": "climate/srad_mean",
+      "group": "climate",
+      "median": 377.18505859375,
+      "mean": 378.1273205639523,
+      "std": 20.944481359268604,
+      "coverage": 1.0
+    },
+    {
+      "index": 29,
+      "name": "climate/srad_summer",
+      "group": "climate",
+      "median": 390.8836364746094,
+      "mean": 391.8019760538779,
+      "std": 22.16857298495978,
+      "coverage": 1.0
+    },
+    {
+      "index": 30,
+      "name": "climate/swe_max",
+      "group": "climate",
+      "median": 30.195621490478516,
+      "mean": 77.90404662661655,
+      "std": 100.1371717282218,
+      "coverage": 1.0
+    },
+    {
+      "index": 31,
+      "name": "climate/swe_mean",
+      "group": "climate",
+      "median": 9.980840682983398,
+      "mean": 34.793764307049265,
+      "std": 53.832867995519,
+      "coverage": 1.0
+    },
+    {
+      "index": 32,
+      "name": "climate/tmax_mean",
+      "group": "climate",
+      "median": 11.123419761657715,
+      "mean": 10.604563939134234,
+      "std": 2.6114370539918714,
+      "coverage": 1.0
+    },
+    {
+      "index": 33,
+      "name": "climate/tmax_p95",
+      "group": "climate",
+      "median": 28.796417236328125,
+      "mean": 27.99186818095787,
+      "std": 3.3715611271207453,
+      "coverage": 1.0
+    },
+    {
+      "index": 34,
+      "name": "climate/tmin_mean",
+      "group": "climate",
+      "median": -1.8016154766082764,
+      "mean": -1.7238065995738003,
+      "std": 1.7037282982556694,
+      "coverage": 1.0
+    },
+    {
+      "index": 35,
+      "name": "climate/tmin_min",
+      "group": "climate",
+      "median": -31.980281829833984,
+      "mean": -31.140144522682508,
+      "std": 5.163790889247538,
+      "coverage": 1.0
+    },
+    {
+      "index": 36,
+      "name": "climate/vpd_max",
+      "group": "climate",
+      "median": 4.371177673339844,
+      "mean": 4.277402943481166,
+      "std": 1.0888666366340063,
+      "coverage": 1.0
+    },
+    {
+      "index": 37,
+      "name": "climate/vpd_mean",
+      "group": "climate",
+      "median": 1.8958308696746826,
+      "mean": 1.8102903460586457,
+      "std": 0.4845019133603485,
+      "coverage": 1.0
+    },
+    {
+      "index": 38,
+      "name": "modis/evi_amp",
+      "group": "modis",
+      "median": 0.23195761442184448,
+      "mean": 0.27117636500513254,
+      "std": 0.1488123778175516,
+      "coverage": 0.9990007580456206
+    },
+    {
+      "index": 39,
+      "name": "modis/evi_max",
+      "group": "modis",
+      "median": 0.40236639976501465,
+      "mean": 0.42108689791560594,
+      "std": 0.15506814789370507,
+      "coverage": 0.9990007580456206
+    },
+    {
+      "index": 40,
+      "name": "modis/evi_mean",
+      "group": "modis",
+      "median": 0.2717894911766052,
+      "mean": 0.27314963104953,
+      "std": 0.08241367275401423,
+      "coverage": 0.9990007580456206
+    },
+    {
+      "index": 41,
+      "name": "modis/evi_sd",
+      "group": "modis",
+      "median": 0.06606713682413101,
+      "mean": 0.08263837318331481,
+      "std": 0.05117119241602348,
+      "coverage": 0.9990007580456206
+    },
+    {
+      "index": 42,
+      "name": "modis/evi_spring",
+      "group": "modis",
+      "median": 0.2167307287454605,
+      "mean": 0.22533778771787294,
+      "std": 0.06685704124847976,
+      "coverage": 0.8787356717892174
+    },
+    {
+      "index": 43,
+      "name": "modis/evi_summer",
+      "group": "modis",
+      "median": 0.31904929876327515,
+      "mean": 0.3255190968329136,
+      "std": 0.1132958352849022,
+      "coverage": 0.9986561918544552
+    },
+    {
+      "index": 44,
+      "name": "modis/ndvi_amp",
+      "group": "modis",
+      "median": 0.3332173228263855,
+      "mean": 0.35104242090670656,
+      "std": 0.1560070298036168,
+      "coverage": 0.9990007580456206
+    },
+    {
+      "index": 45,
+      "name": "modis/ndvi_doy_max",
+      "group": "modis",
+      "median": 185.0,
+      "mean": 187.5476764753176,
+      "std": 28.105135801674034,
+      "coverage": 0.9990007580456206
+    },
+    {
+      "index": 46,
+      "name": "modis/ndvi_fall",
+      "group": "modis",
+      "median": 0.37110841274261475,
+      "mean": 0.39878083549794313,
+      "std": 0.1410944687266289,
+      "coverage": 0.9858191869769294
+    },
+    {
+      "index": 47,
+      "name": "modis/ndvi_max",
+      "group": "modis",
+      "median": 0.6690608263015747,
+      "mean": 0.6433904119498417,
+      "std": 0.15613694843624382,
+      "coverage": 0.9990007580456206
+    },
+    {
+      "index": 48,
+      "name": "modis/ndvi_mean",
+      "group": "modis",
+      "median": 0.4609793424606323,
+      "mean": 0.46949443899503646,
+      "std": 0.12815706940256874,
+      "coverage": 0.9990007580456206
+    },
+    {
+      "index": 49,
+      "name": "modis/ndvi_sd",
+      "group": "modis",
+      "median": 0.0958203598856926,
+      "mean": 0.10706096431118624,
+      "std": 0.0560410336266577,
+      "coverage": 0.9990007580456206
+    },
+    {
+      "index": 50,
+      "name": "modis/ndvi_senescence",
+      "group": "modis",
+      "median": 0.12509945034980774,
+      "mean": 0.13811721519069012,
+      "std": 0.11135873685569432,
+      "coverage": 0.9854899348387047
+    },
+    {
+      "index": 51,
+      "name": "modis/ndvi_spring",
+      "group": "modis",
+      "median": 0.3720337152481079,
+      "mean": 0.3900398420075603,
+      "std": 0.11655660242048985,
+      "coverage": 0.8787356717892174
+    },
+    {
+      "index": 52,
+      "name": "modis/ndvi_spring_anom",
+      "group": "modis",
+      "median": -0.07685783505439758,
+      "mean": -0.08091879576375889,
+      "std": 0.07576132310458261,
+      "coverage": 0.8787356717892174
+    },
+    {
+      "index": 53,
+      "name": "modis/ndvi_summer",
+      "group": "modis",
+      "median": 0.5454277992248535,
+      "mean": 0.5337386809081514,
+      "std": 0.14490727108016233,
+      "coverage": 0.9986561918544552
+    },
+    {
+      "index": 54,
+      "name": "modis/valid_count",
+      "group": "modis",
+      "median": 24.0,
+      "mean": 21.24619254358762,
+      "std": 4.9715646335767385,
+      "coverage": 1.0
+    },
+    {
+      "index": 55,
+      "name": "invasion/aegilops_cylindrica_count10",
+      "group": "invasion",
+      "median": 0.0,
+      "mean": 0.00019525417499368294,
+      "std": 0.023233214197938574,
+      "coverage": 1.0
+    },
+    {
+      "index": 56,
+      "name": "invasion/aegilops_cylindrica_count25",
+      "group": "invasion",
+      "median": 0.0,
+      "mean": 0.00019525417499368294,
+      "std": 0.023233214197938574,
+      "coverage": 1.0
+    },
+    {
+      "index": 57,
+      "name": "invasion/aegilops_cylindrica_dist_km",
+      "group": "invasion",
+      "median": 467.86322021484375,
+      "mean": 428.869729686158,
+      "std": 192.6511073955271,
+      "coverage": 1.0
+    },
+    {
+      "index": 58,
+      "name": "invasion/bromus_japonicus_count10",
+      "group": "invasion",
+      "median": 0.0,
+      "mean": 0.0007925022396802426,
+      "std": 0.030490993036397834,
+      "coverage": 1.0
+    },
+    {
+      "index": 59,
+      "name": "invasion/bromus_japonicus_count25",
+      "group": "invasion",
+      "median": 0.0,
+      "mean": 0.0007925022396802426,
+      "std": 0.030490993036397834,
+      "coverage": 1.0
+    },
+    {
+      "index": 60,
+      "name": "invasion/bromus_japonicus_dist_km",
+      "group": "invasion",
+      "median": 64.03124237060547,
+      "mean": 69.51054725366865,
+      "std": 41.377748172855696,
+      "coverage": 1.0
+    },
+    {
+      "index": 61,
+      "name": "invasion/bromus_tectorum_count10",
+      "group": "invasion",
+      "median": 0.0,
+      "mean": 0.004019938896928766,
+      "std": 0.09784817701595541,
+      "coverage": 1.0
+    },
+    {
+      "index": 62,
+      "name": "invasion/bromus_tectorum_count25",
+      "group": "invasion",
+      "median": 0.0,
+      "mean": 0.004019938896928766,
+      "std": 0.09784817701595541,
+      "coverage": 1.0
+    },
+    {
+      "index": 63,
+      "name": "invasion/bromus_tectorum_dist_km",
+      "group": "invasion",
+      "median": 46.173583984375,
+      "mean": 57.37427353713541,
+      "std": 44.06590754941601,
+      "coverage": 1.0
+    },
+    {
+      "index": 64,
+      "name": "invasion/inv_count10",
+      "group": "invasion",
+      "median": 0.0,
+      "mean": 0.005042151930719225,
+      "std": 0.1079068350231383,
+      "coverage": 1.0
+    },
+    {
+      "index": 65,
+      "name": "invasion/inv_count25",
+      "group": "invasion",
+      "median": 0.0,
+      "mean": 0.005042151930719225,
+      "std": 0.1079068350231383,
+      "coverage": 1.0
+    },
+    {
+      "index": 66,
+      "name": "invasion/inv_dist_km",
+      "group": "invasion",
+      "median": 36.769554138183594,
+      "mean": 47.04601949565216,
+      "std": 35.484971016394674,
+      "coverage": 1.0
+    },
+    {
+      "index": 67,
+      "name": "invasion/ventenata_dubia_count10",
+      "group": "invasion",
+      "median": 0.0,
+      "mean": 3.445661911653229e-05,
+      "std": 0.005869874943971393,
+      "coverage": 1.0
+    },
+    {
+      "index": 68,
+      "name": "invasion/ventenata_dubia_count25",
+      "group": "invasion",
+      "median": 0.0,
+      "mean": 3.445661911653229e-05,
+      "std": 0.005869874943971393,
+      "coverage": 1.0
+    },
+    {
+      "index": 69,
+      "name": "invasion/ventenata_dubia_dist_km",
+      "group": "invasion",
+      "median": 562.1939086914062,
+      "mean": 510.3652742786317,
+      "std": 212.92143176533898,
+      "coverage": 1.0
+    },
+    {
+      "index": 70,
+      "name": "fire_history/fire_count_3yr",
+      "group": "fire_history",
+      "median": 0.0,
+      "mean": 0.019071738681000622,
+      "std": 0.14070939462825896,
+      "coverage": 1.0
+    },
+    {
+      "index": 71,
+      "name": "fire_history/fire_density_3x3",
+      "group": "fire_history",
+      "median": 0.0,
+      "mean": 0.005948233467179111,
+      "std": 0.05528413899959802,
+      "coverage": 1.0
+    },
+    {
+      "index": 72,
+      "name": "fire_history/fire_density_5x5",
+      "group": "fire_history",
+      "median": 0.0,
+      "mean": 0.005740781695667611,
+      "std": 0.044761202691005475,
+      "coverage": 1.0
+    },
+    {
+      "index": 73,
+      "name": "fire_history/fire_t1",
+      "group": "fire_history",
+      "median": 0.0,
+      "mean": 0.006535272092435623,
+      "std": 0.08057643769190266,
+      "coverage": 1.0
+    },
+    {
+      "index": 74,
+      "name": "fire_history/fire_t2",
+      "group": "fire_history",
+      "median": 0.0,
+      "mean": 0.00640318838582225,
+      "std": 0.07976332217456586,
+      "coverage": 1.0
+    },
+    {
+      "index": 75,
+      "name": "fire_history/fire_t",
+      "group": "fire_history",
+      "median": 0.0,
+      "mean": 0.006133278202742747,
+      "std": 0.07807471486482928,
+      "coverage": 1.0
+    },
+    {
+      "index": 76,
+      "name": "fire_history/fire_years_since",
+      "group": "fire_history",
+      "median": 3.0,
+      "mean": 2.9628902212114947,
+      "std": 0.2918131601897042,
+      "coverage": 1.0
+    }
+  ],
+  "imputation": "training median",
+  "stats_source": "train label years 2016-2021"
+}

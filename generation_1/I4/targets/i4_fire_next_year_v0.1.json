@@ -1,0 +1,325 @@
+{
+  "id": "i4_fire_next_year_v0.1",
+  "version": "0.1.0",
+  "status": "frozen",
+  "created": "2026-10-22",
+  "title": "Next-year rangeland fire occurrence in the southern BC/Alberta dry interior",
+  "question": "Given public earth-observation and biodiversity features known by the end of year t, what is the probability that a 2 km rangeland cell burns by NBAC in year t+1?",
+  "unit": "2 km cell-year",
+  "region": {
+    "name": "southern BC and southern Alberta dry interior",
+    "bbox_wgs84": [
+      -121.0,
+      49.0,
+      -110.0,
+      51.2
+    ]
+  },
+  "grid": {
+    "crs": "EPSG:5070",
+    "resolution_m": 2000,
+    "width": 417,
+    "height": 200,
+    "cells": 83400,
+    "bounds_5070": [
+      -1832000.0,
+      2964000.0,
+      -998000.0,
+      3364000.0
+    ],
+    "transform": [
+      2000.0,
+      0.0,
+      -1832000.0,
+      0.0,
+      -2000.0,
+      3364000.0
+    ],
+    "grid_file": "data/grid.json",
+    "study_cells_inside_bbox": 48147,
+    "note": "The 2 km Albers rectangle bounding the WGS84 bbox also contains projection-corner cells outside the study area; all corpora are restricted to cell centers inside the WGS84 bbox."
+  },
+  "period": {
+    "feature_years": [
+      2015,
+      2023
+    ],
+    "label_years": [
+      2016,
+      2024
+    ],
+    "history_label_years": [
+      2013,
+      2024
+    ]
+  },
+  "label": {
+    "name": "burned_next_year",
+    "source": "NBAC via CWFIS WFS public:nbac",
+    "definition": "1 if the NBAC burn fraction in the 2 km cell in year t+1 is >= 0.01, else 0",
+    "threshold_burn_fraction": 0.01,
+    "rasterization": "NBAC polygons rasterized at 400 m and block-averaged to 2 km",
+    "exclusions": [
+      "prescribed fires (prescribed=Y/YES/TRUE)"
+    ],
+    "label_file": "data/labels_2km.npz",
+    "positive_cell_years_all_land": 5523,
+    "positive_cell_years_rangeland": 1922,
+    "positive_cell_years_by_label_year": {
+      "2016": 31,
+      "2017": 370,
+      "2018": 373,
+      "2019": 80,
+      "2020": 60,
+      "2021": 506,
+      "2022": 97,
+      "2023": 287,
+      "2024": 118
+    }
+  },
+  "mask": {
+    "source": "ESA WorldCover 2021",
+    "rangeland_classes": [
+      20,
+      30,
+      40,
+      60
+    ],
+    "class_names": [
+      "shrub",
+      "grass",
+      "crop",
+      "bare"
+    ],
+    "min_rangeland_fraction": 0.2,
+    "cells": 29022,
+    "positive_cell_years": 1922,
+    "prevalence": 0.007358,
+    "mask_file": "data/worldcover_frac_2km.npz",
+    "note": "0.2 was chosen for more training rows; 0.3 also clears the 0.5% gate (0.005683), 0.5 does not (0.003161)."
+  },
+  "splits": {
+    "train_label_years": [
+      2016,
+      2021
+    ],
+    "val_label_years": [
+      2022
+    ],
+    "test_label_years": [
+      2023,
+      2024
+    ],
+    "train_rows": 174132,
+    "val_rows": 29022,
+    "test_rows": 58044,
+    "train_positives": 1420,
+    "val_positives": 97,
+    "test_positives": 405,
+    "train_prevalence": 0.008155,
+    "val_prevalence": 0.003342,
+    "test_prevalence": 0.006977,
+    "spatial_folds": {
+      "status": "provisional",
+      "n_folds": 5,
+      "method": "contiguous x-quantile blocks over study cells; balanced by cell count, not fire count",
+      "note": "fire occurrence is spatially concentrated; test positives by fold are 270, 135, 0, 0, 0, so by-fold AP is reported only where defined",
+      "ecodistrict_layer": null
+    },
+    "rule": "no test tuning; test evaluated once after model selection"
+  },
+  "features": {
+    "total": 77,
+    "manifest": "corpus/feature_manifest.json",
+    "groups": {
+      "static": {
+        "count": 16,
+        "source": "NASADEM + ESA WorldCover 2021 + built-distance proxy",
+        "file": "data/static_features_2km.npz",
+        "names": [
+          "elevation",
+          "slope",
+          "aspect_sin",
+          "aspect_cos",
+          "ruggedness",
+          "tree",
+          "shrub",
+          "grass",
+          "crop",
+          "built",
+          "bare",
+          "water",
+          "wetland",
+          "rangeland",
+          "built_5km",
+          "dist_built_km"
+        ],
+        "coverage": 1.0
+      },
+      "climate": {
+        "count": 22,
+        "source": "Daymet single-pixel API, sampled on a 0.1 degree lattice and bilinearly interpolated to 2 km",
+        "file": "data/climate_features_2km.npz",
+        "year_lag": 0,
+        "coverage": 1.0
+      },
+      "modis": {
+        "count": 17,
+        "source": "MODIS MOD13Q1 250 m NDVI/EVI seasonal metrics",
+        "file": "data/modis_features_2km.npz",
+        "year_lag": 0,
+        "status": "complete",
+        "layers": 153,
+        "coverage": 0.9762
+      },
+      "invasion": {
+        "count": 15,
+        "source": "GBIF cumulative records for Bromus tectorum, Bromus japonicus, Ventenata dubia, Aegilops cylindrica",
+        "file": "data/gbif_features_2km.npz",
+        "year_lag": 0,
+        "rule": "records with year <= t; unknown year treated as 2000",
+        "coverage": 1.0
+      },
+      "fire_history": {
+        "count": 7,
+        "source": "NBAC labels 2013-2024",
+        "file": "data/fire_history_features_2km.npz",
+        "names": [
+          "fire_t",
+          "fire_t1",
+          "fire_t2",
+          "fire_count_3yr",
+          "fire_years_since",
+          "fire_density_3x3",
+          "fire_density_5x5"
+        ],
+        "year_lag": 0,
+        "coverage": 1.0
+      }
+    },
+    "leakage_rules": [
+      "all features use information available by the end of feature year t",
+      "the label is year t+1",
+      "invasion records use year <= t; unknown year defaults to 2000",
+      "fire history uses only years <= t",
+      "medians and z-score statistics are fit on training rows only",
+      "no test-year information is used for feature selection or model selection"
+    ]
+  },
+  "preprocessing": {
+    "missing_values": "per-feature training median",
+    "scaling": "z-score with training mean and standard deviation; constant columns use sd=1",
+    "clip_z": 8.0,
+    "positive_oversampling": 20,
+    "note": "oversampling repeats positive training rows; no class weights in the Lancius CE objective"
+  },
+  "models": {
+    "primary": {
+      "name": "lancius_i4_mlp",
+      "framework": "Lancius",
+      "architecture": "77 -> 512 tanh -> 256 tanh -> 2 logits",
+      "parameters": 171778,
+      "objective": "lancius_cross_entropy",
+      "optimizer": "SGD with momentum 0.9 and weight decay 1e-4",
+      "batch": 512,
+      "epochs": 30,
+      "lr": 0.01,
+      "lr_schedule": "warmup + cosine",
+      "grad_clip_global_norm": 5.0,
+      "selection_metric": "validation average precision",
+      "tiebreak": "validation log loss",
+      "export": "models/i4_mlp.lancius",
+      "test_probabilities": "results/test.prob.bin",
+      "val_probabilities": "results/val.prob.bin",
+      "checkpoints": "models/i4/{best,last}.bin",
+      "calibration": {
+        "method": "Platt scaling on validation logits",
+        "fit_split": "val 2022",
+        "val_rows": 29022,
+        "val_positives": 97,
+        "slope": 0.5860785258803861,
+        "intercept": -4.366592538266709,
+        "file": "results/calibration.json",
+        "note": "test labels are not used; AP and ROC-AUC are invariant"
+      },
+      "model_card": "MODEL_CARD.md",
+      "test_probabilities_calibrated": true,
+      "raw_test_probabilities": "results/test.raw.prob.bin"
+    },
+    "ablations": [
+      "static + climate + modis + fire_history (no invasion)",
+      "static + climate + modis + invasion (no fire_history)",
+      "static + climate + fire_history (no modis, no invasion)",
+      "climate + modis only"
+    ],
+    "baselines": [
+      "training prevalence",
+      "L2 logistic regression",
+      "LightGBM"
+    ]
+  },
+  "metrics": {
+    "primary": "PR-AUC (average precision)",
+    "secondary": [
+      "ROC-AUC",
+      "Brier score",
+      "expected calibration error (10 bins)",
+      "recall at 80% precision",
+      "precision at 1% of cells",
+      "log loss"
+    ],
+    "reporting": "mean and 95% bootstrap interval over cells for the temporal test years; no test tuning",
+    "causal_claim": "none; this is a predictive risk model, not a causal attribution",
+    "calibration_method": "Platt scaling fitted on validation logits, applied to test probabilities"
+  },
+  "acceptance": {
+    "data_coverage_min": 0.7,
+    "prevalence_min": 0.005,
+    "prevalence_max": 0.05,
+    "model_requirement": "met for prevalence and logistic baselines; below LightGBM on test AP; reported honestly without test tuning",
+    "prevalence_gate": "met at rangeland fraction >= 0.2 inside the WGS84 bbox (0.007358)",
+    "coverage_gate": "met: minimum feature coverage 0.8787, mean 0.9948",
+    "data_qc": "corpus/qc.json",
+    "data_qc_gate": "met: coverage >= 70% and prevalence in [0.5%, 5%]",
+    "model_result": "test AP 0.03668 (95% cell-bootstrap CI 0.03198-0.04327) vs prevalence 0.00698, logistic 0.03445, LightGBM 0.04611; calibrated Brier 0.006832, log-loss 0.035182, ECE 0.002697"
+  },
+  "limitations": [
+    "the projected grid rectangle covers cells outside the WGS84 bbox; these are excluded before corpus assembly",
+    "fire occurrence is spatially concentrated; three of five provisional spatial folds have no test positives",
+    "climate is sampled at roughly 11 km and interpolated to 2 km, not native 1 km",
+    "GBIF records are sparse and biased toward accessible/roaded areas",
+    "fire history is left-censored at 2013 and capped at 3 years since fire",
+    "NBAC labels may miss small or low-intensity fires",
+    "spatial folds are provisional until an ecodistrict layer is sourced",
+    "no causal interpretation; feature importance is associational",
+    "Platt calibration is fit on only 97 validation positives; calibration uncertainty is high"
+  ],
+  "provenance": {
+    "brief": "3463-LDFD/BDC_2026-27_Research_and_Project_Ideas.md.pdf",
+    "brief_sha256": "fa4da786a49c3002683030b86e5fedd187bf1c6ef8e3150ef0b95b671e845fe2",
+    "sources": [
+      "NBAC/CWFIS WFS",
+      "MODIS MOD13Q1 via Planetary Computer",
+      "Daymet",
+      "NASADEM",
+      "ESA WorldCover 2021",
+      "GBIF"
+    ],
+    "supersedes": "earlier LDFD-only 1 km study-box plan"
+  },
+  "results": {
+    "test_metrics": "results/i4_test_metrics.json",
+    "baselines": "results/baselines.json",
+    "test_probabilities": "results/test.prob.bin",
+    "raw_test_probabilities": "results/test.raw.prob.bin",
+    "calibration": "results/calibration.json",
+    "figures": [
+      "figures/i4_test_pr_roc.png",
+      "figures/i4_test_calibration.png"
+    ],
+    "model_export": "models/i4_mlp.lancius",
+    "checkpoints": "models/i4/{best,last}.bin",
+    "model_card": "MODEL_CARD.md",
+    "bootstrap": "results/i4_test_bootstrap.json"
+  }
+}

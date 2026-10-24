@@ -1,0 +1,125 @@
+{
+  "feature_count": 77,
+  "nclass": 2,
+  "splits": {
+    "train": {
+      "rows": 174132,
+      "positives": 1420,
+      "prevalence": 0.00815473319091264,
+      "years": [
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021
+      ],
+      "x_min": -44.28235626220703,
+      "x_max": 53093.984375,
+      "folds": {
+        "0": {
+          "rows": 34830,
+          "positives": 916
+        },
+        "1": {
+          "rows": 34824,
+          "positives": 443
+        },
+        "2": {
+          "rows": 34830,
+          "positives": 30
+        },
+        "3": {
+          "rows": 34824,
+          "positives": 3
+        },
+        "4": {
+          "rows": 34824,
+          "positives": 28
+        }
+      }
+    },
+    "val": {
+      "rows": 29022,
+      "positives": 97,
+      "prevalence": 0.0033422920543036316,
+      "years": [
+        2022
+      ],
+      "x_min": -53.758121490478516,
+      "x_max": 53093.984375,
+      "folds": {
+        "0": {
+          "rows": 5805,
+          "positives": 70
+        },
+        "1": {
+          "rows": 5804,
+          "positives": 27
+        },
+        "2": {
+          "rows": 5805,
+          "positives": 0
+        },
+        "3": {
+          "rows": 5804,
+          "positives": 0
+        },
+        "4": {
+          "rows": 5804,
+          "positives": 0
+        }
+      }
+    },
+    "test": {
+      "rows": 58044,
+      "positives": 405,
+      "prevalence": 0.006977465371097788,
+      "years": [
+        2023,
+        2024
+      ],
+      "x_min": -56.62356948852539,
+      "x_max": 53093.984375,
+      "folds": {
+        "0": {
+          "rows": 11610,
+          "positives": 270
+        },
+        "1": {
+          "rows": 11608,
+          "positives": 135
+        },
+        "2": {
+          "rows": 11610,
+          "positives": 0
+        },
+        "3": {
+          "rows": 11608,
+          "positives": 0
+        },
+        "4": {
+          "rows": 11608,
+          "positives": 0
+        }
+      }
+    }
+  },
+  "errors": [],
+  "group_coverage": {
+    "static": 1.0,
+    "climate": 1.0,
+    "modis": 0.9762256084295754,
+    "invasion": 1.0,
+    "fire_history": 1.0
+  },
+  "coverage_min": 0.8787356717892174,
+  "coverage_mean": 0.9947511083545816,
+  "total_rows": 261198,
+  "total_positives": 1922,
+  "cell_count": 29022,
+  "gate": {
+    "coverage_ge_70pct": true,
+    "prevalence_in_range": true
+  }
+}
