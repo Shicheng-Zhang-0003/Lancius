@@ -20,7 +20,7 @@ sys.path.insert(0, _sd)
 import paths as _paths
 _paths.enforce([_paths.BUS])
 REPO = _paths.REPO
-LANCIUS = os.path.join(REPO, "lancius")
+LANCIUS = _paths.LANCIUS
 SCRATCH = "/tmp/opencode"
 ROW0 = re.compile(
     r"row 0: argmax=(\d+) \((-?[\d.]+)\) \| top5: ((?:\d+:-?[\d.]+\s?)+)")
