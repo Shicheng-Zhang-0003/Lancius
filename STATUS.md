@@ -243,9 +243,9 @@ Build clean under `-Wall -Wextra -Werror`; `audit_v7_hardening` 346/346
 quantizer exactness and error bound, fusion shape guard, full op table,
 `broadcast_to_shape` contract at every rank, INT8 64-bit accumulation proven
 at 204800 taps); `audit_regression_13c` 49/49,
-`audit_known_answer` 73/73, `audit_transformer_known_answer` 265/265,
+`audit_known_answer` 165/165, `audit_transformer_known_answer` 265/265,
 `audit_fp32_path` 19/19, `audit_fault_injection` 12/12,
-`audit_sum_axis_nd` 21/21, `audit_train_bwd` 24/24,
+`audit_sum_axis_nd` 21/21, `audit_train_bwd` 32/32,
 `audit_train_converge` 12/12 green;
 `make check`, `make check-long`, and `make check-sanitizers` green with
 failure-propagating exit codes; broadcast/planner/softmax/CE fixes verified
