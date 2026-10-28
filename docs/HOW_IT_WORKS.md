@@ -19,8 +19,8 @@ numeric types and execution order. It is not a tensor library and not a Python
 framework. There is no autograd tape, no reference counting, no allocator
 hiding in the background.
 
-Roughly 8,350 lines of implementation, 1,182 of headers, 11,382 of examples and
-audits, 2,754 of external-oracle and mutation infrastructure.
+Roughly 8,774 lines of implementation, 1,292 of headers, 17,180 of examples and
+audits, 3,071 of external-oracle and mutation infrastructure.
 
 Design commitments, in priority order:
 
