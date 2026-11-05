@@ -1,6 +1,8 @@
 <!-- SECTION:HEADER -->
 # Lancius v12R2
 
+## Vibe Coded Industries Production 3
+
 > **New here?** [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md) is the
 > canonical guide to how a model is defined, processed, executed, trained and
 > proved correct — pipeline stage by stage, the operation set and its
