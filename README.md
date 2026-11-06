@@ -631,6 +631,10 @@ Each document owns one thing; start here, then follow pointers:
 - `3463-LDFD/readme.md` — Live Data Feeding Framework (submodule): its own
   status banner is the only truth about what is built there
 - `3463-LDFD/tests/` — 4 dependency-free suites plus a loopback fetch suite
+- `243-BDC/README.md` — Invasion–Ignition Loop (Idea1) + LDFD demo tracks +
+  cloned Lancius generations 1I4 (fire-risk predictive MLP) and 1I5 (generic
+  decision-surface trainer / rules engine); Idea1 causal-language rule (PDF
+  Sec 26) applies to all artifacts in this folder
 - `docs/v12R2_SCOPE.md` — current-milestone scope (binding for v12R2)
 - `docs/releases/v12R1/GITHUB_RELEASE_v12R1.md` — v12R1 release notes
 - `docs/releases/v11S/GITHUB_RELEASE_v11S.md` — v11S release notes
