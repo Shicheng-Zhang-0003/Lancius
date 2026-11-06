@@ -163,9 +163,9 @@ generation_1/I4/results/*.npy
 generation_1/I5/corpus/*
 generation_1/I5/models/*.lancius
 generation_1/I5/results_big/*
+generation_1/I5/tools/*          # symlinks to tools/ already tracked there
 generation_1/I6/corpus/*
-generation_1/I6/models/*.lancius
-generation_1/I6/models/*.bin
+generation_1/I6/models/*         # trained models and checkpoints
 generation_1/I6/results_big/*
 generation_1/**/models/*.lancius
 generation_1/**/results_big/
