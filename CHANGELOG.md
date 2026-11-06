@@ -1,5 +1,40 @@
 # Lancius Changelog
 
+## V1.2RC3.2 (2026-11-06) — I6 flagship verifier lands; I5 rules engine enters tree
+
+RC3.2 cuts from the unchanged v12R2 core — no format break, no ABI change,
+no numerical behaviour change — and carries the I5/I6 model-lineage batch as
+its headlining content:
+
+- **I6 flagship verifier** enters the tree as the RC3.2 front page:
+  `examples/train_i6.c` (65->4096->2560->5 CE trainer, warm start from the I3
+  ALU pool via `--init-from`, pinned `--mu-sd` normalizer, hard-negative
+  mining with `--hard-negative-frac`/`--hard-negative-start`, persistent
+  training graph, checkpoint/resume, `--verify-lancius` round-trip),
+  `generation_1/I6/gen_data_i6.py` (expanded 150-algorithm corpus, 8000
+  rows/level, hard-negative mining vs I3 ALU pool, deeper LONG derivations,
+  rebalanced regimes), `generation_1/I6/run_big_i6.py` (head-to-head vs all 12
+  I3 ALUs on identical cells), `generation_1/I6/paths.py` (repo resolution,
+  pinned normalizer, lancius locator), `generation_1/I6/README.md` (full
+  reproduce instructions), `examples/train_i6.c` linked in the makefile.
+  corpus/, models/, results_big/ are gitignored as generated/trained artifacts.
+- **I5 rules engine** enters the tree:
+  `examples/train_i5.c` (generic decision-surface trainer, CE loss, persistent
+  graph, row-agnostic export), `generation_1/I5/run_big_i5.py` (binary eval:
+  accuracy, MAE, MSE, ROC-AUC, threshold sweep), `generation_1/I5/paths.py`,
+  `generation_1/I5/README.md` ("Lancius as rules engine" framing), plus the
+  acquisition tools (`tools/acquire_and_train_i5.py`,
+  `tools/fire_data_acquire.py`, `tools/make_synthetic_corpus.py`) and the
+  checkpoint converter `bin_to_lancius.c`.
+- **Infrastructure:** `.gitignore` gains corpus/model/result ignore rules for
+  both generations plus `MATH_COMPENDIUM.md` and `I6_TRAINING_STATUS.md` as
+  dev-only artifacts; makefile gains `train_i5`/`train_i6` LINK rules and
+  registers both in BINS (43 binaries).
+- **Documentation:** `README.md` and `generation_1/README.md` span I1-I6 with
+  I5 as rules engine and I6 as flagship verifier targeting MAE/MSE < 1e-3;
+  `243-BDC/README.md` documents the cloned I4/I5 tracks alongside Idea1 and
+  LDFD.
+
 ## V1.2RC3.1 (2026-10-24) — shell fixes + model-release lineage (no format break, no ABI change, no numerical behaviour change)
 
 The RC3.x line exists for an explicitly limited purpose: **model, dataset and
