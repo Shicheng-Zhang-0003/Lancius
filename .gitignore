@@ -123,3 +123,53 @@ generation_1/I4/results/*.npy
 !generation_1/I4/corpus/corpus.hdr
 !generation_1/I4/corpus/feature_manifest.json
 !generation_1/I4/corpus/metadata.json
+
+# 243-BDC (cloned I4 + I5 generations + Idea1/LDFD tracks): large data,
+# models, results, and figures are reproducible outputs / external artefacts
+# and live outside history. Source configs, specs, cards, and READMEs remain
+# tracked per the 243-BDC README.
+243-BDC/I4/corpus/*
+243-BDC/I4/data/
+243-BDC/I4/models/i4/
+243-BDC/I4/results/*.bin
+243-BDC/I4/results/*.npy
+243-BDC/I5/corpus/*
+243-BDC/I5/models/*.lancius
+243-BDC/I5/results_big/*
+243-BDC/data/raw/*
+243-BDC/data/processed/*
+243-BDC/models/*
+243-BDC/results/*
+243-BDC/figures/*
+243-BDC/literature/*
+# Small artifacts stay tracked beside the ignored roots they live under.
+!243-BDC/I4/corpus/qc.json
+!243-BDC/I4/corpus/corpus.hdr
+!243-BDC/I4/corpus/feature_manifest.json
+!243-BDC/I4/corpus/metadata.json
+!243-BDC/I5/gen1_mu_sd.txt
+!243-BDC/I5/README.md
+!243-BDC/I5/paths.py
+!243-BDC/I5/run_big_i5.py
+!243-BDC/README.md
+!243-BDC/experiment_log.md
+!243-BDC/configs/
+!243-BDC/src/
+!243-BDC/tests/
+!243-BDC/requirements.txt
+
+# General model and data folders anywhere in the tree (reproducible outputs,
+# never repository content).
+generation_1/I5/corpus/*
+generation_1/I5/models/*.lancius
+generation_1/I5/results_big/*
+generation_1/I6/corpus/*
+generation_1/I6/models/*.lancius
+generation_1/I6/models/*.bin
+generation_1/I6/results_big/*
+generation_1/**/models/*.lancius
+generation_1/**/results_big/
+data_i5_real/
+data_synthetic/
+MATH_COMPENDIUM.md
+I6_TRAINING_STATUS.md
