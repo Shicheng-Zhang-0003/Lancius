@@ -1,0 +1,7 @@
+# Lancius I5 / Idea-1 acquisition credentials
+# Fill in your values, then save to ~/.lancius_earthdata (chmod 600)
+
+EARTHDATA_USERNAME=your_nasa_earthdata_username
+EARTHDATA_PASSWORD=your_nasa_earthdata_password
+COPERNICUS_USERNAME=your_copernicus_username
+COPERNICUS_PASSWORD=your_copernicus_password
