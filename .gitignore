@@ -128,6 +128,7 @@ generation_1/I4/results/*.npy
 # models, results, and figures are reproducible outputs / external artefacts
 # and live outside history. Source configs, specs, cards, and READMEs remain
 # tracked per the 243-BDC README.
+243-BDC/
 243-BDC/I4/corpus/*
 243-BDC/I4/data/
 243-BDC/I4/models/i4/

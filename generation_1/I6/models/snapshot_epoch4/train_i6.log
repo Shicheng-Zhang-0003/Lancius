@@ -1,0 +1,108 @@
+using pinned MU/SD from generation_1/I3/gen1_mu_sd.txt
+warm start loaded from generation_1/I3/alu_pool/alu_01.lancius
+  ||W1||^2=8117.9 ||b1||^2=0.0028234 ||W2||^2=5066.81 ||b2||^2=0.00461309 ||W3||^2=8.02228 ||b3||^2=0.00599193
+================================================================
+  Lancius I6 decision-surface trainer  65 -> 4096 -> 2560 -> 5
+  (10.771M params)  CE objective, persistent graph
+  warm start: generation_1/I3/alu_pool/alu_01.lancius
+  hard negative: frac=0.50 start_epoch=2
+================================================================
+  epoch 1 step 100 loss=0.001119 lr=9.97053e-05
+  epoch 1 step 200 loss=0.000517 lr=0.000192337
+  epoch 1 step 300 loss=0.000306 lr=0.000284968
+  epoch 1 step 400 loss=0.000290 lr=0.0003776
+  epoch 1 step 500 loss=0.000212 lr=0.000470232
+  epoch 1 step 600 loss=0.000151 lr=0.000562863
+  epoch 1 step 700 loss=0.000023 lr=0.000655495
+  epoch 1 step 800 loss=0.000013 lr=0.000748126
+  epoch 1 step 900 loss=0.000008 lr=0.000799995
+  epoch 1 step 1000 loss=0.000007 lr=0.000799947
+  epoch 1 step 1100 loss=0.000007 lr=0.000799848
+  epoch 1 step 1200 loss=0.000004 lr=0.000799698
+  epoch 1 step 1300 loss=0.000004 lr=0.000799497
+  epoch 1 step 1400 loss=0.000003 lr=0.000799245
+epoch  1/20  train_loss=0.077127  val exact=0.8936 MAE=0.115027  test exact=0.8985 MAE=0.110259
+  -> new best (score=0.801127 val_exact=0.8936 val_MAE=0.115027)
+  epoch 2 step 100 loss=0.000129 lr=0.000798858
+  epoch 2 step 200 loss=0.000073 lr=0.000798491
+  epoch 2 step 300 loss=0.000093 lr=0.000798073
+  epoch 2 step 400 loss=0.000114 lr=0.000797605
+  epoch 2 step 500 loss=0.000079 lr=0.000797086
+  epoch 2 step 600 loss=0.000072 lr=0.000796516
+  epoch 2 step 700 loss=0.000011 lr=0.000795895
+  epoch 2 step 800 loss=0.000187 lr=0.000795224
+  epoch 2 step 900 loss=0.000228 lr=0.000794503
+  epoch 2 step 1000 loss=0.000194 lr=0.000793731
+  epoch 2 step 1100 loss=0.000155 lr=0.000792909
+  epoch 2 step 1200 loss=0.000187 lr=0.000792037
+  epoch 2 step 1300 loss=0.000172 lr=0.000791114
+  epoch 2 step 1400 loss=0.000180 lr=0.000790142
+epoch  2/20  train_loss=0.042576  val exact=0.9402 MAE=0.067764  test exact=0.9383 MAE=0.071512
+  -> new best (score=0.895874 val_exact=0.9402 val_MAE=0.067764)
+  epoch 3 step 100 loss=0.000104 lr=0.000788857
+  epoch 3 step 200 loss=0.000026 lr=0.000787773
+  epoch 3 step 300 loss=0.000042 lr=0.000786639
+  epoch 3 step 400 loss=0.000090 lr=0.000785456
+  epoch 3 step 500 loss=0.000038 lr=0.000784224
+  epoch 3 step 600 loss=0.000047 lr=0.000782943
+  epoch 3 step 700 loss=0.000009 lr=0.000781613
+  epoch 3 step 800 loss=0.000021 lr=0.000780234
+  epoch 3 step 900 loss=0.000010 lr=0.000778807
+  epoch 3 step 1000 loss=0.000007 lr=0.000777332
+  epoch 3 step 1100 loss=0.000006 lr=0.000775808
+  epoch 3 step 1200 loss=0.000005 lr=0.000774236
+  epoch 3 step 1300 loss=0.000005 lr=0.000772617
+  epoch 3 step 1400 loss=0.000004 lr=0.00077095
+epoch  3/20  train_loss=0.010374  val exact=0.8968 MAE=0.062008  test exact=0.9024 MAE=0.059428
+  -> new best (score=0.883098 val_exact=0.8968 val_MAE=0.062008)
+  epoch 4 step 100 loss=0.000072 lr=0.0007688
+  epoch 4 step 200 loss=0.000022 lr=0.000767027
+  epoch 4 step 300 loss=0.000049 lr=0.000765207
+  epoch 4 step 400 loss=0.000081 lr=0.000763341
+  epoch 4 step 500 loss=0.000029 lr=0.000761428
+  epoch 4 step 600 loss=0.000044 lr=0.000759469
+  epoch 4 step 700 loss=0.000006 lr=0.000757464
+  epoch 4 step 800 loss=0.000018 lr=0.000755414
+  epoch 4 step 900 loss=0.000015 lr=0.000753318
+  epoch 4 step 1000 loss=0.000018 lr=0.000751178
+  epoch 4 step 1100 loss=0.000008 lr=0.000748992
+  epoch 4 step 1200 loss=0.000008 lr=0.000746762
+  epoch 4 step 1300 loss=0.000019 lr=0.000744488
+  epoch 4 step 1400 loss=0.000010 lr=0.00074217
+epoch  4/20  train_loss=0.013656  val exact=0.9390 MAE=0.039386  test exact=0.9402 MAE=0.040606
+  -> new best (score=0.924082 val_exact=0.9390 val_MAE=0.039386)
+  epoch 5 step 100 loss=0.000098 lr=0.000739211
+  epoch 5 step 200 loss=0.000017 lr=0.000736796
+  epoch 5 step 300 loss=0.000036 lr=0.000734337
+  epoch 5 step 400 loss=0.000072 lr=0.000731836
+  epoch 5 step 500 loss=0.000024 lr=0.000729292
+  epoch 5 step 600 loss=0.000043 lr=0.000726707
+  epoch 5 step 700 loss=0.000007 lr=0.00072408
+  epoch 5 step 800 loss=0.000009 lr=0.000721411
+  epoch 5 step 900 loss=0.000005 lr=0.000718702
+  epoch 5 step 1000 loss=0.000004 lr=0.000715952
+  epoch 5 step 1100 loss=0.000003 lr=0.000713162
+  epoch 5 step 1200 loss=0.000003 lr=0.000710332
+  epoch 5 step 1300 loss=0.000002 lr=0.000707463
+  epoch 5 step 1400 loss=0.000002 lr=0.000704554
+epoch  5/20  train_loss=0.008568  val exact=0.9323 MAE=0.042517  test exact=0.9351 MAE=0.040897
+  -> new best (score=0.919448 val_exact=0.9323 val_MAE=0.042517)
+  epoch 6 step 100 loss=0.000059 lr=0.000700864
+  epoch 6 step 200 loss=0.000018 lr=0.000697869
+  epoch 6 step 300 loss=0.000037 lr=0.000694836
+  epoch 6 step 400 loss=0.000075 lr=0.000691765
+  epoch 6 step 500 loss=0.000027 lr=0.000688657
+  epoch 6 step 600 loss=0.000037 lr=0.000685513
+  epoch 6 step 700 loss=0.000005 lr=0.000682332
+  epoch 6 step 800 loss=0.000012 lr=0.000679115
+  epoch 6 step 900 loss=0.000004 lr=0.000675863
+  epoch 6 step 1000 loss=0.000003 lr=0.000672576
+  epoch 6 step 1100 loss=0.000003 lr=0.000669254
+  epoch 6 step 1200 loss=0.000002 lr=0.000665898
+  epoch 6 step 1300 loss=0.000005 lr=0.000662508
+  epoch 6 step 1400 loss=0.000003 lr=0.000659085
+epoch  6/20  train_loss=0.012542  val exact=0.9568 MAE=0.029186  test exact=0.9570 MAE=0.030208
+  -> new best (score=0.945521 val_exact=0.9568 val_MAE=0.029186)
+  epoch 7 step 100 loss=0.000133 lr=0.00065476
+  epoch 7 step 200 loss=0.000016 lr=0.000651263
+  epoch 7 step 300 loss=0.000033 lr=0.000647735

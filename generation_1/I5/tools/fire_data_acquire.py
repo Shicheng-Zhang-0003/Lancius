@@ -1,0 +1,1 @@
+../../../tools/fire_data_acquire.py

@@ -1,0 +1,9 @@
+using pinned MU/SD from generation_1/I6/gen1_mu_sd.txt
+warm start loaded from generation_1/I3/alu_pool/alu_01.lancius
+  ||W1||^2=8117.9 ||b1||^2=0.0028234 ||W2||^2=5066.81 ||b2||^2=0.00461309 ||W3||^2=8.02228 ||b3||^2=0.00599193
+================================================================
+  Lancius I6 decision-surface trainer  65 -> 4096 -> 2560 -> 5
+  (10.771M params)  CE objective, persistent graph
+  warm start: generation_1/I3/alu_pool/alu_01.lancius
+  hard negative: frac=0.50 start_epoch=2
+================================================================
