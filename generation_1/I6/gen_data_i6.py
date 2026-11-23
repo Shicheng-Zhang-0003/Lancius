@@ -125,6 +125,12 @@ def emit(algo, params, steps, rng, level, kind, acc, rep=None, struct=None):
         else:
             kind = kd
     chk = V.check(algo, params, steps, rep, struct)
+    # A requested level that the candidate does not actually realize must not
+    # become a label.  The 1-step cases are the known degeneracies: +0.5 has no
+    # working step to corrupt, and the old 0.0 cut was empty for a lone step.
+    if not V.level_realized(algo, params, steps, rep, struct, level):
+        raise ValueError("unrealized level %r (algo=%s, steps=%d)"
+                         % (level, algo.name, len(steps)))
     X, T, S, L, A = acc
     ai = ALL.index(algo)
     li = int(round((level + 1) * 2))
@@ -181,6 +187,8 @@ def hard_negative_cells(models, names, n_per_algo, seed, mu, sd):
         except Exception:
             continue
         chk = V.check(algo, params, steps, rep, struct)
+        if not V.level_realized(algo, params, steps, rep, struct, level):
+            continue
         f = V.row_features(algo, chk, -1)
         xs = [(v - m) / s for v, m, s in zip(f, mu, sd)]
         import numpy as np
@@ -194,7 +202,8 @@ def hard_negative_cells(models, names, n_per_algo, seed, mu, sd):
         agree = len(set(preds)) == 1
         majority_correct = (max(set(preds), key=preds.count) == true_li)
         if not agree or not majority_correct:
-            kept.append((algo, params, steps, level, regime, kind, chk, f, true_li))
+            kept.append((algo, params, steps, level, regime, kind, chk, f,
+                         true_li, rep, struct))
             per_algo[algo.name] += 1
     return kept, per_algo
 
@@ -284,8 +293,17 @@ def generate(n_per_level, seed, out_dir, hard_neg=False, alu_pool=None,
                                                     seed, mu, sd)
             print("  [gen_data_i6] hard-negative cells kept: %d" % len(kept),
                   flush=True)
-            for algo, params, steps, level, regime, kind, chk, f, true_li in kept:
-                emit(algo, params, steps, rng, level, kind, acc)
+            for (algo, params, steps, level, regime, kind, chk, f,
+                 true_li, rep, struct) in kept:
+                try:
+                    # Reuse the exact candidate that was scored against the
+                    # ALU pool; re-running make_candidate here would emit a
+                    # different cell than the one selected as hard.
+                    emit(algo, params, steps, rng, level, kind, acc,
+                         rep=rep, struct=struct)
+                except Exception:
+                    n_skipped += 1
+                    continue
                 per_level[level] += 1
                 per_regime[regime] += 1
                 per_algo[algo.name][0] += 1

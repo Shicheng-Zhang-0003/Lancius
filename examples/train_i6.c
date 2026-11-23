@@ -95,6 +95,13 @@ static size_t g_step = 0;
 static double HARD_NEG_FRAC = 0.5;   /* fraction of next epoch that is misclassified rows */
 static int    HARD_NEG_START = 2;    /* begin mining after this epoch (1-based) */
 
+/* Sampling repeats.  The corpus is about 18% overall verdict rows and 82%
+ * step rows; the verdict is the target, so the overall rows are repeated.
+ * Class 1 no longer needs the old 20x repeat: that compensated for the
+ * 1-step label ambiguity, which the cleaned corpus removes. */
+static size_t POS_REPEAT = 1;
+static size_t OVERALL_REPEAT = 4;
+
 static const double LEVEL[NCMAX] = {-1.0, -0.5, 0.0, 0.5, 1.0, 0, 0, 0};
 
 /* ---- corpus ---- */
@@ -634,13 +641,14 @@ static void shuffle_idx(size_t* idx, size_t n){
  * misclassified rows ---- */
 static void build_epoch_index(const model* m, const corpus* tr,
                               size_t* idx, size_t* nidx, int epoch){
-    /* Start with all train rows (with positive oversampling for balance). */
-    size_t npos=0;
-    for(size_t i=0;i<tr->n;i++) if(tr->L[i]==1) npos++;
+    /* Start with all train rows, then repeat the verdict rows (and class 1
+     * if a caller asks for it). */
     size_t q=0;
     for(size_t i=0;i<tr->n;i++) idx[q++]=i;
-    for(int r=1;r<20;r++)
+    for(size_t r=1;r<POS_REPEAT;r++)
         for(size_t i=0;i<tr->n;i++) if(tr->L[i]==1) idx[q++]=i;
+    for(size_t r=1;r<OVERALL_REPEAT;r++)
+        for(size_t i=0;i<tr->n;i++) if(tr->S[i]==0) idx[q++]=i;
     *nidx = q;
 
     if (epoch < HARD_NEG_START || HARD_NEG_FRAC <= 0.0) return;
@@ -661,14 +669,16 @@ static void build_epoch_index(const model* m, const corpus* tr,
 
     if (nwrong == 0) { free(wrong); return; }
 
+    /* The repeated verdict rows sit at the end of the base pool; shuffle so
+     * the kept half is a random sample instead of the un-repeated prefix. */
+    shuffle_idx(idx, q);
+
     /* Replace HARD_NEG_FRAC of the pool with misclassified rows (sampled with
      * replacement if needed). */
     size_t nreplace = (size_t)((double)q * HARD_NEG_FRAC);
     if (nreplace > q) nreplace = q;
     size_t keep = q - nreplace;
-    /* Compact: keep first `keep` indices, then fill with wrong rows. */
-    size_t qi=0;
-    for(size_t i=0;i<keep && qi<q;i++){ /* already in place */ (void)qi; }
+    /* The first `keep` shuffled entries stay; the tail becomes hard rows. */
     for(size_t i=0;i<nreplace;i++){
         size_t w = wrong[(size_t)(u01()*(double)nwrong)];
         idx[keep+i]=w;
@@ -701,7 +711,8 @@ int main(int argc, char** argv){
         else if (!strcmp(argv[i], "--clip") && i+1 < argc) CLIP=strtod(argv[++i],NULL);
         else if (!strcmp(argv[i], "--warmup-frac") && i+1 < argc) WARMUP_FRAC=strtod(argv[++i],NULL);
         else if (!strcmp(argv[i], "--eval-frac") && i+1 < argc) EVAL_FRAC=strtod(argv[++i],NULL);
-        else if (!strcmp(argv[i], "--pos-repeat") && i+1 < argc) { /* kept for CLI compat; fixed at 20 */ (void)strtoul(argv[++i],NULL,10); }
+        else if (!strcmp(argv[i], "--pos-repeat") && i+1 < argc) POS_REPEAT=(size_t)strtoul(argv[++i],NULL,10);
+        else if (!strcmp(argv[i], "--overall-repeat") && i+1 < argc) OVERALL_REPEAT=(size_t)strtoul(argv[++i],NULL,10);
         else if (!strcmp(argv[i], "--hard-negative-frac") && i+1 < argc) HARD_NEG_FRAC=strtod(argv[++i],NULL);
         else if (!strcmp(argv[i], "--hard-negative-start") && i+1 < argc) HARD_NEG_START=(int)strtol(argv[++i],NULL,10);
         else if (!strcmp(argv[i], "--export-lancius") && i+1 < argc) export_path=argv[++i];
@@ -724,6 +735,8 @@ int main(int argc, char** argv){
             }
         }
     }
+    if (POS_REPEAT < 1) POS_REPEAT = 1;
+    if (OVERALL_REPEAT < 1) OVERALL_REPEAT = 1;
     if (!dir) {
         fprintf(stderr,
         "usage: train_i6 <dir> [H1 H2 EPOCHS BATCH]\n"
@@ -825,10 +838,13 @@ int main(int argc, char** argv){
     zscore_apply(&va, mu, sd);
     zscore_apply(&te, mu, sd);
 
-    size_t npos=0;
-    for(size_t i=0;i<tr.n;i++) if(tr.L[i]==1) npos++;
+    size_t npos=0, nover=0;
+    for(size_t i=0;i<tr.n;i++) {
+        if(tr.L[i]==1) npos++;
+        if(tr.S[i]==0) nover++;
+    }
     if(!npos) die("train split has no positive rows");
-    size_t nfit = tr.n + npos*(20-1);
+    size_t nfit = tr.n + npos*(POS_REPEAT-1) + nover*(OVERALL_REPEAT-1);
     size_t* idx=(size_t*)xcalloc(nfit,sizeof(size_t),"idx");
     size_t nidx=0;
 

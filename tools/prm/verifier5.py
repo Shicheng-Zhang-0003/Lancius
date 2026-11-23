@@ -121,7 +121,10 @@ def make_candidate(algo, params, steps, rng, level):
 
     elif level == 0.0:
         kind = "undecidable"
-        cut = rng.randint(1, max(1, len(steps) - 1))
+        # A one-step derivation has no "later" step to omit, so the cut has
+        # to be allowed at 0: omitting the only step still leaves a
+        # derivation that cannot be judged either way (all steps missing).
+        cut = rng.randint(0, max(0, len(steps) - 1))
         for i in range(cut, len(steps)):
             rep[i] = None
 
@@ -148,6 +151,37 @@ def make_candidate(algo, params, steps, rng, level):
             rep[i] = _bump(rep[i], rng, None)
 
     return rep, struct, kind
+
+
+def level_realized(algo, params, steps, rep, struct, level):
+    """True iff the candidate actually realizes the requested verdict level.
+
+    make_candidate can fail to realize a level for degenerate derivations:
+    a one-step algorithm has no working step to corrupt for +0.5, and the
+    omission cut left a one-step derivation untouched for 0.0.  The corpus
+    generator and the evaluator both use this check so a label never claims
+    a level the measurements do not support.
+    """
+    final_exact = (rep[-1] is not None
+                   and F(rep[-1]) == F(steps[-1]["value"]))
+    struct_ok = all(F(struct.get(k)) == F(params[k]) for k in algo.structure_keys)
+    struct_moved = any(F(struct.get(k)) != F(params[k]) for k in algo.structure_keys)
+    if level == 1.0:
+        return all(rep[i] is not None and F(rep[i]) == F(s["value"])
+                   for i, s in enumerate(steps)) and struct_ok
+    if level == 0.5:
+        return (len(steps) >= 2 and final_exact and struct_ok
+                and any(rep[i] is not None and F(rep[i]) != F(s["value"])
+                        for i, s in enumerate(steps[:-1])))
+    if level == 0.0:
+        return any(x is None for x in rep) and all(
+            rep[i] is None or F(rep[i]) == F(s["value"]) for i, s in enumerate(steps))
+    if level == -0.5:
+        return (not final_exact) and struct_ok
+    if level == -1.0:
+        return struct_moved and all(rep[i] is not None and F(rep[i]) != F(s["value"])
+                                    for i, s in enumerate(steps))
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +246,12 @@ def check(algo, params, steps, rep, struct):
     undecidable = 1 if n_missing > 0 else 0
     max_rel = max([p["rel"] for p in present], default=1.0)
     mean_rel = (sum(p["rel"] for p in present) / len(present)) if present else 1.0
+    # A scale-free count of wrong steps.  mean_rel was the global summary in
+    # this slot, but it shrinks as 1/n_steps, so a single wrong step in a
+    # 12-step chain looked almost like a clean chain after normalization and
+    # the +0.5/+1 boundary landed between n=11 and n=12.  The count keeps the
+    # same "one step is off" signal at every chain length.
+    n_wrong = sum(1 for p in present if p["exact"] == 0)
 
     return {
         "per_step": per_step, "n_steps": n,
@@ -220,7 +260,7 @@ def check(algo, params, steps, rep, struct):
         "final_exact": final_exact, "final_rel": final_rel,
         "frac_exact": frac_exact, "undecidable": undecidable,
         "max_rel": max_rel, "mean_rel": mean_rel,
-        "n_missing": n_missing,
+        "n_wrong": n_wrong, "n_missing": n_missing,
     }
 
 
@@ -264,7 +304,7 @@ def row_features(algo, chk, step_idx):
         chk["final_rel"],
         float(chk["undecidable"]),
         chk["max_rel"],
-        chk["mean_rel"],
+        float(chk["n_wrong"]),   # scale-free count; was mean_rel
         float(FAM_ID.get(algo.family, 0)),
         1.0 if step_idx < 0 else 0.0,
         float(step_idx),

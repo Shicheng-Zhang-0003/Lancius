@@ -16,6 +16,7 @@ USAGE
 """
 import sys, os, time, random, argparse
 from fractions import Fraction as F
+import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -40,6 +41,22 @@ TIERS = ["base", "big", "neg"]
 BIG_MULTIPLIERS = tuple(range(2, 21))
 SKIPPED = 0
 MISLABELLED = 0
+# Softmax can saturate to exactly 0/1; keep the reported verdict strictly
+# inside the open interval (-1, 1).  The 1e-6 bias is far below the 1e-3
+# target and never leaves the logic scale.
+VERDICT_EPS = 1e-6
+
+# Algorithm -> family mapping for multi-expert evaluation
+ALGO_FAMILY = {}
+for a in ALL150:
+    ALGO_FAMILY[a.name] = a.family
+
+FAMILY_MODEL_MAP = {
+    "algebra": "alu_algebra.lancius",
+    "calculus": "alu_calculus.lancius",
+    "linear_algebra": "alu_linear_algebra.lancius",
+    "number_theory": "alu_number_theory.lancius",
+}
 
 def read_musd(path):
     mu, sd = [], []
@@ -52,32 +69,36 @@ def read_musd(path):
                 sd.append(float(line[3:]))
     if len(mu) < 65 or len(sd) < 65:
         raise SystemExit("%s: only %d MU / %d SD lines, want 65" % (path, len(mu), len(sd)))
-    import numpy as np
     mu = np.asarray(mu[:65]); sd = np.asarray(sd[:65])
     sd[~(sd > 1e-12)] = 1.0
     return mu, sd
 
-def level_realized(algo, params, steps, rep, struct, lv):
-    final_exact = (rep[-1] is not None
-                   and F(rep[-1]) == F(steps[-1]["value"]))
-    struct_ok = all(F(struct.get(k)) == F(params[k]) for k in algo.structure_keys)
-    struct_moved = any(F(struct.get(k)) != F(params[k]) for k in algo.structure_keys)
-    if lv == 1.0:
-        return all(rep[i] is not None and F(rep[i]) == F(s["value"])
-                   for i, s in enumerate(steps)) and struct_ok
-    if lv == 0.5:
-        return (len(steps) >= 2 and final_exact and struct_ok
-                and any(rep[i] is not None and F(rep[i]) != F(s["value"])
-                        for i, s in enumerate(steps[:-1])))
-    if lv == 0.0:
-        return any(x is None for x in rep) and all(
-            rep[i] is None or F(rep[i]) == F(s["value"]) for i, s in enumerate(steps))
-    if lv == -0.5:
-        return (not final_exact) and struct_ok
-    if lv == -1.0:
-        return struct_moved and all(rep[i] is not None and F(rep[i]) != F(s["value"])
-                                    for i, s in enumerate(steps))
-    return False
+
+def softmax(z):
+    """Row-wise softmax for a batch of logits."""
+    z = np.asarray(z, dtype=np.float64)
+    z = z - z.max(axis=1, keepdims=True)
+    e = np.exp(z)
+    return e / e.sum(axis=1, keepdims=True)
+
+
+def continuous_verdict(prob, fault_code=None):
+    """Continuous verdict in (-1, 1), or -2 for a non-logic fault/error.
+
+    The five level logits are turned into a probability distribution and the
+    verdict is the expected level.  The result is strictly inside (-1, 1)
+    because it is a convex combination of LEVELS.  A caller that detects a
+    non-logic fault (bad input, numerical failure, missing model) returns -2
+    instead, which is deliberately outside the logic scale.
+    """
+    if fault_code is not None:
+        return -2.0
+    v = float(np.dot(np.asarray(prob, dtype=np.float64), LEVELS))
+    return min(1.0 - VERDICT_EPS, max(-1.0 + VERDICT_EPS, v))
+
+# Single source of truth lives in verifier5 so corpus generation and
+# evaluation cannot drift apart.
+level_realized = V.level_realized
 
 class CellRng:
     def __init__(self, seed):
@@ -151,6 +172,9 @@ def main():
     ap.add_argument("outdir", nargs="?", default=None)
     ap.add_argument("--alu-pool", default=DEFAULT_ALU_POOL)
     ap.add_argument("--musd", default=DEFAULT_MUSD)
+    ap.add_argument("--experts", default=DEFAULT_ALU_POOL,
+                    help="directory containing per-family .lancius models "
+                         "(alu_algebra.lancius, alu_calculus.lancius, etc.)")
     args = ap.parse_args()
 
     per_algo = args.runs_per_algo
@@ -209,6 +233,16 @@ def main():
     print("alu pool: %d models loaded: %s" %
           (len(alu_models), ", ".join(sorted(alu_models))), flush=True)
 
+    # Load per-family expert models
+    expert_models = {}
+    for fam_name, fname in FAMILY_MODEL_MAP.items():
+        fpath = os.path.join(args.experts, fname)
+        if os.path.exists(fpath):
+            expert_models[fam_name] = load_gen1(fpath)
+            print("expert %s: loaded %s" % (fam_name, fname), flush=True)
+        else:
+            print("expert %s: NOT FOUND %s" % (fam_name, fpath), flush=True)
+
     MODEL_ID = "i6=%s | musd=%s" % (ida, args.musd)
 
     sub = random.Random(master)
@@ -229,7 +263,10 @@ def main():
             chk = V.check(algo, p, steps, rep, struct)
             f = V.row_features(algo, chk, -1)
             xs = ((np.asarray([f]) - mu) / sd)
-            zi_i6 = int(np.argmax(fwd_batch(m_i6, xs)[0]))
+            m_exp = expert_models.get(ALGO_FAMILY.get(algo.name, "algebra"))
+            if m_exp is None:
+                m_exp = m_i6
+            zi_i6 = int(np.argmax(fwd_batch(m_exp, xs)[0]))
             flag = "" if level_realized(algo, p, steps, rep, struct, lv) \
                 else "  [NOT EXPRESSIBLE]"
             print("### %s [%s] steps=%d tier=%s x%s lv=%+.1f i6->%s%s" %
@@ -241,7 +278,7 @@ def main():
     # ---- SWEEP ----
     print("\n###### SWEEP: 150 algos x runs ######", flush=True)
     orows, olabs, ometa, oscales = [], [], [], []
-    srows, slabs = [], []
+    srows, slabs, sfams = [], [], []
     done = 0
     for ai, algo in enumerate(ALL150):
         for k in range(per_algo):
@@ -265,12 +302,12 @@ def main():
             for si in range(len(steps)):
                 srows.append(V.row_features(algo, chk, si))
                 slabs.append(V.step_label(lv, kind, chk, si))
+                sfams.append(ALGO_FAMILY[algo.name])
         done += 1
         if done % 15 == 0:
             print("  generated %d/150 algos (overall rows=%d, skipped=%d)"
                   % (done, len(orows), SKIPPED), flush=True)
 
-    import numpy as np
     Yo = np.asarray(olabs)
     Ys = np.asarray(slabs)
     R_o = (np.asarray(orows) - mu) / sd
@@ -283,7 +320,61 @@ def main():
             out[i:i + CH] = fwd_batch(m, X[i:i + CH]).argmax(axis=1)
         return out
 
-    p_i6_o = preds(m_i6, R_o); p_i6_s = preds(m_i6, R_s)
+    # Multi-expert prediction: route each row to its family expert
+    fam_of_row = np.array([ALGO_FAMILY[mm[0]] for mm in ometa])
+
+    def preds_multi(models_dict, X, fam_of_row):
+        out = np.empty(len(X), dtype=int)
+        covered = np.zeros(len(X), dtype=bool)
+        CH = 20000
+        for fam_name in sorted(models_dict.keys()):
+            m = models_dict[fam_name]
+            fam_mask = fam_of_row == fam_name
+            if not fam_mask.any():
+                continue
+            fam_X = X[fam_mask]
+            fam_out = np.empty(len(fam_X), dtype=int)
+            for i in range(0, len(fam_X), CH):
+                fam_out[i:i + CH] = fwd_batch(m, fam_X[i:i + CH]).argmax(axis=1)
+            out[fam_mask] = fam_out
+            covered[fam_mask] = True
+        rest = ~covered
+        if rest.any():
+            # Missing expert: fall back to the single trunk instead of
+            # leaving rows uninitialised.
+            out[rest] = preds(m_i6, X[rest])
+        return out
+
+    def verdict_multi(models_dict, X, fam_of_row):
+        """Continuous verdict = expected level under the 5-class softmax."""
+        out = np.empty(len(X), dtype=np.float64)
+        covered = np.zeros(len(X), dtype=bool)
+        CH = 20000
+        lv = np.asarray(LEVELS, dtype=np.float64)
+        for fam_name in sorted(models_dict.keys()):
+            m = models_dict[fam_name]
+            fam_mask = fam_of_row == fam_name
+            if not fam_mask.any():
+                continue
+            fam_X = X[fam_mask]
+            fam_out = np.empty(len(fam_X), dtype=np.float64)
+            for i in range(0, len(fam_X), CH):
+                p = softmax(fwd_batch(m, fam_X[i:i + CH]))
+                fam_out[i:i + CH] = np.clip(p @ lv,
+                                            -1.0 + VERDICT_EPS,
+                                            1.0 - VERDICT_EPS)
+            out[fam_mask] = fam_out
+            covered[fam_mask] = True
+        rest = ~covered
+        if rest.any():
+            p = softmax(fwd_batch(m_i6, X[rest]))
+            out[rest] = np.clip(p @ lv, -1.0 + VERDICT_EPS, 1.0 - VERDICT_EPS)
+        return out
+
+    p_i6_o = preds_multi(expert_models, R_o, fam_of_row)
+    p_i6_s = preds_multi(expert_models, R_s, np.array(sfams))
+    v_i6_o = verdict_multi(expert_models, R_o, fam_of_row)
+    v_i6_s = verdict_multi(expert_models, R_s, np.array(sfams))
 
     print("\n[i6] overall verdict correct : %d/%d (%.4f)"
           % ((p_i6_o == Yo).sum(), len(Yo), (p_i6_o == Yo).mean()), flush=True)
@@ -322,11 +413,21 @@ def main():
         mse = float(np.mean(d * d))
         return mae, mse
 
+    def mae_mse_cont(verdict, true_arr):
+        true_levels = np.array([LEVELS[int(t)] for t in true_arr],
+                               dtype=np.float64)
+        d = np.asarray(verdict, dtype=np.float64) - true_levels
+        return float(np.mean(np.abs(d))), float(np.mean(d * d))
+
     i6_mae, i6_mse = mae_mse(p_i6_o, Yo)
-    print("\n[i6] MAE(level)=%.6f  MSE(level)=%.6f" % (i6_mae, i6_mse), flush=True)
-    print("Target MAE < 1e-3: %s   Target MSE < 1e-3: %s"
-          % ("PASS" if i6_mae < 1e-3 else "FAIL",
-             "PASS" if i6_mse < 1e-3 else "FAIL"), flush=True)
+    i6_mae_c, i6_mse_c = mae_mse_cont(v_i6_o, Yo)
+    print("\n[i6] discrete  MAE(level)=%.6f  MSE(level)=%.6f"
+          % (i6_mae, i6_mse), flush=True)
+    print("[i6] continuous MAE(level)=%.6f  MSE(level)=%.6f"
+          % (i6_mae_c, i6_mse_c), flush=True)
+    print("Continuous target MAE < 1e-3: %s   MSE < 1e-3: %s"
+          % ("PASS" if i6_mae_c < 1e-3 else "FAIL",
+             "PASS" if i6_mse_c < 1e-3 else "FAIL"), flush=True)
 
     for aname in sorted(alu_results):
         pa_o, _ = alu_results[aname]
@@ -385,9 +486,14 @@ def main():
         f.write("overall_i6 %.4f per_step_i6 %.4f\n"
                 % ((p_i6_o == Yo).mean(), (p_i6_s == Ys).mean()))
         f.write("i6_MAE %.6f i6_MSE %.6f\n" % (i6_mae, i6_mse))
+        f.write("i6_continuous_MAE %.6f i6_continuous_MSE %.6f\n"
+                % (i6_mae_c, i6_mse_c))
         f.write("target_MAE_1e-3 %s target_MSE_1e-3 %s\n"
                 % ("PASS" if i6_mae < 1e-3 else "FAIL",
                    "PASS" if i6_mse < 1e-3 else "FAIL"))
+        f.write("target_continuous_MAE_1e-3 %s target_continuous_MSE_1e-3 %s\n"
+                % ("PASS" if i6_mae_c < 1e-3 else "FAIL",
+                   "PASS" if i6_mse_c < 1e-3 else "FAIL"))
         for aname in sorted(alu_results):
             pa_o, pa_s = alu_results[aname]
             amae, amse = mae_mse(pa_o, Yo)
@@ -409,5 +515,4 @@ def main():
     print("\nsummary -> %s/big_summary.txt\nDone." % outdir, flush=True)
 
 if __name__ == "__main__":
-    import numpy as np
     main()
