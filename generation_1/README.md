@@ -109,7 +109,7 @@ attribution to be trusted. Synthetic smoke test (FEAT=10, NCLASS=2) in
 
 I6 (1I6) returns to the verifier flagship: 65→4096→2560→5, warm-started
 from the I3 ALU pool, trained with CE loss + hard-negative mining, targeting
-MAE/MSE < 1e-3. Training in progress — see `I6_TRAINING_STATUS.md` and
+MAE/MSE < 1e-3. All 4 family experts complete — see `I6_TRAINING_STATUS.md` and
 `I6/models/train_i6.log`.
 
 ## Run
