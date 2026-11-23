@@ -34,7 +34,7 @@ total).
 
 | Internal Version | Public Version       | Release Type      |
 |------------------|----------------------|-------------------|
-| `v12R2`          | `V1.2RC3`      | Development Milestone    |
+| `v12R2`          | `V1.2RC3.3`      | Development Milestone    |
 
 Lancius uses the following internal milestone progression:
 
@@ -56,7 +56,7 @@ in R-series numbering), built on the `v11S` stable baseline via `v12R1`.
 > This is a development milestone.
 > Binary compatibility is guaranteed for v2 models written by v11S+.
 
-**RC3.x model line (starts at `V1.2-RC3.1`).** Point releases on this cycle
+**RC3.x model line (starts at `V1.2-RC3.3`).** Point releases on this cycle
 are **model, dataset and fabric iterations** cut from an unchanged `v12R2`
 codebase — no format break, no stable-API change, no numerical behaviour
 change; `src/` is frozen at the RC3 line for them. The rules and per-release
@@ -674,6 +674,9 @@ For public GitHub releases, internal milestones are mapped as follows:
 | `v11S`             | `V1.1`               | Stable release                       |
 | `v12R1`            | `V1.2RC1`            | Previous development milestone: hardening plus numerical correctness |
 | `v12R2`            | `V1.2RC3`            | Current development milestone (R2 phase: mute mathematician learns) |
+| `v12R2.1`          | `V1.2RC3.1`          | First point release: model/dataset/fabric iterations |
+| `v12R2.2`          | `V1.2RC3.2`          | Second point release: I6 flagship verifier lands, I5 rules engine |
+| `v12R2.3`          | `V1.2RC3.3`          | Third point release: corpus label-noise floor removed, n_wrong feature, continuous verdict, all 4 family experts MAE < 1e-3 |
 
 ### Current Milestone
 

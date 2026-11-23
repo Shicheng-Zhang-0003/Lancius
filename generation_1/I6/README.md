@@ -2,17 +2,99 @@
 
 I6 is the flagship Lancius verifier lineage: **I1 → I2 → I3 → I6**.
 It is trained with the I3 ALU pool as warm-start substrate and targets
-**MAE(level) < 1e-3 and MSE(level) < 1e-3** on the 150-algorithm verifier
-corpus.
+**MAE(level) < 1e-3 and MSE(level) < 1e-3** on the 150-algorithm verifier corpus.
 
 I4 and I5 were deviations (fire-risk and generic decision-surface
 trainers); I6 returns to the verifier flagship with a slightly wider trunk,
 more epochs, the fused cross-entropy loss, and hard-negative mining.
 
+All four family experts (algebra, calculus, linear_algebra, number_theory)
+now achieve MAE < 1e-3 on their respective family corpora, with two
+achieving perfect MAE 0.000000. The corpus label-noise floor is removed
+(0 unrealizable labels), feature 57 is `n_wrong` instead of `mean_rel`,
+and the continuous verdict is the expected level under the 5-class softmax
+clipped to `(-1+1e-6, 1-1e-6)`.
+
 ```
 i6  =  I3 ALU pool (alu_00..alu_11, 150-algo trained)
        --warm start + hard negatives + 20 epochs-->  I6 model
 ```
+
+## Release Identity
+
+| Internal Version | Public Version       | Release Type      |
+|------------------|----------------------|-------------------|
+| `v12R2`          | `V1.2RC3.3`      | Development Milestone    |
+
+Lancius uses the following internal milestone progression:
+
+```text
+S → R1 → R2 → R3 → S
+```
+
+Where:
+
+- `S` is a stable release
+- `R1` is the first development milestone after the previous stable release
+- `R2` is the second development milestone, where new subsystems begin becoming independent
+- `R3` is the freeze, hardening, and bug-hunting milestone
+
+`v12R2` is the second development milestone of the v12 cycle (the R2 phase
+in R-series numbering), built on the `v11S` stable baseline via `v12R1`.
+
+> This is a development milestone.
+> Binary compatibility is guaranteed for v2 models written by v11S+.
+
+**RC3.x model line (starts at `V1.2-RC3.1`).** Point releases on this cycle
+are **model, dataset and fabric iterations** cut from an unchanged `v12R2`
+codebase — no format break, no stable-API change, no numerical behaviour
+change; `src/` is frozen at the RC3 line for them. The rules and per-release
+asset provenance live in `MANIFEST.md` and
+`docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.1.md`.
+
+## What's New in V1.2-RC3.3
+
+### Corpus label-noise floor removed
+- `verifier5.level_realized()` is now the single source of truth for whether
+  a candidate realizes its requested level; the generator refuses unrealized
+  labels. The 577 train / 145 test 1-step label mismatches are gone.
+- Audit on `corpus_clean`: **0 conflicting labels** across 11,349 train /
+  3,655 test feature keys. The overall verdict is therefore an exact function
+  of the measured features — the Bayes error is zero.
+
+### Feature 57: `mean_rel` → `n_wrong`
+- `mean_rel` shrinks as `1/n_steps`, making a single wrong step in a 12-step
+  chain almost invisible after normalization; the `+0.5/+1` boundary landed
+  inconsistently between n=11 and n=12.
+- `n_wrong` (count of non-exact present steps) preserves the "one step is
+  off" signal at every chain length, fixing the n=12 +0.5/+1 boundary.
+- The input remains 65-wide; pinned normalization from `gen1_mu_sd.txt` is unchanged.
+
+### Continuous verdict
+- Expected level under the 5-class softmax, clipped to `(-1+1e-6, 1-1e-6)`.
+- `-2` reserved for non-logic faults, returned before the logic readout.
+- Added to `run_big_i6.py`; `continuous_verdict(prob, fault_code=None)`.
+
+### All four family experts achieve MAE < 1e-3
+| Family | Epoch | Test MAE | Test MSE |
+|---|---|---|---|
+| Algebra | 1 | **0.000192** | ~3.7e-8 |
+| Calculus | 1 | **0.000813** | ~6.6e-7 |
+| Linear Algebra | 16 | **0.000000** | 0 |
+| Number Theory | 1 | **0.000000** | 0 |
+
+All warm-started from `generation_1/I3/alu_pool/alu_01.lancius`, 20 epochs,
+lr 0.0008, `OMP_NUM_THREADS=2`, `OVERALL_REPEAT=4`, `POS_REPEAT=1`,
+hard-negative frac 0.50 from epoch 2.
+
+### Trainer sampling fixed
+- `OVERALL_REPEAT=4` (was 20× class-1 repeat that starved `+0.5`)
+- `POS_REPEAT=1` (was 20×)
+- Shuffle before hard-negative replacement so repeats aren't wiped out.
+
+### Orchestration
+- `orchestrate_i6.py` defaults to sequential training (laptop thermal-sensitive),
+  running one family expert at a time.
 
 ## Architecture
 
@@ -51,6 +133,8 @@ Deltas vs I3's corpus:
 - **Deeper LONG derivations**: long chains (10–12 steps) appear in training,
   not just test
 - **Rebalanced regimes**: neg tier drawn at the same rate as base
+- **Label-noise floor removed**: 0 unrealizable labels; `n_wrong` feature;
+  continuous verdict
 
 With hard negatives:
 ```

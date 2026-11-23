@@ -1,5 +1,78 @@
 # Lancius Changelog
 
+## V1.2RC3.3 (2026-11-23) — corpus label-noise floor removed; all 4 family experts MAE < 1e-3
+
+RC3.3 cuts from the unchanged v12R2 core — no format break, no ABI change,
+no numerical behaviour change — and carries the I6 label-noise floor removal
+and all-4-expert training as its headline content:
+
+- **Corpus label-noise floor removed.** `make_candidate` could not realize
+  `+0.5` for a 1-step derivation (it bumped the only step, which is the
+  final one) and its `0.0` omission range was empty for a lone step. The old
+  corpus therefore had 577 train / 145 test overall rows whose labels
+  contradicted their measurements, all at `nsteps == 1`. `verifier5.level_realized`
+  is now the single source of truth used by both the generator and the
+  evaluator, and `emit()` refuses to write an unrealized level. Audit:
+  **0 unrealizable overall labels** across 11,349 train / 3,655 test feature
+  keys; the overall verdict is therefore an exact function of the measured
+  features, and the Bayes floor is zero.
+- **Feature 57 is now `n_wrong` (count of non-exact present steps), not
+  `mean_rel`.** `mean_rel` shrinks as `1/n_steps`, so one wrong step in a
+  12-step chain looked almost like a clean chain after normalization and the
+  `+0.5/+1` boundary landed between `n=11` and `n=12`. The count keeps the
+  same "one step is off" signal at every chain length. The input is still
+  65-wide.
+- **Continuous verdict:** `run_big_i6.py` now reports the expected level
+  under the 5-class softmax, clipped to `(-1+1e-6, 1-1e-6)`. `-2` is
+  reserved for non-logic faults and is returned by
+  `continuous_verdict(..., fault_code=...)` before the logic readout.
+- **All 4 family experts achieve MAE < 1e-3.** Algebra expert (epoch 1:
+  val MAE 0.000322, test MAE 0.000192), Calculus expert (epoch 1:
+  val MAE 0.000461, test MAE 0.000813), Linear Algebra expert (epoch 16:
+  val MAE 0.000000, test MAE 0.000000), Number Theory expert (epoch 1:
+  val MAE 0.000000, test MAE 0.000000). All warm-started from
+  `generation_1/I3/alu_pool/alu_01.lancius`, 20 epochs, lr 0.0008,
+  `OMP_NUM_THREADS=2`, `OVERALL_REPEAT=4`, `POS_REPEAT=1`, hard-negative
+  frac 0.50 from epoch 2.
+- **Trainer sampling fixed:** `OVERALL_REPEAT=4`, `POS_REPEAT=1`. Shuffle
+  before hard-negative replacement so the repeated verdict rows are not
+  wiped out.
+- **Sequential orchestration:** `orchestrate_i6.py` defaults to one trainer
+  at a time on a laptop-sensitive thermal profile.
+
+RC3.2 cuts from the unchanged v12R2 core — no format break, no ABI change,
+no numerical behaviour change — and carries the I5/I6 model-lineage batch as
+its headlining content:
+
+- **I6 flagship verifier** enters the tree as the RC3.2 front page:
+  `examples/train_i6.c` (65->4096->2560->5 CE trainer, warm start from the I3
+  ALU pool via `--init-from`, pinned `--mu-sd` normalizer, hard-negative
+  mining with `--hard-negative-frac`/`--hard-negative-start`, persistent
+  training graph, checkpoint/resume, `--verify-lancius` round-trip),
+  `generation_1/I6/gen_data_i6.py` (expanded 150-algorithm corpus, 8000
+  rows/level, hard-negative mining vs I3 ALU pool, deeper LONG derivations,
+  rebalanced regimes), `generation_1/I6/run_big_i6.py` (head-to-head vs all 12
+  I3 ALUs on identical cells), `generation_1/I6/paths.py` (repo resolution,
+  pinned normalizer, lancius locator), `generation_1/I6/README.md` (full
+  reproduce instructions), `examples/train_i6.c` linked in the makefile.
+  corpus/, models/, results_big/ are gitignored as generated/trained artifacts.
+- **I5 rules engine** enters the tree:
+  `examples/train_i5.c` (generic decision-surface trainer, CE loss, persistent
+  graph, row-agnostic export), `generation_1/I5/run_big_i5.py` (binary eval:
+  accuracy, MAE, MSE, ROC-AUC, threshold sweep), `generation_1/I5/paths.py`,
+  `generation_1/I5/README.md` ("Lancius as rules engine" framing), plus the
+  acquisition tools (`tools/acquire_and_train_i5.py`,
+  `tools/fire_data_acquire.py`, `tools/make_synthetic_corpus.py`) and the
+  checkpoint converter `bin_to_lancius.c`.
+- **Infrastructure:** `.gitignore` gains corpus/model/result ignore rules for
+  both generations plus `MATH_COMPENDIUM.md` and `I6_TRAINING_STATUS.md` as
+  dev-only artifacts; makefile gains `train_i5`/`train_i6` LINK rules and
+  registers both in BINS (43 binaries).
+- **Documentation:** `README.md` and `generation_1/README.md` span I1-I6 with
+  I5 as rules engine and I6 as flagship verifier targeting MAE/MSE < 1e-3;
+  `243-BDC/README.md` documents the cloned I4/I5 tracks alongside Idea1 and
+  LDFD.
+
 ## V1.2RC3.2 (2026-11-06) — I6 flagship verifier lands; I5 rules engine enters tree
 
 RC3.2 cuts from the unchanged v12R2 core — no format break, no ABI change,
