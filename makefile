@@ -109,25 +109,6 @@ $(BIN)/distill_prm800k: examples/distill_prm800k.c | $(BIN)
 $(BIN)/test_diamond_memory: examples/test_diamond_memory.c $(LIB) | $(BIN)
 	$(CC) -Wall -Wextra -fsanitize=address -fno-omit-frame-pointer -g -I./include -fopenmp -o $@ $< $(LIB) $(LDFLAGS) -fsanitize=address
 
-# ldfd_stream_train (experimental, v12R3): the LDFD -> Lancius stream plug.
-# It compiles every LDFD source directly into the binary, so one executable
-# owns BOTH the Lancius trainer and the live data path — no libsnapshot.so,
-# no shared state between the two frameworks. The curl_multi loop in fetch.c
-# reaches snap_pipeline_rearm (context.c) and pipeline construction reaches
-# the JSON parser vtables, so the FULL LDFD source set links here — same
-# dependency shape as the module itself (libcurl + cJSON + zlib).
-# Deliberately NOT part of `all` (needs libcurl dev headers, like every LDFD
-# consumer): build it explicitly via `make check-ldfd-stream`. A missing
-# dependency turns that build red, never a silent pass.
-LDFD_PLUG_SRC = 3463-LDFD/src/fetch.c 3463-LDFD/src/buffer.c \
-                3463-LDFD/src/parser_csv.c 3463-LDFD/src/parser_json.c \
-                3463-LDFD/src/context.c 3463-LDFD/src/config.c \
-                3463-LDFD/src/assoc.c 3463-LDFD/src/decompress.c \
-                3463-LDFD/src/output.c
-$(BIN)/ldfd_stream_train: examples/ldfd_stream_train.c $(LDFD_PLUG_SRC) $(LIB) | $(BIN)
-	$(CC) $(CFLAGS) -D_POSIX_C_SOURCE=200809L -I3463-LDFD/include -o $@ $< \
-	    $(LDFD_PLUG_SRC) $(LIB) $(LDFLAGS) -lcurl -lcjson -lz -fopenmp -lpthread
-
 $(LIB): $(OBJS) | $(LIBD)
 	ar rcs $@ $(OBJS)
 
@@ -175,8 +156,8 @@ clean:
 	rm -f temp/audit/physics_probe_out.txt
 	@echo "build tree, legacy root binaries and gate scratch removed."
 
-.PHONY: all clean help env check check-long check-sanitizers ldfd-test \
-        ldfd-build check-ldfd-stream check-oracle check-mutation \
+.PHONY: all clean help env check check-long check-sanitizers \
+        check-oracle check-mutation \
         check-ubstrict check-physics install uninstall
 
 # ---- terminal friendliness: know where things are without searching -----
@@ -196,7 +177,7 @@ help:
 	@echo "  distill_prm800k                standalone PRM distiller (links nothing)"
 	@echo
 	@echo "language gates:"
-	@echo "  make check                     full suite + LDFD bridge + CLI self-test"
+	@echo "  make check                     full suite + CLI self-test"
 	@echo "  make check-long                + soak_fuzz, fuzz_lancius"
 	@echo "  make check-sanitizers          instrumented lib + all audits under ASan/UBSan/LSan"
 	@echo "  make check-ubstrict            strict UBSan sweep (abort on first finding)"
@@ -206,14 +187,6 @@ help:
 	@echo
 	@echo "measurement (never a gate):"
 	@echo "  make bench_kernels             build/bin/bench_kernels"
-	@echo
-	@echo "data feeding framework (own deps: libcurl, zlib):"
-	@echo "  make ldfd-build                build 3463-LDFD"
-	@echo "  make ldfd-test                 run its suites"
-	@echo "  make check-ldfd-stream         experimental LDFD -> Lancius plug:"
-	@echo "                                 train one tiny model from a live LDFD"
-	@echo "                                 stream AND from the predownloaded same"
-	@echo "                                 corpus, then gate parity + round-trip"
 	@echo
 	@echo "install:"
 	@echo "  make install [PREFIX=/usr/local]   headers + lib + CLI"
@@ -260,32 +233,6 @@ test_ubsan: stress_test test_torture fuzz_lancius
 stress_test fuzz_lancius test_torture soak_fuzz: %: $(BIN)/%
 	@true
 
-# ------------------------------------------------------------------ 3463-LDFD
-#
-# The Live Data Feeding Framework is a separate component with its own
-# makefile and its own dependencies (libcurl, zlib). It is wired in as a
-# target rather than folded into `all` so a machine without libcurl headers
-# can still build and gate the ML runtime. Everything here degrades to an
-# honest SKIP instead of a silent pass.
-
-LDFD_DIR = 3463-LDFD
-
-ldfd-test:
-	@echo "LDFD acquisition path: `python3 tools/data/manage_datasets.py status | sed -n 's/.*LDFD (3463) *: //p'`"
-	@$(MAKE) -C $(LDFD_DIR) test
-	@# exit 77 = skipped (library not built); anything else is a failure
-	@python3 tools/audit/audit_ldfd_bridge.py; st=$$?; \
-	 if [ $$st -eq 77 ]; then echo "bridge audit skipped (no libsnapshot.so)"; \
-	 elif [ $$st -ne 0 ]; then echo "bridge audit FAILED"; exit $$st; fi
-
-ldfd-build:
-	$(MAKE) -C $(LDFD_DIR) all
-
-# v12R3 experimental plug: live LDFD stream and a predownloaded corpus both
-# train the same tiny model; servers/parsers/trainer in one binary.
-check-ldfd-stream: $(BIN)/ldfd_stream_train
-	$(BIN)/ldfd_stream_train
-
 check: all
 	$(BIN)/stress_test
 	$(BIN)/test_torture
@@ -319,8 +266,6 @@ check: all
 	python3 tools/audit/audit_text_pipeline.py
 	python3 tools/audit/audit_abi.py
 	python3 tools/audit/audit_binding_smoke.py
-	@echo "--- LDFD bridge (3463) ---"
-	@$(MAKE) --no-print-directory ldfd-test
 	$(BIN)/lancius info test_model.lancius
 	$(BIN)/lancius run test_model.lancius --mode static --fill zero
 	$(BIN)/lancius eval test_model.lancius --mode static

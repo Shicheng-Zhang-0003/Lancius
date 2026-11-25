@@ -21,13 +21,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 0
 
       - name: toolchain
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends build-essential clang libcurl4-openssl-dev zlib1g-dev python3-numpy
+          sudo apt-get install -y --no-install-recommends build-essential clang python3-numpy
           gcc --version | head -1
           # numpy is a HARD requirement, not an optional extra like torch:
           # tools/audit/kernel_oracle.py and graph_oracle.py both import it at

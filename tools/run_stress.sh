@@ -8,9 +8,8 @@
 # fuzz_lancius's seed, so that is what this script sweeps: a long run is many
 # seeds, not one long run.
 #
-# It also repeats the deterministic suites, because the bugs found during the
-# 3463 integration only appeared on the *second* poll -- a single run cannot
-# see state that leaks between invocations.
+# It also repeats deterministic suites to catch state that leaks between
+# invocations.
 #
 # Usage:
 #   tools/run_stress.sh                     # tier: full (default)
@@ -71,9 +70,8 @@ binaries; fuzz_lancius: 500 graphs). The only knob any of them expose is
 fuzz_lancius's seed, so that is what this script sweeps: a long run is many
 seeds, not one long run.
 
-It also repeats the deterministic suites, because the bugs found during the
-3463 integration only appeared on the *second* poll -- a single run cannot
-see state that leaks between invocations.
+It also repeats deterministic suites to catch state that leaks between
+invocations.
 
 Usage:
   tools/run_stress.sh                     # tier: full (default)

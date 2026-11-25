@@ -77,106 +77,11 @@ CLEANUP_TARGETS = [
 MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB cap per file
 
 
-# ---------------------------------------------------------------- LDFD path
-#
-# Dataset acquisition goes through the Lancius Live Data Feeding Framework
-# (3463-LDFD) when its shared library is available: one native fetch with
-# streaming gzip inflate and tar extraction, landed atomically. When the
-# library is absent (no libcurl headers, not built yet) every fetch falls
-# back to the hardened urllib path below, so `download` always works.
-#
-# Deliberately not required: a data pipeline must not gain a hard build
-# dependency just because a faster path exists.
-
-try:
-    import ldfd_bridge as _ldfd
-except Exception as _exc:  # pragma: no cover - import guard
-    _ldfd = None
-    _LDFD_IMPORT_ERROR = repr(_exc)
-else:
-    _LDFD_IMPORT_ERROR = None
-
-_LDFD_SESSION = None
-_LDFD_CHECKED = False
-
-
-def _ldfd_session():
-    """Return a usable LDFD session, or None. Cached; never raises."""
-    global _LDFD_SESSION, _LDFD_CHECKED
-    if _LDFD_CHECKED:
-        return _LDFD_SESSION
-    _LDFD_CHECKED = True
-    if _ldfd is None:
-        _LDFD_SESSION = None
-        return None
-    if not _ldfd.available():
-        _LDFD_SESSION = None
-        return None
-    try:
-        _LDFD_SESSION = _ldfd.session(max_bytes=MAX_DOWNLOAD_BYTES)
-    except Exception:                          # noqa: BLE001
-        _LDFD_SESSION = None
-    return _LDFD_SESSION
-
-
-def ldfd_status() -> str:
-    """One line describing which acquisition path is active."""
-    if _ldfd is None:
-        return f"unavailable (bridge import failed: {_LDFD_IMPORT_ERROR})"
-    if not _ldfd.available():
-        return f"unavailable ({_ldfd.unavailable_reason()})"
-    return "active"
-
-
-def _ldfd_fetch(url, dest, *, gzip_payload=False, tar=False):
-    """Fetch via LDFD. Returns True on success, False to fall back."""
-    sess = _ldfd_session()
-    if sess is None:
-        return False
-    if os.path.exists(dest) and os.path.getsize(dest) > 0:
-        print(f"  SKIP (exists): {dest}")
-        return True
-    print(f"  Fetching {url} [ldfd] ...")
-    try:
-        res = sess.fetch_to_file(
-            url, dest,
-            decompress="gzip" if (gzip_payload or tar) else "auto",
-            extract_tar=tar,
-        )
-    except _ldfd.LDFDError as exc:
-        print(f"  !! LDFD fetch failed: {exc}")
-        return False
-    except Exception as exc:                   # noqa: BLE001
-        print(f"  !! LDFD fetch error: {exc!r}")
-        return False
-
-    note = ""
-    if res.inflated:
-        note += ", inflated"
-    if tar:
-        note += (f", extracted {res.tar_files} file(s) "
-                 f"(skipped {res.tar_skipped}, rejected {res.tar_rejected})")
-    elif res.bytes_written:
-        note += f" ({res.bytes_written} bytes{note})"
-    print(f"  Saved: {dest}{note}")
-    return True
-
-
 def _fetch(url, dest, optional=False):
     """Download url -> dest with size cap. Returns True on success.
-
-    Tries LDFD first; falls back to urllib if the native path is missing
-    or reports an error, so behaviour is identical either way.
     """
     if os.path.exists(dest) and os.path.getsize(dest) > 0:
         print(f"  SKIP (exists): {dest}")
-        return True
-
-    # .gz payloads and .tar.gz archives are unpacked by LDFD itself.
-    lower = dest.lower()
-    is_gz = lower.endswith(".gz")
-    is_tar = lower.endswith(".tar.gz") or lower.endswith(".tgz")
-    if _ldfd_fetch(url, dest, gzip_payload=is_gz, tar=is_tar):
         return True
 
     print(f"  Fetching {url} ...")
@@ -264,8 +169,7 @@ def _safe_extract_zip(z, dest_dir):
 
 
 def download_mnist():
-    """MNIST idx files. LFD inflates the .gz in one pass so only the raw
-    bytes train_mnist.c reads are ever written to disk."""
+    """Download and safely inflate the MNIST idx files."""
     print("📥 Downloading MNIST...")
     os.makedirs("datasets/mnist", exist_ok=True)
     base_url = "https://ossci-datasets.s3.amazonaws.com/mnist/"
@@ -279,10 +183,6 @@ def download_mnist():
     for f in files:
         raw_name = f[:-3]                     # strip .gz
         url = base_url + f
-        # LDFD path: fetch + inflate, landing the decompressed file.
-        if _ldfd_fetch(url, os.path.join("datasets", "mnist", raw_name), gzip_payload=True):
-            continue
-        # urllib path: fetch the .gz, then expand it here.
         try:
             print(f"  Fetching {f}...")
             with urllib.request.urlopen(url, timeout=60) as response, open(os.path.join("datasets", "mnist", f), 'wb') as out:
@@ -324,8 +224,7 @@ def download_mnist():
 
 
 def download_cifar10():
-    """CIFAR-10 binary. LDFD extracts the .tar.gz in place, so the archive
-    itself never lands and train_cifar10.c finds cifar-10-batches-bin/."""
+    """Download and safely extract the CIFAR-10 binary archive."""
     print("📥 Downloading CIFAR-10 (Binary version for C)...")
     os.makedirs("datasets/cifar10", exist_ok=True)
     url = "https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz"
@@ -335,12 +234,6 @@ def download_cifar10():
         print("✅ CIFAR-10 ready.")
         return True
 
-    # LDFD path: fetch + extract, atomically landing the batch directory.
-    if _ldfd_fetch(url, os.path.join("datasets", "cifar10", "cifar-10-batches-bin"), tar=True):
-        print("✅ CIFAR-10 ready.")
-        return True
-
-    # urllib path: fetch, then extract with the existing safe extractor.
     tar_name = os.path.join("datasets", "cifar10", "cifar-10-binary.tar.gz")
     try:
         print(f"  Fetching {tar_name}...")
@@ -572,11 +465,9 @@ DOWNLOADERS = {
 
 
 def show_status():
-    """Report which acquisition path is active (no network access)."""
+    """Report installed datasets (no network access)."""
     print("Lancius dataset acquisition")
     print(f"  data dir      : {DATA_DIR}")
-    print(f"  LDFD (3463)   : {ldfd_status()}")
-    print(f"  fallback      : urllib (always available)")
     print(f"  size cap      : {MAX_DOWNLOAD_BYTES} bytes")
     installed = []
     for name, probe in (("mnist", "train-images-idx3-ubyte"),
@@ -597,7 +488,7 @@ def _usage():
     print("Math/proof/logic (Python-side derivational analysis):")
     print("  gsm8k, math, svamp, minif2f, proofwriter, ruletaker")
     print("Usage:")
-    print("  python3 tools/data/manage_datasets.py status               # which fetch path is live")
+    print("  python3 tools/data/manage_datasets.py status               # installed dataset status")
     print("  python3 tools/data/manage_datasets.py clean")
     print("  python3 manage_datasets.py download all       # everything")
     print("  python3 manage_datasets.py download vision    # mnist + cifar10")
