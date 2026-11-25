@@ -6,30 +6,13 @@
  * the framework's test accuracy, the framework's training gradients are sound
  * and only the trainer's gradient-check harness is mis-plumbed.
  *
- * Everything is mirrored from examples/train_prm_verifier.c:
+ * The objective, initialization, hyperparameters, and shuffle stream mirror
+ * examples/train_prm_verifier.c; this implementation has its own analytic
+ * gradient and no framework.
  *   H=32  LR=0.05  MOM=0.9  WD=1e-4  BATCH=64  EPOCHS=60  SEED=20261007
- *   He init  w = rnd()*sqrt(2/fan_in),  b = 0
+ *   Glorot-uniform init for tanh,  b = 0
  *   Fisher-Yates shuffle with the same xorshift64* RNG
- *   step = LR * dCE/dw  +  SGDM with L2 into the gradient
- *
- * The step used to be LR*(2/pe)*(2/NCLASS)*dCE/dw, mirroring the framework
- * trainer, whose graph builds MSE(logits, onehot) with VJP (2/pe)*(z-T) and
- * which then stepped with LR*(2/pe). The two paths took the same step iff the
- * gradients agreed -- which is what this file tests -- but both carried a
- * factor of 2/pe too many, because the VJP already contains it, so the step
- * scaled as 1/rows^2 and BATCH=1024 collapsed to chance.
- *
- * The trainer's factor is now NCLASS/2, which is the unique constant making
- * its step LR*(1/rows)*sum_r(z_r-T_r)*x_r; this file's step is
- * LR*(1/rows)*sum_r(p_r-T_r)*x_r. The two paths therefore now differ only by
- * their true objective, (z-T) versus softmax(z)-T, and no longer by an
- * arbitrary scale -- so a disagreement here is evidence about the gradients,
- * not about a step-size convention.
- *
- * Note the trainer's graph is MSE applied to the RAW LOGITS (no softmax node):
- * mse_of_logits() in examples/train_prm_verifier.c and the central-difference
- * check both pin that. There is therefore no softmax anywhere in its objective,
- * which is why no constant can convert its VJP into a CE gradient.
+ *   step = LR * mean-row dCE/dw + SGDM with coupled L2 regularization
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,8 +35,7 @@ static double rnd(void){
     rng_state = rng_state * 6364136223846793007ULL + 1442695040888963407ULL;
     uint64_t z = rng_state;
     z ^= z >> 12; z ^= z << 25; z ^= z >> 27; z *= 0x2545F4914F6CDD1DULL;
-    rng_state = z;
-    return (double)(int64_t)(z >> 11) / 9007199254740992.0 * 2.0 - 1.0;
+    return ((double)((z >> 11) & ((1ULL<<52)-1)) / (double)(1ULL<<52)) * 2.0 - 1.0;
 }
 static size_t shuf_next(void){
     uint64_t z = rng_state;
@@ -149,7 +131,6 @@ static void metrics(const double* X, const int* T, size_t n,
         cm[T[i]][p]++;
     }
     long tot=0; for(int a=0;a<NC;a++) for(int b=0;b<NC;b++) tot+=cm[a][b];
-    *acc=(double)cm[0][0]+cm[1][1]+cm[2][2]/(double)tot;
     long acc_ok=cm[0][0]+cm[1][1]+cm[2][2];
     *acc=(double)acc_ok/(double)tot;
     double s=0;
@@ -193,8 +174,10 @@ int main(int argc, char** argv){
     double* gW2=malloc(H*NC*sizeof(double)), *gb2=malloc(NC*sizeof(double));
 
     rseed(SEED);
-    for(size_t i=0;i<FD*H;i++) W1[i]=rnd()*sqrt(2.0/(double)FD);
-    for(size_t i=0;i<H*NC;i++) W2[i]=rnd()*sqrt(2.0/(double)H);
+    double lim1=sqrt(6.0/(double)(FD+H));
+    double lim2=sqrt(6.0/(double)(H+NC));
+    for(size_t i=0;i<FD*H;i++) W1[i]=rnd()*lim1;
+    for(size_t i=0;i<H*NC;i++) W2[i]=rnd()*lim2;
 
     size_t* idx=malloc(tr.n*sizeof(size_t));
     double* xb=malloc(BATCH*FD*sizeof(double));
@@ -206,6 +189,7 @@ int main(int argc, char** argv){
     printf("epoch   loss      train-acc   test-acc    test-macroF1\n");
     printf("--------------------------------------------------------------\n");
 
+    rseed(SEED ^ 0xA11CEULL);
     for(int ep=0;ep<EPOCHS;ep++){
         for(size_t i=0;i<tr.n;i++) idx[i]=i;
         for(size_t i=tr.n-1;i>0;i--){
@@ -220,34 +204,15 @@ int main(int argc, char** argv){
                 tb[r]=tr.T[s];
             }
             ce_and_grad(xb,tb,rows,W1,b1,W2,b2,gW1,gb1,gW2,gb2);
-            /* ce_and_grad returns the TRUE softmax-CE gradient, MEAN over the
-             * batch (it divides by n inside), so the step is just LR -- this is
-             * the standard "LR times the mean gradient" convention.
-             *
-             * This used to be LR*(2/pe)*(2/NC), mirroring the framework
-             * trainer's lr_eff = LR*2/pe against its graph gradient
-             * (2/NC)*dCE/dw. Both paths then stepped with
-             * LR*(2/pe)*(2/NC)*(mean gradient), so they agreed with each other
-             * -- and both divided by pe a second time on top of the 2/pe that
-             * the MSE VJP already contains. That made the step scale as
-             * 1/rows^2: BATCH=1024 measured a collapse to chance (acc 0.3306,
-             * CE 1.109 ~ ln 3) where BATCH=64 reached 0.4913.
-             *
-             * The trainer's factor is now C/2, which is the UNIQUE constant
-             * that turns its step into LR*(1/rows)*sum_r (z_r - T_r)*x_r. This
-             * file's step is LR*(1/rows)*sum_r (p_r - T_r)*x_r. So the two
-             * paths now differ ONLY by their genuine objective -- (z-T) versus
-             * (softmax(z)-T) -- and no longer by an arbitrary scale factor.
-             * That residual difference is real and is the whole point: it is
-             * what a constant CANNOT convert away, which is why the two land at
-             * nearby but not identical accuracies (0.5104 vs 0.5046 at 60
-             * epochs, both against a ~0.49 feature ceiling). */
-            double lr_eff = LR;
+            /* ce_and_grad returns the true mean-row CE gradient. The trainer
+             * applies the same gradient scaling and coupled L2-before-momentum
+             * update, so this is a direct implementation parity reference. */
+            double lr = LR;
             #define STEP(W,M,G,N,WDV) do{ \
                 for(size_t i=0;i<(N);i++){ \
                     double gi=(G)[i]+(WDV)*(W)[i]; \
                     (M)[i]=MOM*(M)[i]+gi; \
-                    (W)[i]-=lr_eff*(M)[i]; } }while(0)
+                    (W)[i]-=lr*(M)[i]; } }while(0)
             STEP(W1,mW1,gW1,FD*H,WD);
             STEP(b1,vW1,gb1,H,0.0);
             STEP(W2,mW2,gW2,H*NC,WD);

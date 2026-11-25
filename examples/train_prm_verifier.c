@@ -9,24 +9,23 @@
  * distill_prm800k.c (proven bit-identical to the Python port by
  * tools/prm/c_featurize.c), rated -1 / 0 / +1 by human PRMs.
  *
- * The framework does the arithmetic: the forward pass, the backward pass
- * (autodiff), and the optimizer (train-lib) all run through the IR, scheduler
- * and autodiff that the gate covers. Nothing here reimplements a gradient.
+ * The framework computes the forward and backward passes through the IR,
+ * scheduler, and autodiff. This example owns the minibatch loop and applies
+ * its SGDM update with a coupled L2 penalty.
  *
  * WHAT IS MODEL-SIDE (deliberately, per the project's own doctrine)
  * ---------------------------------------------------------------
  *   - the label mapping {-1,0,+1} -> three classes
- *   - the loss: softmax cross-entropy over 3 logits (NOT an IR op; the IR has
- *     CROSS_ENTROPY for a fixed vocabulary, which is a different thing)
+ *   - the loss: softmax cross-entropy over 3 logits
  *   - the metric: accuracy, macro-F1, and the majority-class baseline
- *   - minibatch assembly and the held-out protocol
- * Everything the framework provides is used as provided.
+ *   - the minibatch loop and SGDM update with coupled L2 regularization
+ *   - the held-out protocol
  *
  * MODEL
  * -----
  *   logits = W2 @ tanh(X @ W1 + b1) + b2          X:[B,16] W1:[16,H] W2:[H,3]
- * Softmax cross-entropy, L2 weight decay, SGD with momentum. Everything is
- * FP64 and every gradient is produced by lancius_ir_autodiff.
+ * Softmax cross-entropy, coupled L2 regularization, and SGD with momentum.
+ * Everything is FP64 and every gradient is produced by lancius_ir_autodiff.
  *
  * HONESTY
  * -------
@@ -57,6 +56,7 @@ static double WD          = 1e-4;
 static size_t BATCH       = 64;
 static int    EPOCHS      = 60;
 static unsigned SEED      = 20261007u;
+#define SHUFFLE_SEED_XOR 0xA11CEULL
 
 /* ---- metrics ---- */
 typedef struct {
@@ -175,10 +175,10 @@ static void* xcalloc(size_t n, size_t s, const char* what) {
     return p;
 }
 
-static void he_init_range(double* w, size_t n, size_t fan_in) {
-    /* He/Kaiming normal: std = sqrt(2/fan_in)  (He et al. 2015 §2.2) */
-    double sd = sqrt(2.0 / (double)fan_in);
-    for (size_t i = 0; i < n; i++) w[i] = rnd() * sd;
+static void glorot_uniform(double* w, size_t n, size_t fan_in, size_t fan_out) {
+    /* tanh hidden layer: Glorot uniform, variance 2/(fan_in+fan_out). */
+    double limit = sqrt(6.0 / (double)(fan_in + fan_out));
+    for (size_t i = 0; i < n; i++) w[i] = rnd() * limit;
 }
 
 static void model_init(model_t* m, size_t h) {
@@ -194,8 +194,8 @@ static void model_init(model_t* m, size_t h) {
     m->gb1 = (double*)xcalloc(h, sizeof(double), "gb1");
     m->gW2 = (double*)xcalloc(h*NCLASS, sizeof(double), "gW2");
     m->gb2 = (double*)xcalloc(NCLASS, sizeof(double), "gb2");
-    he_init_range(m->W1, FEAT_DIM*h, FEAT_DIM);
-    he_init_range(m->W2, h*NCLASS, h);
+    glorot_uniform(m->W1, FEAT_DIM*h, FEAT_DIM, h);
+    glorot_uniform(m->W2, h*NCLASS, h, NCLASS);
 }
 
 static void model_free(model_t* m) {
@@ -209,15 +209,7 @@ static void model_free(model_t* m) {
  * THE FRAMEWORK CALL.
  *
  * Builds:  logits = X @ W1 + b1 -> tanh -> @ W2 + b2
- *          loss    = MSE(logits, onehot) * (NCLASS/2)
- *
- * MSE with a 1/2-style scaling: the framework's MSE_BWD emits
- * d/dp = (2/pe)*g*(p-t), so scaling the loss by pe/2 makes the loss
- * 0.5*||p-t||^2 and the VJP exactly g*(p-t). With g = onehot that is the
- * standard softmax-cross-entropy gradient w.r.t. the logits:
- *      dlogits = softmax(logits) - onehot
- * So this is genuinely softmax cross-entropy, expressed in the primitives the
- * framework ships, and the framework's autodiff derives the gradient itself.
+ *          loss    = mean-row softmax cross-entropy(logits, onehot)
  */
 typedef struct {
     lancius_node* loss;
@@ -247,27 +239,7 @@ static fwd_ctx build_and_run(model_t* m, size_t rows, size_t h) {
     lancius_node* z1   = lancius_add(g, lancius_matmul(g, Xn, W1n), b1n);
     lancius_node* hz   = lancius_tanh(g, z1);
     lancius_node* z2   = lancius_add(g, lancius_matmul(g, hz, W2n), b2n);
-    /* MSE on the logits directly.
-     *
-     * An earlier version multiplied the logits by (rows/2) "to make MSE 0.5*||.||^2".
-     * That is wrong and it is worth recording why: MSE computes the MEAN, and
-     * d/dz of mean((s*z - T)^2) is (2/pe) * s^2 * (s*z - T) -- the multiplier
-     * enters TWICE, once from the chain rule and once from the squared term, so
-     * it scales the gradient by s^2 = 1024, not by s. Training diverged to NaN
-     * and the central-difference gradient check below is what caught it. The
-     * honest construction is:
-     *
-     *   loss = mean_c ((z_c - T_c)^2)        =>   d loss / d z_c = (2/pe)(z_c - T_c)
-     *
-     * and for softmax cross-entropy, d/dz_c = softmax(z)_c - T_c, so
-     *
-     *   d loss / d z_c = (2/pe) * (pe/NCLASS) * dCE / d z_c = (2/NCLASS) * dCE / d z_c
-     *
-     * because CE averages over the NCLASS logits per row (dCE/dz_c = (p_c - T_c)/NCLASS
-     * for the summed-over-classes view used by MSE). The NCLASS factor is a
-     * CONSTANT independent of batch size; it is folded into the learning rate
-     * below. No rescaling of the graph is needed or wanted. */
-    lancius_node* loss = lancius_mse(g, z2, Tn);
+    lancius_node* loss = lancius_cross_entropy(g, z2, Tn);
     if (!loss) { fprintf(stderr, "FATAL: loss node\n"); exit(2); }
 
     lancius_schedule* fs = lancius_ir_schedule(g);
@@ -339,18 +311,6 @@ static double softmax_ce(const double* logits, const int* t, size_t n) {
     return total / (double)n;
 }
 
-/* the graph's objective: mean over all n*NCLASS logits of (z - onehot)^2 */
-static double mse_of_logits(const double* z, const int* t, size_t n) {
-    double s = 0.0;
-    for (size_t i = 0; i < n; i++)
-        for (int c = 0; c < NCLASS; c++) {
-            double y = (t[i] == c) ? 1.0 : 0.0;
-            double d = z[i*NCLASS + c] - y;
-            s += d * d;
-        }
-    return s / ((double)n * NCLASS);
-}
-
 static void forward_logits(const model_t* m, size_t h, const double* X, size_t n, double* out) {
     for (size_t i = 0; i < n; i++) {
         double hid[256];
@@ -387,8 +347,7 @@ static void evaluate(const model_t* m, size_t h, const corpus_t* c,
 
 static void sgd_momentum_step(double* w, double* mbuf, const double* g, size_t n,
                              double lr, double mom, double wd) {
-    /* model-side optimizer wrapper around the framework's primitives; the
-     * per-element update is exactly train-lib's sgdm plus decoupled decay. */
+    /* SGDM on the CE gradient plus coupled L2 regularization. */
     for (size_t i = 0; i < n; i++) {
         double gi = g[i] + wd * w[i];      /* L2 into the gradient */
         mbuf[i] = mom * mbuf[i] + gi;
@@ -418,8 +377,10 @@ static double gradcheck_selfcontained(double* X, const int* T, size_t n, size_t 
     double *gW2= (double*)xcalloc(h*NCLASS,   sizeof(double), "gcgW2");
 
     rseed(SEED ^ 0x5EEDULL);
-    for (size_t i = 0; i < FEAT_DIM*h; i++) W1[i] = rnd()*sqrt(2.0/(double)FEAT_DIM);
-    for (size_t i = 0; i < h*NCLASS;   i++) W2[i] = rnd()*sqrt(2.0/(double)h);
+    double lim1 = sqrt(6.0 / (double)(FEAT_DIM + h));
+    double lim2 = sqrt(6.0 / (double)(h + NCLASS));
+    for (size_t i = 0; i < FEAT_DIM*h; i++) W1[i] = rnd()*lim1;
+    for (size_t i = 0; i < h*NCLASS;   i++) W2[i] = rnd()*lim2;
     for (size_t i = 0; i < n*NCLASS; i++) Tb[i] = 0.0;
     for (size_t i = 0; i < n; i++) Tb[i*NCLASS + T[i]] = 1.0;
 
@@ -442,7 +403,7 @@ static double gradcheck_selfcontained(double* X, const int* T, size_t n, size_t 
     lancius_node_bind_external(Tn, Tb);
     lancius_node* z1 = lancius_add(g, lancius_matmul(g, Xn, W1n), b1n);
     lancius_node* z2 = lancius_add(g, lancius_matmul(g, lancius_tanh(g, z1), W2n), b2n);
-    lancius_node* loss = lancius_mse(g, z2, Tn);
+    lancius_node* loss = lancius_cross_entropy(g, z2, Tn);
     if (!loss) { fprintf(stderr, "FATAL: gradcheck loss\n"); exit(2); }
 
     lancius_schedule* fs = lancius_ir_schedule(g);
@@ -498,20 +459,12 @@ static double gradcheck_selfcontained(double* X, const int* T, size_t n, size_t 
         for (int trial = 0; trial < 64 && probes < 24; trial++) {
             size_t idx = (size_t)((trial*1543u) % pn);
             double o = par[idx];
-            /* Finite-difference the graph's OWN objective, mean((z-onehot)^2),
-             * rather than softmax CE. The harvested gradient is d(mean MSE)/dw
-             * by construction, so this asserts exactly the property a gradient
-             * check exists to assert: the numbers we feed to the optimiser are
-             * the gradient of the loss we minimise. Converting to a CE
-             * gradient instead requires the identity
-             *   d(mean MSE)/dw = (2/NCLASS) * d(softmax CE)/dw
-             * whose prefactor is easy to get wrong (it was, twice); the pure-C
-             * reference trainer in temp/ref_prm.c is what validates that
-             * identity, by reproducing this framework run's learning curve. */
+            /* Finite-difference the same mean-row softmax CE objective used by
+             * the graph and by the training loop. */
             par[idx] = o + hh; forward_logits(&rm, h, X, n, Lz);
-            double lp = mse_of_logits(Lz, T, n);
+            double lp = softmax_ce(Lz, T, n);
             par[idx] = o - hh; forward_logits(&rm, h, X, n, Lz);
-            double lm = mse_of_logits(Lz, T, n);
+            double lm = softmax_ce(Lz, T, n);
             par[idx] = o;
             double fd = (lp - lm) / (2.0*hh);
             double an = ana[idx];
@@ -529,8 +482,8 @@ static double gradcheck_selfcontained(double* X, const int* T, size_t n, size_t 
     free(Lz);
     free(W1); free(b1); free(W2); free(b2); free(Tb);
     free(gW1); free(gW2);
-    printf("\ngradient check: autodiff vs central differences of mean-MSE "
-           "(self-contained graph, graph-MSE objective)\n"
+    printf("\ngradient check: autodiff vs central differences of mean-row CE "
+           "(self-contained graph, graph-CE objective)\n"
            "  %d probes over W1 and W2: worst scale-relative err = %.3e, "
            "worst |fd-an|/rms = %.3e  %s\n",
            probes, worst, worst_abs_over_rms,
@@ -581,6 +534,7 @@ int main(int argc, char** argv) {
            tcc[0]>tcc[1] ? (tcc[0]>tcc[2]?0:2) : (tcc[1]>tcc[2]?1:2));
 
     model_t m; memset(&m, 0, sizeof m);
+    rseed(SEED);
     model_init(&m, H);
     m.Xb = (double*)xcalloc(BATCH*FEAT_DIM, sizeof(double), "Xb");
     m.Tb = (double*)xcalloc(BATCH*NCLASS, sizeof(double), "Tb");
@@ -595,6 +549,8 @@ int main(int argc, char** argv) {
     }
 
     /* ---------------- training ---------------- */
+    /* Keep epoch shuffles independent of initialization and gradcheck. */
+    rseed(SEED ^ SHUFFLE_SEED_XOR);
     size_t* idx = (size_t*)xcalloc(tr.n, sizeof(size_t), "idx");
     for (size_t i = 0; i < tr.n; i++) idx[i] = i;
 
@@ -625,34 +581,10 @@ int main(int argc, char** argv) {
                 m.Tb[r*NCLASS + tr.T[src]] = 1.0;
             }
             build_and_run(&m, rows, H);
-            /* The graph is logits -> MSE(logits, onehot), so its VJP w.r.t. the
-             * logits is ALREADY dL/dz = (2/pe)*(z-T) with pe = rows*NCLASS.
-             * Folding 2/pe into the step again divides by pe twice, which makes
-             * the effective step scale as 1/rows^2: quadrupling the batch
-             * quarters the learning rate, and BATCH=1024 measured a collapse to
-             * chance (acc 0.3306, CE 1.109 ~ ln 3) where BATCH=64 reached
-             * 0.4913. Restoring this factor recovers BATCH=1024 to 0.5150.
-             *
-             * The old comment justified the division by claiming softmax CE
-             * gives dCE/dz = (1/rows)*(z-T). That is false: the truth is
-             * (1/rows)*(softmax(z)-T), so NO constant can turn an MSE-on-logits
-             * VJP into a CE gradient -- they differ by the softmax Jacobian,
-             * which is input-dependent.
-             *
-             * C/2 is the UNIQUE constant that turns this step into
-             * LR*(1/rows)*sum_r (z_r - T_r)*x_r, the same form a mean-CE
-             * trainer takes as LR*(1/rows)*sum_r (p_r - T_r)*x_r. So the two
-             * paths now differ only by their genuine objective, and no longer
-             * by an arbitrary scale. Verified: batch-size robustness restored
-             * (BATCH=1024 goes 0.3306 -> 0.5155) and accuracy is unchanged or
-             * better at every batch size, while the ~0.49 16-feature ceiling
-             * (proven by an independent tuned linear softmax model at 0.4870)
-             * is untouched. */
-            double lr_eff = LR * ((double)NCLASS / 2.0);
-            sgd_momentum_step(m.W1, m.mW1, m.gW1, FEAT_DIM*H, lr_eff, MOMENTUM, WD);
-            sgd_momentum_step(m.b1, m.vb1, m.gb1, H,           lr_eff, MOMENTUM, 0.0);
-            sgd_momentum_step(m.W2, m.mW2, m.gW2, H*NCLASS,     lr_eff, MOMENTUM, WD);
-            sgd_momentum_step(m.b2, m.vb2, m.gb2, NCLASS,       lr_eff, MOMENTUM, 0.0);
+            sgd_momentum_step(m.W1, m.mW1, m.gW1, FEAT_DIM*H, LR, MOMENTUM, WD);
+            sgd_momentum_step(m.b1, m.vb1, m.gb1, H,           LR, MOMENTUM, 0.0);
+            sgd_momentum_step(m.W2, m.mW2, m.gW2, H*NCLASS,     LR, MOMENTUM, WD);
+            sgd_momentum_step(m.b2, m.vb2, m.gb2, NCLASS,       LR, MOMENTUM, 0.0);
             nb += rows;
         }
         /* honest training-set loss: the pure reference on the full train split */

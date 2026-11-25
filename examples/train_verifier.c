@@ -3,7 +3,8 @@
  *
  * Fixes vs the old drivers, each mapped to the framework debt it removes:
  *  1. CE objective: the framework's own fused softmax cross-entropy
- *     (lancius_cross_entropy, exact VJP (softmax-y)/R). No MSE-on-logits,
+ *     (lancius_cross_entropy, exact VJP ((sum(y)*softmax)-y)/R; normalized
+ *     targets reduce this to (softmax-y)/R). No MSE-on-logits,
  *     no lr_eff = LR*NCLASS/2 fudge. Loss value is READ every step.
  *  2. Fisher-Yates epoch shuffle (swap idx[i] <-> idx[j], j in [0,i]).
  *  3. Persistent training graph: built ONCE for a fixed BATCH; buffers are
@@ -42,7 +43,7 @@
 #include <lancius/lancius_autodiff.h>
 #include <lancius/lancius_train.h>
 
-#define CKPT_MAGIC 0x4C564331u /* "LVC1" */
+#define CKPT_MAGIC 0x56524332u /* "VRC2": decoupled-SGDM state */
 #define PI_2 3.14159265358979323846
 #define NCMAX 8
 
@@ -175,8 +176,9 @@ static void minit(model* m){
     m->gW3=(double*)xcalloc(H2*NCLASS,8,"gW3");m->gb3=(double*)xcalloc(NCLASS,8,"gb3");
     m->Xb=(double*)xcalloc(BATCH*FEAT,8,"Xb");
     m->Tb=(double*)xcalloc(BATCH*NCLASS,8,"Tb");
-    double s1=sqrt(2.0/(double)FEAT), s2=sqrt(2.0/(double)H1),
-           s3=sqrt(2.0/(double)H2);
+    double s1=sqrt(2.0/((double)FEAT+(double)H1));
+    double s2=sqrt(2.0/((double)H1+(double)H2));
+    double s3=sqrt(2.0/((double)H2+(double)NCLASS));
     for(size_t i=0;i<FEAT*H1;i++)     m->W1[i]=gauss_()*s1;
     for(size_t i=0;i<H1*H2;i++)       m->W2[i]=gauss_()*s2;
     for(size_t i=0;i<H2*NCLASS;i++)   m->W3[i]=gauss_()*s3;
@@ -221,7 +223,7 @@ static void tgraph_build(model* m){
         lancius_matmul(TG_FWD,h1,NW2),NB2));
     lancius_node* z3=lancius_add(TG_FWD,lancius_matmul(TG_FWD,h2,NW3),NB3);
     /* FIX 1: framework's own fused softmax cross-entropy (mean over rows).
-     * Exact VJP (softmax-y)/R -- no lr_eff fudge, no MSE-on-logits. */
+     * Exact VJP ((sum(y)*softmax)-y)/R -- no lr_eff fudge, no MSE-on-logits. */
     NLOSS=lancius_cross_entropy(TG_FWD,z3,NT);
     if(!h1||!h2||!z3||!NLOSS) die("loss");
     TG = lancius_ir_autodiff(TG_FWD, NLOSS); if(!TG) die("autodiff");
@@ -244,9 +246,8 @@ static void grad_registry(model* m){
 }
 
 static double step_model(model* m){
-    /* Last batch is PADDED by replaying earlier rows (static graph needs
-     * fixed BATCH; padded rows contribute but shuffled order makes that
-     * harmless). Buffers were filled by the caller; execute fused fwd+bwd. */
+    /* The fixed-size graph uses replayed tail rows with weighted targets, so
+     * its mean loss and gradient equal the mean over the real tail rows. */
     lancius_arena_reset(ARENA);
     lancius_schedule_execute(BS, ARENA);
     if (lancius_get_error() != LANCIUS_ERROR_OK) {
@@ -278,10 +279,11 @@ static double step_model(model* m){
     return loss;
 }
 
-/* SGD with momentum + weight decay (decoupled position, pre-momentum). */
+/* SGDM with decoupled weight decay applied directly to parameters. */
 static void apply_step(model* m, double lr){
     #define UPD(W,M,G,N,WDV) do{ for(size_t i=0;i<(size_t)(N);i++){ \
-        double gi=(G)[i]+(WDV)*(W)[i]; (M)[i]=MOM*(M)[i]+gi; (W)[i]-=lr*(M)[i]; } }while(0)
+        (M)[i]=MOM*(M)[i]+(G)[i]; \
+        (W)[i]=(1.0-lr*(WDV))*(W)[i]-lr*(M)[i]; } }while(0)
     UPD(m->W1,m->mW1,m->gW1,FEAT*H1,WD);
     UPD(m->b1,m->mb1,m->gb1,H1,0.0);
     UPD(m->W2,m->mW2,m->gW2,H1*H2,WD);
@@ -365,9 +367,12 @@ static void eval_split(met* mo, met* ms, const model* md,
         m->macro_f1=f1/(double)NCLASS;
         double po=(double)m->exact/(double)m->n, pe=0;
         for(size_t c=0;c<NCLASS;c++){
-            double rt=0, ct=0;
-            for(size_t r=0;r<NCLASS;r++){ rt+=m->cm[r][c]; ct+=m->cm[r][c]; }
-            pe += (rt>0)? (rt/(double)m->n)*(ct/(double)m->n) : 0.0;
+            double true_count=0, pred_count=0;
+            for(size_t r=0;r<NCLASS;r++) {
+                true_count += m->cm[c][r];
+                pred_count += m->cm[r][c];
+            }
+            pe += (true_count/(double)m->n)*(pred_count/(double)m->n);
         }
         m->kappa = (pe<1.0)? (po-pe)/(1.0-pe) : 0.0;
     }
@@ -548,9 +553,9 @@ static void gradcheck(void){
     double* X = m.Xb;                 /* bindings read these in place */
     int*    L =(int*)xcalloc(n,8,"gL");
     rseed(SEED^0x5EEDu);
-    for(size_t i=0;i<FEAT*H1;i++)   m.W1[i]=gauss_()*sqrt(2.0/(double)FEAT);
-    for(size_t i=0;i<H1*H2;i++)     m.W2[i]=gauss_()*sqrt(2.0/(double)H1);
-    for(size_t i=0;i<H2*NCLASS;i++) m.W3[i]=gauss_()*sqrt(2.0/(double)H2);
+    for(size_t i=0;i<FEAT*H1;i++)   m.W1[i]=gauss_()*sqrt(2.0/((double)FEAT+(double)H1));
+    for(size_t i=0;i<H1*H2;i++)     m.W2[i]=gauss_()*sqrt(2.0/((double)H1+(double)H2));
+    for(size_t i=0;i<H2*NCLASS;i++) m.W3[i]=gauss_()*sqrt(2.0/((double)H2+(double)NCLASS));
     for(size_t i=0;i<n*FEAT;i++) X[i]=gauss_();
     for(size_t i=0;i<n;i++){
         L[i]=(int)((u01()*(double)NCLASS));
@@ -585,13 +590,12 @@ static void gradcheck(void){
             for(size_t j=0;j<H2;j++){ double s=(M).b2[j]; \
                 for(size_t k=0;k<H1;k++) s+=h1[k]*(M).W2[k*H2+j]; \
                 h2[j]=tanh(s);} \
-            double mx=-1e30; double zz[NCMAX]; \
+            double mx=-INFINITY; double zz[NCMAX]; \
             for(size_t c=0;c<NCLASS;c++){ double s=(M).b3[c]; \
                 for(size_t j=0;j<H2;j++) s+=h2[j]*(M).W3[j*NCLASS+c]; \
                 zz[c]=s; if(s>mx) mx=s; } \
             double lse=0; for(size_t c=0;c<NCLASS;c++) lse+=exp(zz[c]-mx); \
-            lse=log(lse)+mx; \
-            ce += -(zz[L[i]]-lse); \
+            ce += -((zz[L[i]]-mx)-log(lse)); \
         } \
         ce /= (double)n; \
     }while(0)
@@ -758,11 +762,14 @@ int main(int argc, char** argv){
         }
         for(size_t s=0; s<nfit; s+=BATCH){
             size_t rows=nfit-s; if(rows>BATCH) rows=BATCH;
-            for(size_t r=0;r<BATCH;r++){        /* last batch padded by replay */
-                size_t src=idx[s+(r%rows)];
+            for(size_t r=0;r<BATCH;r++){        /* replay with equal tail weights */
+                size_t copy=r%rows;
+                size_t repeats=BATCH/rows+(copy<BATCH%rows);
+                double row_weight=(double)BATCH/((double)rows*(double)repeats);
+                size_t src=idx[s+copy];
                 memcpy(m.Xb+r*FEAT,tr.X+src*FEAT,FEAT*8);
                 for(size_t c=0;c<NCLASS;c++) m.Tb[r*NCLASS+c]=0.0;
-                m.Tb[r*NCLASS+tr.L[src]]=1.0;
+                m.Tb[r*NCLASS+tr.L[src]]=row_weight;
             }
             double lr = lancius_lr_warmup_cosine((int)g_step,(int)warmup,
                                                  (int)total_steps,LR,lr_min);

@@ -7,6 +7,27 @@
 /* Private pi literal: M_PI is not standard C11. */
 static const double LANCIUS_TRAIN_PI = 3.14159265358979323846;
 
+/* LAPACK-style scaled sum of squares. `scale * sqrt(ssq)` is the norm, while
+ * the pair remains useful even when that product exceeds DBL_MAX. */
+static void lassq_add(double x, double *scale, double *ssq)
+{
+    double ax = fabs(x);
+    if (ax == 0.0) return;
+    if (*scale < ax) {
+        double r = *scale / ax;
+        *ssq = 1.0 + *ssq * r * r;
+        *scale = ax;
+    } else {
+        double r = ax / *scale;
+        *ssq += r * r;
+    }
+}
+
+static double lassq_norm(double scale, double ssq)
+{
+    return scale == 0.0 ? 0.0 : scale * sqrt(ssq);
+}
+
 void lancius_sgd_step(double *w, const double *g, size_t n, double lr)
 {
     size_t i;
@@ -98,8 +119,8 @@ void lancius_adamw_step(double *w, double *m, double *v, const double *g, size_t
 
 double lancius_clip_grad_norm(double *g, size_t n, double max_norm)
 {
-    double sum = 0.0;
-    double norm;
+    double scale = 0.0, ssq = 1.0, norm;
+    int has_nan = 0, has_inf = 0;
     size_t i;
 
     if (g == NULL) {
@@ -110,22 +131,25 @@ double lancius_clip_grad_norm(double *g, size_t n, double max_norm)
         return 0.0;
     }
     for (i = 0; i < n; ++i) {
-        sum += g[i] * g[i];
+        if (isnan(g[i])) has_nan = 1;
+        else if (isinf(g[i])) has_inf = 1;
+        else lassq_add(g[i], &scale, &ssq);
     }
-    norm = sqrt(sum);
+    norm = has_nan ? NAN : (has_inf ? INFINITY : lassq_norm(scale, ssq));
     if (!isfinite(max_norm) || !(max_norm > 0.0)) {
         lancius_set_error(LANCIUS_ERROR_NUMERICAL);
         return norm;
     }
-    /* Never rescale zero / NaN / Inf norms: return honestly, leave untouched. */
-    if (!isfinite(norm) || !(norm > 0.0)) {
-        return norm;
-    }
-    /* Exact: iff norm > max_norm, scale *= max_norm / norm */
-    if (norm > max_norm) {
-        double scale = max_norm / norm;
-        for (i = 0; i < n; ++i) {
-            g[i] *= scale;
+    if (has_nan || has_inf) return norm;
+    if (!(scale > 0.0)) return norm;
+    /* Compare without forming a possibly overflowing norm. */
+    {
+        double root_ssq = sqrt(ssq);
+        if (scale > max_norm / root_ssq) {
+            double clipped_scale = max_norm / root_ssq;
+            /* Divide before multiplying so max_norm/scale cannot underflow
+             * for a finite gradient near DBL_MAX and a small clip limit. */
+            for (i = 0; i < n; ++i) g[i] = (g[i] / scale) * clipped_scale;
         }
     }
     return norm;
@@ -134,8 +158,8 @@ double lancius_clip_grad_norm(double *g, size_t n, double max_norm)
 double lancius_clip_global_norm(double **gs, const size_t *ns, size_t ntensors,
                                  double max_norm)
 {
-    double sum = 0.0;
-    double norm;
+    double scale = 0.0, ssq = 1.0, norm;
+    int has_nan = 0, has_inf = 0;
     size_t t, i;
 
     if (ntensors == 0) {
@@ -151,23 +175,27 @@ double lancius_clip_global_norm(double **gs, const size_t *ns, size_t ntensors,
             return 0.0;
         }
         for (i = 0; i < ns[t]; ++i) {
-            sum += gs[t][i] * gs[t][i];
+            if (isnan(gs[t][i])) has_nan = 1;
+            else if (isinf(gs[t][i])) has_inf = 1;
+            else lassq_add(gs[t][i], &scale, &ssq);
         }
     }
-    norm = sqrt(sum);
+    norm = has_nan ? NAN : (has_inf ? INFINITY : lassq_norm(scale, ssq));
     if (!isfinite(max_norm) || !(max_norm > 0.0)) {
         lancius_set_error(LANCIUS_ERROR_NUMERICAL);
         return norm;
     }
-    /* Never rescale zero / NaN / Inf totals: honest no-op. */
-    if (!isfinite(norm) || !(norm > 0.0)) {
-        return norm;
-    }
-    if (norm > max_norm) {
-        double scale = max_norm / norm;
-        for (t = 0; t < ntensors; ++t) {
-            for (i = 0; i < ns[t]; ++i) {
-                gs[t][i] *= scale;
+    if (has_nan || has_inf) return norm;
+    if (!(scale > 0.0)) return norm;
+    /* Compare without forming a possibly overflowing norm. */
+    {
+        double root_ssq = sqrt(ssq);
+        if (scale > max_norm / root_ssq) {
+            double clipped_scale = max_norm / root_ssq;
+            for (t = 0; t < ntensors; ++t) {
+                for (i = 0; i < ns[t]; ++i) {
+                    gs[t][i] = (gs[t][i] / scale) * clipped_scale;
+                }
             }
         }
     }
@@ -218,13 +246,15 @@ double lancius_lr_warmup_cosine(int step, int warmup, int total,
     if (step >= total) {
         return lr_min;
     }
+    /* A warmup that consumes the whole schedule has no cosine phase. Use the
+     * well-defined cosine schedule rather than ramping to the peak then
+     * jumping abruptly to lr_min at `total`. */
+    if (warmup >= total) {
+        return lancius_lr_cosine(step, total, lr_max, lr_min);
+    }
     /* Linear warmup: lr_min -> lr_max over [0, warmup). */
     if (warmup > 0 && step < warmup) {
         return lr_min + (lr_max - lr_min) * ((double)step / (double)warmup);
-    }
-    /* Degenerate: warmed past total, nothing left to decay. */
-    if (total <= warmup) {
-        return lr_min;
     }
     /* Cosine decay over [warmup, total]: pi*(step-warmup)/(total-warmup). */
     progress = (double)(step - warmup) / (double)(total - warmup);

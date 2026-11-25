@@ -299,14 +299,16 @@ int main() {
     MNIST_NEED(out_batch, "out_batch");
     double* vm_inputs[5] = {x_batch, w1, b1_d, w2, b2_d};
 
-    for(int i=0; i<=te_n - BATCH_SIZE; i+=BATCH_SIZE) {
+    for(int i=0; i<te_n; i+=BATCH_SIZE) {
+        int rows = te_n - i;
+        if (rows > BATCH_SIZE) rows = BATCH_SIZE;
         for(int b=0; b<BATCH_SIZE; b++) {
-            int idx = i+b;
+            int idx = i + (b < rows ? b : rows - 1);
             for(int p=0; p<784; p++) x_batch[b*784 + p] = (te_X[idx*784 + p] / 255.0) - 0.5; // Zero-Mean Centering
         }
         /* Despot V9: bounded VM execution (was unbounded out write). */
         lancius_vm_execute_checked(prog, vm_inputs, out_batch, (size_t)BATCH_SIZE * 10, scratch);
-        for(int b=0; b<BATCH_SIZE; b++) {
+        for(int b=0; b<rows; b++) {
             int pred = 0; double max_logit = -1e9;
             for(int c=0; c<10; c++) {
                 if(out_batch[b*10 + c] > max_logit) { max_logit = out_batch[b*10 + c]; pred = c; }

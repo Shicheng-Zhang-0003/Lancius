@@ -23,8 +23,8 @@
  * rows*NCLASS; softmax CE would give (1/rows)*(softmax(z)-T), NOT
  * (1/rows)*(z-T) -- the two differ by the softmax Jacobian, which is
  * input-dependent, so no constant converts one into the other. The step-size
- * factor below is lr_eff = LR*NCLASS/2, which restores the step FORM a mean-CE
- * trainer takes rather than claiming the gradients are equivalent. See
+ * factor below is lr_eff = LR*NCLASS/2, which scales the MSE residual update
+ * to 1/rows; it does not make that update a mean-CE gradient. See
  * examples/train_prm_verifier.c for the full derivation and the measurement.
  */
 #include <stdio.h>
@@ -129,7 +129,8 @@ static void minit(model* m){
     m->gb2=(double*)xcalloc(NCLASS,sizeof(double),"gb2");
     m->Xb=(double*)xcalloc(BATCH*FEAT,sizeof(double),"Xb");
     m->Tb=(double*)xcalloc(BATCH*NCLASS,sizeof(double),"Tb");
-    double s1=sqrt(2.0/FEAT), s2=sqrt(2.0/(double)H);
+    double s1=sqrt(2.0/(double)(FEAT+H));
+    double s2=sqrt(2.0/(double)(H+NCLASS));
     for(size_t i=0;i<FEAT*H;i++) m->W1[i]=gauss_()*s1;
     for(size_t i=0;i<H*NCLASS;i++) m->W2[i]=gauss_()*s2;
 }
@@ -280,9 +281,12 @@ static void macc(met* m,const model* md,const double* X,const int* L,const int* 
     m->macro_f1=f1/NCLASS;
     double po=m->n?(double)correct/(double)m->n:0.0, pe=0;
     for(int c=0;c<NCLASS;c++){
-        double rt=0,ct=0;
-        for(int r=0;r<NCLASS;r++){ rt+=m->cm[r][c]; ct+=m->cm[r][c]; }
-        pe += (m->n&&rt>0)? (rt/m->n)*(ct/m->n) : 0.0;
+        double true_count=0,pred_count=0;
+        for(int r=0;r<NCLASS;r++) {
+            true_count += m->cm[c][r];
+            pred_count += m->cm[r][c];
+        }
+        pe += (m->n)? (true_count/m->n)*(pred_count/m->n) : 0.0;
     }
     m->kappa = (pe<1.0)? (po-pe)/(1.0-pe) : 0.0;
     free(z);
@@ -461,8 +465,8 @@ static void gradcheck(void){
     double* T =(double*)xcalloc(n*NCLASS,sizeof(double),"gT");
     int*   L =(int*)xcalloc(n,sizeof(int),"gL");
     rseed(SEED^0x5EEDu);
-    for(size_t i=0;i<FEAT*H;i++) W1[i]=gauss_()*sqrt(2.0/FEAT);
-    for(size_t i=0;i<H*NCLASS;i++) W2[i]=gauss_()*sqrt(2.0/(double)H);
+    for(size_t i=0;i<FEAT*H;i++) W1[i]=gauss_()*sqrt(2.0/(double)(FEAT+H));
+    for(size_t i=0;i<H*NCLASS;i++) W2[i]=gauss_()*sqrt(2.0/(double)(H+NCLASS));
     for(size_t i=0;i<n*FEAT;i++) X[i]=gauss_();
     for(size_t i=0;i<n;i++){ L[i]=(int)(u01()*NCLASS)%NCLASS;
         for(int c=0;c<NCLASS;c++) T[i*NCLASS+c]=0.0;

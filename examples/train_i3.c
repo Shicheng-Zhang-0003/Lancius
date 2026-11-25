@@ -3,7 +3,8 @@
  *
  * Architecture identical to examples/train_gen1.c:
  *   65 feats -> H1 (tanh) -> H2 (tanh) -> 5 classes, SGDM on
- *   mean((logits-onehot)^2) with the lr_eff = LR*NCLASS/2 MNB correction.
+ *   mean((logits-onehot)^2); lr_eff=LR*NCLASS/2 scales the MSE residual
+ *   update to 1/rows, but does not make it a cross-entropy gradient.
  *
  * Deltas vs train_gen1.c:
  *   --init-from <path>   warm-start the six parameter tensors from a
@@ -141,7 +142,9 @@ static void minit(model* m){
     m->gb3=(double*)xcalloc((size_t)NCLASS,sizeof(double),"gb3");
     m->Xb=(double*)xcalloc(BATCH*FEAT,sizeof(double),"Xb");
     m->Tb=(double*)xcalloc(BATCH*(size_t)NCLASS,sizeof(double),"Tb");
-    double s1=sqrt(2.0/FEAT), s2=sqrt(2.0/(double)H1), s3=sqrt(2.0/(double)H2);
+    double s1=sqrt(2.0/(double)(FEAT+H1));
+    double s2=sqrt(2.0/(double)(H1+H2));
+    double s3=sqrt(2.0/(double)(H2+NCLASS));
     for(size_t i=0;i<(size_t)FEAT*H1;i++) m->W1[i]=gauss_()*s1;
     for(size_t i=0;i<H1*H2;i++) m->W2[i]=gauss_()*s2;
     for(size_t i=0;i<H2*(size_t)NCLASS;i++) m->W3[i]=gauss_()*s3;
@@ -363,9 +366,12 @@ static void macc(met* m,const model* md,const double* X,const int* L,const int* 
     m->macro_f1=f1/NCLASS;
     double po=m->n?(double)correct/(double)m->n:0.0, pe=0;
     for(int c=0;c<NCLASS;c++){
-        double rt=0,ct=0;
-        for(int r=0;r<NCLASS;r++){ rt+=m->cm[r][c]; ct+=m->cm[r][c]; }
-        pe += (m->n&&rt>0)? (rt/m->n)*(ct/m->n) : 0.0;
+        double true_count=0,pred_count=0;
+        for(int r=0;r<NCLASS;r++) {
+            true_count += m->cm[c][r];
+            pred_count += m->cm[r][c];
+        }
+        pe += (m->n)? (true_count/m->n)*(pred_count/m->n) : 0.0;
     }
     m->kappa = (pe<1.0)? (po-pe)/(1.0-pe) : 0.0;
     free(z);
@@ -518,9 +524,9 @@ static void gradcheck(void){
     double* T =(double*)xcalloc(n*NCLASS,sizeof(double),"gT");
     int*   L =(int*)xcalloc(n,sizeof(int),"gL");
     rseed(SEED^0x5EEDu);
-    for(size_t i=0;i<(size_t)FEAT*H1;i++) W1[i]=gauss_()*sqrt(2.0/FEAT);
-    for(size_t i=0;i<H1*H2;i++) W2[i]=gauss_()*sqrt(2.0/(double)H1);
-    for(size_t i=0;i<H2*(size_t)NCLASS;i++) W3[i]=gauss_()*sqrt(2.0/(double)H2);
+    for(size_t i=0;i<(size_t)FEAT*H1;i++) W1[i]=gauss_()*sqrt(2.0/(double)(FEAT+H1));
+    for(size_t i=0;i<H1*H2;i++) W2[i]=gauss_()*sqrt(2.0/(double)(H1+H2));
+    for(size_t i=0;i<H2*(size_t)NCLASS;i++) W3[i]=gauss_()*sqrt(2.0/(double)(H2+NCLASS));
     for(size_t i=0;i<n*FEAT;i++) X[i]=gauss_();
     for(size_t i=0;i<n;i++){ L[i]=(int)(u01()*NCLASS)%NCLASS;
         for(int c=0;c<NCLASS;c++) T[i*NCLASS+c]=0.0;

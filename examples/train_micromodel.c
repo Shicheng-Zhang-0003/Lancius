@@ -80,16 +80,18 @@ int main(int argc, char **argv) {
     double *b1 = (double*)calloc(16, sizeof(double));
     double *w2 = (double*)calloc(16, sizeof(double));
     double b2 = 0.0;
-    /* deterministic He-ish init via LCG */
+    /* Deterministic Glorot-uniform init for both tanh layers. */
     {
         unsigned long long s = 0x9E3779B97F4A7C15ULL;
+        double lim1 = sqrt(6.0 / ((double)feat + 16.0));
+        double lim2 = sqrt(6.0 / 17.0);
         for (size_t i = 0; i < (size_t)feat*16; i++) {
             s = s*6364136223846793005ULL+1442695040888963407ULL;
-            w1[i] = ((double)(s>>33)/(double)(1ULL<<31)-0.5) * sqrt(2.0/(double)feat);
+            w1[i] = ((double)(s>>33)/(double)(1ULL<<31)-0.5) * (2.0*lim1);
         }
         for (int i = 0; i < 16; i++) {
             s = s*6364136223846793005ULL+1442695040888963407ULL;
-            w2[i] = ((double)(s>>33)/(double)(1ULL<<31)-0.5) * sqrt(1.0/16.0);
+            w2[i] = ((double)(s>>33)/(double)(1ULL<<31)-0.5) * (2.0*lim2);
         }
     }
     double h[16], p;

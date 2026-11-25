@@ -222,8 +222,11 @@ static void execute_node_math(lancius_node* n) {
             for(size_t c=0; c<C; c++) sum_exp += exp(x[r*C+c] - max_val);
             /* Despot truth: degenerate softmax denominator is NUMERICAL, not 1e30.
                Must match BWD which fails loud — no silent masking. */
-            if (sum_exp <= 0.0 || sum_exp != sum_exp) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
-            double log_sum_exp = log(sum_exp) + max_val;
+            if (!(sum_exp > 0.0) || !isfinite(sum_exp)) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
+            /* Keep log-sum-exp shifted. Forming max_val + log(sum_exp) and
+             * then subtracting max_val loses log(sum_exp) when logits share
+             * a very large common offset. */
+            double log_sum_exp_shifted = log(sum_exp);
             for(size_t c=0; c<C; c++) {
                 double yc = y[r*C+c];
                 /* Despot V9 truth: NaN/Inf/negative targets are corrupt labels,
@@ -234,10 +237,15 @@ static void execute_node_math(lancius_node* n) {
                  * 0*log p is 0 by convention. Verified against torch: valid
                  * one-hot/soft targets agree to 1e-15; NaN now NUMERICAL. */
                 if (!isfinite(yc) || yc < 0.0) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
-                if (yc > 0.0) total_loss -= yc * (x[r*C+c] - log_sum_exp);
+                if (yc > 0.0) {
+                    double log_prob = (x[r*C+c] - max_val) - log_sum_exp_shifted;
+                    total_loss -= yc * log_prob;
+                    if (!isfinite(total_loss)) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
+                }
             }
         }
         n->runtime_data[0] = total_loss / R;
+        if (!isfinite(n->runtime_data[0])) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
         if (n->runtime_data[0] < 0.0 && n->runtime_data[0] > -1e-12) n->runtime_data[0] = 0.0;
         return;
     
@@ -262,16 +270,26 @@ static void execute_node_math(lancius_node* n) {
         for (size_t k = 0; k < R * C; k++) {
             if (!isfinite(y[k]) || y[k] < 0.0) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
         }
+        if (!isfinite(g[0])) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
         double scale = g[0] / R;
         for(size_t r=0; r<R; r++) {
             double max_val = x[r*C];
             for(size_t c=1; c<C; c++) if(x[r*C+c] > max_val) max_val = x[r*C+c];
             double sum_exp = 0.0;
             for(size_t c=0; c<C; c++) sum_exp += exp(x[r*C+c] - max_val);
-            if (sum_exp <= 0.0 || sum_exp != sum_exp) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
+            if (!(sum_exp > 0.0) || !isfinite(sum_exp)) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
+            double target_sum = 0.0;
+            for(size_t c=0; c<C; c++) target_sum += y[r*C+c];
+            if (!isfinite(target_sum)) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
             for(size_t c=0; c<C; c++) {
                 double sm = exp(x[r*C+c] - max_val) / sum_exp;
-                n->runtime_data[r*C+c] = (sm - y[r*C+c]) * scale;
+                /* d[-sum_c y_c log softmax(x)_c]/dx_j =
+                 * (sum_c y_c) softmax(x)_j - y_j. This also agrees with
+                 * the forward objective for finite nonnegative targets whose
+                 * rows are not normalized. */
+                double dx = (target_sum * sm - y[r*C+c]) * scale;
+                if (!isfinite(dx)) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
+                n->runtime_data[r*C+c] = dx;
             }
         }
         return;
@@ -523,9 +541,26 @@ static void execute_node_math(lancius_node* n) {
         if (!p || !t || !n->runtime_data) { lancius_set_error(LANCIUS_ERROR_NULL_PTR); return; }
         size_t pe = 0, te = 0;
         if (!lancius_node_elements_checked(n->inputs[0], &pe) || !lancius_node_elements_checked(n->inputs[1], &te) || pe != te || pe == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
-        double acc = 0.0;
-        for (size_t k = 0; k < pe; k++) { double d = p[k] - t[k]; acc += d * d; }
-        n->runtime_data[0] = acc / (double)pe;
+        /* Scaled sum of squares avoids overflowing d*d when the mean squared
+         * error itself is still representable. */
+        double scale = 0.0, ssq = 1.0;
+        for (size_t k = 0; k < pe; k++) {
+            double d = p[k] - t[k];
+            if (!isfinite(d)) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
+            double ad = fabs(d);
+            if (ad == 0.0) continue;
+            if (scale < ad) {
+                double q = scale / ad;
+                ssq = 1.0 + ssq * q * q;
+                scale = ad;
+            } else {
+                double q = ad / scale;
+                ssq += q * q;
+            }
+        }
+        double rms = scale == 0.0 ? 0.0 : scale * sqrt(ssq / (double)pe);
+        n->runtime_data[0] = rms * rms;
+        if (!isfinite(n->runtime_data[0])) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
         return;
     } else if (n->op == LANCIUS_OP_MSE_BWD) {
         if (!n->inputs || n->input_count < 3 || !n->inputs[0] || !n->inputs[1] || !n->inputs[2]) { lancius_set_error(LANCIUS_ERROR_GRAPH_INVALID); return; }
@@ -534,8 +569,15 @@ static void execute_node_math(lancius_node* n) {
         size_t pe = 0, te = 0, ge = 0;
         if (!lancius_node_elements_checked(n->inputs[0], &pe) || !lancius_node_elements_checked(n->inputs[1], &te) || pe != te || pe == 0) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
         if (!lancius_node_elements_checked(n->inputs[2], &ge) || ge != 1) { lancius_set_error(LANCIUS_ERROR_SHAPE_MISMATCH); return; }
-        double scale = (2.0 * g[0]) / (double)pe;
-        for (size_t k = 0; k < pe; k++) n->runtime_data[k] = scale * (p[k] - t[k]);
+        if (!isfinite(g[0])) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
+        double scale = 2.0 * (g[0] / (double)pe);
+        if (!isfinite(scale)) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
+        for (size_t k = 0; k < pe; k++) {
+            double d = p[k] - t[k];
+            double dp = scale * d;
+            if (!isfinite(d) || !isfinite(dp)) { lancius_set_error(LANCIUS_ERROR_NUMERICAL); return; }
+            n->runtime_data[k] = dp;
+        }
         return;
     }
     /* R3-1: N-dim reduction sorts after CONV2D, so like TANH/MSE it must

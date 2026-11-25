@@ -1,4 +1,5 @@
 #include <lancius.h>
+#include <lancius/lancius_train.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -256,26 +257,11 @@ int main() {
             if(tg->grad_nodes[b1->id] && tg->grad_nodes[b1->id]->runtime_data) memcpy(grad_b1, tg->grad_nodes[b1->id]->runtime_data, 120*sizeof(double));
             if(tg->grad_nodes[b2->id] && tg->grad_nodes[b2->id]->runtime_data) memcpy(grad_b2, tg->grad_nodes[b2->id]->runtime_data, 10*sizeof(double));
 
-            // V12 GLOBAL NORM CLIPPING (Preserves Gradient Direction)
-            double global_norm = 0.0;
-            for(size_t i=0; i<16*3*5*5; i++) global_norm += grad_w1[i] * grad_w1[i];
-            for(size_t i=0; i<32*16*5*5; i++) global_norm += grad_w2[i] * grad_w2[i];
-            for(size_t i=0; i<2048*120; i++) global_norm += grad_w3[i] * grad_w3[i];
-            for(size_t i=0; i<120*10; i++) global_norm += grad_w4[i] * grad_w4[i];
-            for(size_t i=0; i<120; i++) global_norm += grad_b1[i] * grad_b1[i];
-            for(size_t i=0; i<10; i++) global_norm += grad_b2[i] * grad_b2[i];
-            global_norm = sqrt(global_norm);
-            
-            double max_norm = 1.0;
-            if (global_norm > max_norm) {
-                double scale = max_norm / (global_norm + 1e-6);
-                for(size_t i=0; i<16*3*5*5; i++) grad_w1[i] *= scale;
-                for(size_t i=0; i<32*16*5*5; i++) grad_w2[i] *= scale;
-                for(size_t i=0; i<2048*120; i++) grad_w3[i] *= scale;
-                for(size_t i=0; i<120*10; i++) grad_w4[i] *= scale;
-                for(size_t i=0; i<120; i++) grad_b1[i] *= scale;
-                for(size_t i=0; i<10; i++) grad_b2[i] *= scale;
-            }
+            double* grad_tensors[6] = {grad_w1, grad_w2, grad_w3,
+                                       grad_w4, grad_b1, grad_b2};
+            const size_t grad_sizes[6] = {16*3*5*5, 32*16*5*5,
+                                          2048*120, 120*10, 120, 10};
+            lancius_clip_global_norm(grad_tensors, grad_sizes, 6, 1.0);
 
             adam_step(w1, grad_w1, m_w1, v_w1, 16*3*5*5, lr, 0.9, 0.999, 1e-8, step);
             adam_step(w2, grad_w2, m_w2, v_w2, 32*16*5*5, lr, 0.9, 0.999, 1e-8, step);
@@ -321,10 +307,12 @@ int main() {
     // Hostile fix: track A2 (logits) by pointer identity via loss inputs[0].
     // A2 is fwd_to_full[orig A2 id]; loss_node is full CE; its inputs[0] is full A2.
     lancius_node* A2_full = (tg->loss_node && tg->loss_node->input_count > 0) ? (lancius_node*)tg->loss_node->inputs[0] : NULL;
-    for(int i=0; i<=NUM_TEST - BATCH_SIZE; i+=BATCH_SIZE) {
+    for(int i=0; i<NUM_TEST; i+=BATCH_SIZE) {
+        int rows = NUM_TEST - i;
+        if (rows > BATCH_SIZE) rows = BATCH_SIZE;
         memset(y_batch, 0, BATCH_SIZE * 10 * sizeof(double));
         for(int b=0; b<BATCH_SIZE; b++) {
-            int idx = i+b;
+            int idx = i + (b < rows ? b : rows - 1);
             for(int p=0; p<3072; p++) x_batch[b*3072 + p] = ((te_X[idx*3072 + p] / 255.0) - 0.5) / 0.5;
         }
         for(uint32_t w=0; w<sched->wave_count; w++) {
@@ -340,7 +328,7 @@ int main() {
         /* Despot truth: break on missing logits still counted stale pred=0 as
          * correct when label was 0 (was: inflated accuracy). Skip instead. */
         if (!P_node || !P_node->runtime_data) continue;
-        for(int b=0; b<BATCH_SIZE; b++) {
+        for(int b=0; b<rows; b++) {
             int pred = 0; double max_logit = -1e9;
             for(int c=0; c<10; c++) {
                 if(P_node->runtime_data[b*10 + c] > max_logit) { max_logit = P_node->runtime_data[b*10 + c]; pred = c; }
