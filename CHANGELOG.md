@@ -1,6 +1,68 @@
 # Lancius Changelog
 
-## V1.2RC3.3 (2026-11-23) — corpus label-noise floor removed; all 4 family experts MAE < 1e-3
+## V1.2-RC3.4 (2026-11-25) — compact I6 flagship, expanded audit, training math corrections
+
+RC3.4 replaces the withdrawn RC3.3 I6 headline with a fresh four-expert model
+set and publishes its complete training and audit bundle. It retains the v2
+model format and stable C ABI. Training/runtime numerical behavior is
+corrected in this point release, so training losses and updates can differ
+from earlier releases.
+
+- **Compact I6 flagship.** Four 65→128→64→5 tanh experts, 17,029 parameters
+  each (68,116 across the family), train from fresh initialization on a
+  sparse seven-predicate schema. The 233,381-row corpus holds out whole
+  algorithms by family; the scaler is fit only on training algorithms, I3
+  warm starts are rejected, and the validation-selected logit scale is
+  folded into each exported model. Outputs are five-level verdicts and
+  continuous expected-level scores. These models judge checker-derived
+  features; they do not parse questions or solve free-form math.
+- **Held-out measurements.** All four families pass overall and local-step
+  continuous MAE and independently computed per-row MSE below `1e-3`. The
+  expanded stress harness samples 1,000 valid builder inputs for each of 150
+  algorithms, then crosses each input with all realizable verdict classes.
+  Each expert exactly matches 741,544 overall and 2,785,441 local-step
+  generated labels; all 68,056 condition slices have 100% exact-class
+  agreement. There were 57,300 unique sampled algorithm/parameter vectors,
+  six explicit edge inputs, zero build/candidate failures, and 8,482
+  unrealizable requests recorded and excluded. The generated-label results
+  are not a human-annotated or end-to-end math-solver benchmark.
+- **Complete I6 assets.** The GitHub release attaches the four exported
+  `.lancius` experts, best/last checkpoints and trainer logs, the exact
+  `corpus_verified/` dataset and train-only normalizer, and the full
+  scenario/step manifests and condition metrics from the expanded sweep.
+  The archive includes a per-file SHA-256 manifest and use notes.
+- **Training math and numerical stability.** Cross-entropy now evaluates
+  fully in shifted-logit space and its VJP handles non-normalized finite
+  nonnegative target rows. MSE uses an independently correct mean of squared
+  row errors with scaled accumulation; gradient clipping uses scaled sum of
+  squares so large finite gradients can still be clipped. Invalid/non-finite
+  intermediates fail with numerical errors. Degenerate warmup schedules use
+  the defined cosine schedule. Replayed fixed-batch tail rows are weighted
+  so their contribution remains the exact mean over real rows; I6 loss
+  reporting follows the same rule.
+- **Trainer/evaluation corrections.** I4 average precision groups tied
+  scores, Cohen's kappa uses true and predicted class marginals, and MNIST
+  and CIFAR-10 evaluate their final partial batches. Tanh examples use
+  Glorot scaling; CIFAR uses the shared global-norm clipper. I1–I3 retain
+  their legacy `mean_rel` feature contract while I6 uses its separate sparse
+  feature builder and matching `[-8,8]` input clamp.
+- **Obsolete external data integration removed.** Its submodule, bridge code,
+  sample trainer, audit, make targets, dependencies, and ignore rules are
+  removed.
+- **Documentation and audit records.** Release status, compatibility notes,
+  limitations, model card, current research plan, and per-condition accuracy
+  tables now distinguish the historical RC3.3 model from the RC3.4 model.
+  The original RC3.3 metric claims remain explicitly withdrawn.
+
+The complete release record is in
+`docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.4.md`; detailed I6 measurements
+and the scope limit are in `generation_1/I6/README.md`.
+
+**Verification:** `make check` passes (all 44 build targets present); all
+modified I6 Python modules pass `py_compile`; the expanded stress run passes
+its strict metric, condition-coverage, and perfect-accuracy gates.
+
+## V1.2RC3.3 (2026-11-23) — corpus label-noise floor removed; I6 metric claims corrected
 
 RC3.3 cuts from the unchanged v12R2 core — no format break, no ABI change,
 no numerical behaviour change — and carries the I6 label-noise floor removal
@@ -26,52 +88,28 @@ and all-4-expert training as its headline content:
   under the 5-class softmax, clipped to `(-1+1e-6, 1-1e-6)`. `-2` is
   reserved for non-logic faults and is returned by
   `continuous_verdict(..., fault_code=...)` before the logic readout.
-- **All 4 family experts achieve MAE < 1e-3.** Algebra expert (epoch 1:
-  val MAE 0.000322, test MAE 0.000192), Calculus expert (epoch 1:
-  val MAE 0.000461, test MAE 0.000813), Linear Algebra expert (epoch 16:
-  val MAE 0.000000, test MAE 0.000000), Number Theory expert (epoch 1:
-  val MAE 0.000000, test MAE 0.000000). All warm-started from
-  `generation_1/I3/alu_pool/alu_01.lancius`, 20 epochs, lr 0.0008,
-  `OMP_NUM_THREADS=2`, `OVERALL_REPEAT=4`, `POS_REPEAT=1`, hard-negative
-  frac 0.50 from epoch 2.
+- **I6 metric headline withdrawn after audit.** The published sub-millilevel
+  MAEs were computed from argmax class labels, not the continuous expected
+  level. The published MSE values were estimated as `MAE²`, which is not the
+  mean of squared per-row errors. A direct continuous-output audit found MAEs
+  from 0.0036 to 0.4209 across the saved experts and evaluation paths; none
+  established the `1e-3` target. The trainer now computes continuous MAE and
+  true per-row MSE from expected softmax levels; the saved artifacts still
+  need a fresh evaluation/retraining run before new headline metrics are
+  published. Training settings remain historical provenance, not proof of
+  those targets.
 - **Trainer sampling fixed:** `OVERALL_REPEAT=4`, `POS_REPEAT=1`. Shuffle
   before hard-negative replacement so the repeated verdict rows are not
   wiped out.
 - **Sequential orchestration:** `orchestrate_i6.py` defaults to one trainer
   at a time on a laptop-sensitive thermal profile.
-
-RC3.2 cuts from the unchanged v12R2 core — no format break, no ABI change,
-no numerical behaviour change — and carries the I5/I6 model-lineage batch as
-its headlining content:
-
-- **I6 flagship verifier** enters the tree as the RC3.2 front page:
-  `examples/train_i6.c` (65->4096->2560->5 CE trainer, warm start from the I3
-  ALU pool via `--init-from`, pinned `--mu-sd` normalizer, hard-negative
-  mining with `--hard-negative-frac`/`--hard-negative-start`, persistent
-  training graph, checkpoint/resume, `--verify-lancius` round-trip),
-  `generation_1/I6/gen_data_i6.py` (expanded 150-algorithm corpus, 8000
-  rows/level, hard-negative mining vs I3 ALU pool, deeper LONG derivations,
-  rebalanced regimes), `generation_1/I6/run_big_i6.py` (head-to-head vs all 12
-  I3 ALUs on identical cells), `generation_1/I6/paths.py` (repo resolution,
-  pinned normalizer, lancius locator), `generation_1/I6/README.md` (full
-  reproduce instructions), `examples/train_i6.c` linked in the makefile.
-  corpus/, models/, results_big/ are gitignored as generated/trained artifacts.
-- **I5 rules engine** enters the tree:
-  `examples/train_i5.c` (generic decision-surface trainer, CE loss, persistent
-  graph, row-agnostic export), `generation_1/I5/run_big_i5.py` (binary eval:
-  accuracy, MAE, MSE, ROC-AUC, threshold sweep), `generation_1/I5/paths.py`,
-  `generation_1/I5/README.md` ("Lancius as rules engine" framing), plus the
-  acquisition tools (`tools/acquire_and_train_i5.py`,
-  `tools/fire_data_acquire.py`, `tools/make_synthetic_corpus.py`) and the
-  checkpoint converter `bin_to_lancius.c`.
-- **Infrastructure:** `.gitignore` gains corpus/model/result ignore rules for
-  both generations plus `MATH_COMPENDIUM.md` and `I6_TRAINING_STATUS.md` as
-  dev-only artifacts; makefile gains `train_i5`/`train_i6` LINK rules and
-  registers both in BINS (43 binaries).
-- **Documentation:** `README.md` and `generation_1/README.md` span I1-I6 with
-  I5 as rules engine and I6 as flagship verifier targeting MAE/MSE < 1e-3;
-  `243-BDC/README.md` documents the cloned I4/I5 tracks alongside Idea1 and
-  LDFD.
+- **Documentation consolidation:** `README.md`, `STATUS.md`, `MANIFEST.md`,
+  `KNOWN_LIMITATIONS.md`, `generation_1/README.md`,
+  `generation_1/I6/README.md`, and `I6_TRAINING_STATUS.md` are aligned to
+  the RC3.3 state (I6 shape `65->4096->2560->5`, `corpus_clean/`,
+  `models_clean/`, four-family results, continuous verdict). Added
+  `docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.2.md` and
+  `GITHUB_RELEASE_V1.2-RC3.3.md`.
 
 ## V1.2RC3.2 (2026-11-06) — I6 flagship verifier lands; I5 rules engine enters tree
 
@@ -105,8 +143,7 @@ its headlining content:
   registers both in BINS (43 binaries).
 - **Documentation:** `README.md` and `generation_1/README.md` span I1-I6 with
   I5 as rules engine and I6 as flagship verifier targeting MAE/MSE < 1e-3;
-  `243-BDC/README.md` documents the cloned I4/I5 tracks alongside Idea1 and
-  LDFD.
+  the I4/I5 tracks are documented alongside Idea1.
 
 ## V1.2RC3.1 (2026-10-24) — shell fixes + model-release lineage (no format break, no ABI change, no numerical behaviour change)
 
@@ -161,7 +198,8 @@ global-norm clipping and a warmup+cosine schedule, but the drivers that actually
 trained the verifiers (`train_verifier5.c`, `train_gen1.c`, 731/721-line
 copy-forks) predated all of it: each rebuilt its graph from scratch for every
 batch, hand-rolled an MSE-on-logits objective with an `lr_eff = LR*NCLASS/2`
-step-size fudge (correct step form, wrong gradient — softmax Jacobian missing),
+step scaling (which normalizes the MSE residual step by rows but does not turn
+it into a CE gradient),
 shuffled each epoch with a partner-range permutation that is not Fisher-Yates,
 printed `-` for the loss it never read, never clipped, never scheduled LR,
 selected on overall-exact only, froze `--lancius-rows 256` into every export,
@@ -171,7 +209,8 @@ and stored nothing a crashed run could resume from.
 trainer (any FEAT/NCLASS/H1/H2 from `corpus.hdr`):
 
 - the framework's own fused softmax cross-entropy (`lancius_cross_entropy`,
-  exact VJP `(softmax-y)/R`); loss read every step; gradient-checked against
+  exact VJP `((sum(y)*softmax)-y)/R`, reducing to `(softmax-y)/R` for
+  normalized labels); loss read every step; gradient-checked against
   central differences to <1e-7 at both 512x256 and 4096x2560;
 - a persistent training graph — built once, INPUT buffers bound by pointer
   (the autodiff mirror shares `runtime_data`), so a step is one memcpy-into-
@@ -215,7 +254,7 @@ reaches val-exact 1.0000 / per-step 1.0000, held-out overall 0.9981
 row-count 1; resume picks up step 111 / best 0.9974 and anneals
 `0.0088 -> 0.000524` across the resumed epoch. Full-scale 4096x2560x5ep:
 555 steps in ~40 min, val-exact 1.0000 from step 220 on, held-out overall
-0.9968 / per-step 0.9999 / kappa 0.9960, export round-trip 7.1e-15 at row
+0.9968 / per-step 0.9999, export round-trip 7.1e-15 at row
 count 1; gradients on an objective that actually reads its loss stop
 needing the `lr_eff` rescue: the same LR that was tuned around a
 double-scaled MSE step anneals monotonically `0.0494 -> 0.0005` with no
@@ -348,6 +387,19 @@ been baselined.
 
 ## Despot audit V10.1 (2026-10-11) — why the model accuracies were low
 
+**Math correction (2026-11-23):** the original account below incorrectly
+described a scaled MSE residual step as if its gradient were equivalent to
+cross-entropy. For mean-element MSE the logit gradient is
+`2*(z-T)/(rows*NCLASS)`; for mean-row softmax CE it is
+`((sum(T)*softmax(z))-T)/rows`, reducing to `(softmax(z)-T)/rows` for
+one-hot targets. No constant converts the two. Multiplying the MSE update rate
+by `NCLASS/2` only changes its scale to `1/rows`; it remains an MSE update.
+The PRM framework trainer now optimizes CE directly. The older Gen1/I3
+trainers retain MSE as their stated objective. Historical C-trainer kappa
+values are also withdrawn: their confusion-matrix calculation used predicted
+class counts for both marginals. The source formula is corrected; values need
+recomputation before reuse.
+
 Every `examples/` trainer was run to completion and its reported accuracy
 traced to a cause. Three causes, one of them a genuine defect that the V10
 audit had *documented in prose and then left in the code*.
@@ -359,11 +411,9 @@ audit had *documented in prose and then left in the code*.
   **1/rows^2**). The in-code comment justified this by asserting softmax CE
   gives `dCE/dz = (1/rows)*(z-T)` — false; the truth is
   `(1/rows)*(softmax(z)-T)`, and the two differ by the softmax Jacobian, which
-  is input-dependent, so no constant converts one into the other. The correct
-  relationship is the constant `2/NCLASS`, which §18.2 of
-  `docs/DESPOT_TRUTH_V2.md` had already written down. Corrected to
-  `lr_eff = LR*NCLASS/2`, the unique constant turning the step into
-  `LR*(1/rows)*sum_r(z_r-T_r)*x_r` — the form a mean-CE trainer takes. The
+  is input-dependent, so no constant converts one gradient into the other.
+  Corrected to `lr_eff = LR*NCLASS/2`, the MSE update is scaled to
+  `LR*(1/rows)*sum_r(z_r-T_r)*x_r`; this remains an MSE-residual update. The
   shipped factor had no closed-form equivalent; at rows=1024 it was 2304x too
   small. Behavioural proof, 25 epochs, same data, same LR:
   batch 64/256/1024 = 0.4913/0.4821/**0.3306** before, **0.5055/0.5030/0.5155**
@@ -373,7 +423,8 @@ audit had *documented in prose and then left in the code*.
   binding constraint there — see the ceiling result below. `tools/prm/ref_prm.c`
   updated in lockstep: its `LR*(2/pe)*(2/NCLASS)` was a *faithful* mirror of the
   buggy step, which is why its 0.4959 tracking the framework's 0.4957 to four
-  decimals was evidence of a shared defect, not of correctness.
+  decimals was evidence of a shared defect, not of correctness. Those are
+  historical results; current PRM CE results have not been rerun.
 - Measurement: the PRM 3-class accuracy is a **feature ceiling, not a training
   failure**. A tuned linear softmax classifier on the same 16 byte-level
   features reaches **test acc 0.4870, CE 0.9972**; the nonlinear Lancius model
@@ -418,8 +469,9 @@ audit had *documented in prose and then left in the code*.
   `train_gen1.c` and `tools/prm/ref_prm.c`; **absent** from
   `train_prm_verifier.c:85`, which braces the `if` correctly. Caught by
   recomputing the matrix the same run printed: verifier5's `0.6385` is
-  **0.9971**, Gen1's `0.6172` is **0.8941**. Accuracy, MAE and kappa were never
-  affected, so every accuracy claim in this record stands; the published
+  **0.9971**, Gen1's `0.6172` is **0.8941**. Accuracy and MAE were not
+  affected by that macro-F1 defect; the separate kappa marginal bug is noted
+  above, so those kappa values are withdrawn. The published
   "verifiers have low macro-F1" reading was an artifact of the metric, not of
   the models.
 - Operational: `--lr` added to `train_gen1.c` so the corrected convention can be
@@ -740,193 +792,7 @@ source lines exceed, `//` for single-line comments vs the uniformly-actual
 the document describes it accurately.
 
 
-## 3463-LDFD integration — dataset acquisition stops being manual
-
-Lancius can now acquire its own datasets. `manage_datasets.py download`
-routes through the Live Data Feeding Framework (3463-LDFD, submodule) when
-its shared library is present, and falls back to the hardened urllib path
-when it is not, so the command works either way. `make check` gains an
-`ldfd-test` stage that reports an honest SKIP rather than a silent pass.
-
-Nine defects in 3463 were fixed first, because ingesting data through a
-component that silently corrupts it is worse than not ingesting at all:
-
-- `assoc.c`: NULL row callback was a guaranteed SIGSEGV on the first data
-  row (ASan: `SEGV on unknown address 0x0`); both `_new()` constructors now
-  refuse NULL. Headerless feeds emitted **zero** rows — the documented
-  positional fallback was unreachable because rows were only forwarded
-  after a header was seen; preamble lines are now distinguished from data
-  rows by their first byte. A row over `ASSOC_MAX_LINE` (1MB) was silently
-  truncated and emitted, producing a plausible-but-wrong number; it is now
-  rejected whole. Rows over `ASSOC_MAX_COLS` are rejected instead of
-  truncated. RFC4180 `""` now collapses to one quote inside a quoted field
-  (was kept as two). GBIF: a value containing the literal text `"results"`
-  hijacked the key scan and failed the page; a malformed tail returned -1
-  with `kept`/`skipped` still zero even though callbacks had fired.
-  `ASSOC_MAX_COLS` raised 32 -> 64.
-- `fetch.c`: the async loop set `still_running = 0` after the **first**
-  completed transfer, so every sibling source was abandoned mid-flight and
-  its easy handle leaked (`curl_multi_cleanup` refuses to run with handles
-  attached). Now owned by curl, with an exhaustive detach-on-exit sweep.
-  `interval_sec` was parsed, stored, printed by both examples — and read by
-  nothing; there is now a real monotonic-clock scheduler that re-polls.
-- `parser_csv.c`/`parser_json.c`: a re-used parser kept `header_done` set
-  and the JSON buffer non-empty, so every re-poll after the first re-emitted
-  the CSV header row as a data record (a 1s-interval source produced a bogus
-  leading record every poll) and JSON documents concatenated. New optional
-  `snap_parser.reset` clears per-response state while keeping the caller's
-  callback — freeing and re-initing the context instead dropped the
-  callback, which would have made a re-polled source go silent.
-- `context.c`: `curl_global_init`/`cleanup` ran once per context, so two
-  live contexts meant two inits and one cleanup, tearing down libcurl global
-  state under the survivor. Now one `pthread_once` init, never cleaned up.
-  Parser-init failure was ignored, leaving a pipeline with a NULL context.
-- `fetch.c`: `CURLOPT_FOLLOWLOCATION` replayed `CURLOPT_HTTPHEADER`, so an
-  `auth_header` was re-sent to whatever host a redirect named. Added
-  `PROTOCOLS`/`REDIR_PROTOCOLS` (http/https only), `UNRESTRICTED_AUTH=0`,
-  and explicit `SSL_VERIFYPEER`/`VERIFYHOST`.
-- `snapshot.h` included `<curl/curl.h>` unconditionally, so the buffer and
-  the parsers required libcurl headers to compile at all. The multi handle
-  is now `void*`; only `fetch.c` sees curl.
-
-New capability:
-
-- `src/output.c`: the output stage existed only as seven undefined externs.
-  Real sinks now: `snap_file_output` (atomic append, `fflush` failure
-  surfaced), `snap_callback_output`, and a CSV-rows-to-JSONL sink that is
-  the integration seam into `data_text/`. The 4 unimplemented transforms
-  and 3 unimplemented outputs were deleted from the header rather than left
-  to fail at link time.
-- `src/decompress.c`: streaming gzip (zlib) and a tar reader, because the
-  corpus is MNIST `.gz` and CIFAR-10 `.tar.gz`. gzip accepts 1-byte chunks
-  and rejects truncated streams instead of returning a partial dataset; tar
-  verifies header checksums, honours GNU `L` and pax `path=` long names,
-  refuses `..` members, and contains absolute paths under the destination.
-- `snap_fetch_to_buffer`: one-shot raw fetch with a size cap and HTTP >= 400
-  reported as an error, so a saved error page is never mistaken for data.
-- `ldfd_bridge.py` + `audit_ldfd_bridge.py`: ctypes seam. It deliberately
-  exposes only buffer-in/buffer-out entry points, so nothing is called back
-  into Python from C. The audit compiles against the C headers to assert
-  struct layout and enum values, and exits 77 (skip) when the library is
-  absent.
-- `examples/poll_once.c`: fetch once, inflate, optionally extract — the
-  shape the dataset layer uses. `fire_monitor`/`multi_pipeline` now use the
-  scheduler instead of hand-rolled `sleep()` loops.
-
-A second pass, found while hardening the debug/stress path:
-
-- `fetch.c`: `ctx_untrack_task` NULLed the completed task's slot but never
-  shrank `n_tasks`, so the async loop's own exit test (`n_tasks == 0`) could
-  never fire. A context whose sources were all one-shot finished its work and
-  then spun on a 250 ms timer until stopped. Now compacts on untrack.
-  Reproduced with a dedicated probe (`n_tasks` 1 -> 0 after the fix) and
-  pinned by `test_fetch.c::test_oneshot_loop_drains`.
-- `buffer.c`: growth arithmetic could wrap. `buf->len + len` overflowing
-  skipped the grow entirely and then `memcpy`'d past the end, and
-  `new_cap *= 2` wrapping to 0 spun forever. Now computed in the remaining
-  space with an explicit 1 TiB ceiling.
-- `output.c`: `strtod` maps overflow to +/-HUGE_VAL, and `%g` printed that
-  as `inf` / `nan` — not valid JSON, so one bad numeric field would poison
-  every downstream consumer. Non-finite and out-of-range values are now
-  emitted as strings, and finite numbers use the shortest representation that
-  round-trips (so `-113` stays `-113` instead of becoming
-  `-113.00000000000000`, which a bare `%.17g` would have produced).
-- `decompress.c`: tar `((size + 511) / 512) * 512` wrapped for a size near
-  SIZE_MAX, desynchronising every later offset; a member whose declared size
-  runs past the image is now rejected up front. gzip refused a chunk larger
-  than zlib's 32-bit `avail_in` rather than truncating the cast and feeding
-  inflate a prefix.
-- `manage_datasets.py` + `ldfd_bridge.py`: fetch failures can now be
-  reported before anything is written, and the landed file is renamed into
-  place only after a complete payload.
-
-Test evidence: `make -C 3463-LDFD test` — 4 dependency-free suites, 100
-checks, 0 failures (assoc scenarios, assoc regressions, core
-buffer/CSV/output, decompression), ASan/UBSan clean via `make sanitize`.
-The assoc regression suite was verified to FAIL 15/20 against the pre-fix
-`assoc.c`. `make test-fetch` needs libcurl headers and is an honest SKIP
-without them.
-
-**Real-libcurl verification (curl 8.5.0).** With libcurl present the fetch
-layer was exercised for the first time, and it found a bug the curl stub had
-been hiding: the async loop exited as soon as `curl_multi_perform` reported
-nothing in flight, but a periodic context is idle for the whole gap between
-polls. So `interval_sec` fetched exactly once and the loop was gone before the
-first deadline -- the feature the whole integration exists for was inert in
-production, while a stub that always had work made it look fine. The exit test
-now also asks whether any deadline is still ahead (`sched_has_pending`).
-Measured after the fix at 1s interval: 6 polls in 6s; at 3s: 2 polls in 6s.
-`tests/test_fetch.c` now passes 22/22 against real curl, including a new
-one-shot-termination test so the fix cannot be made by simply never exiting,
-and the interval checks were confirmed to FAIL when the fix is reverted.
-
-Also against real curl: `fetch_to_buffer` returns byte-exact payloads, an
-HTTP 404 is reported as an error rather than silently landing the error page
-as if it were data, and the size cap refuses instead of truncating.
-
-Other fixes found by having the headers available:
-
-- `fetch.c` used `CURLOPT_PROTOCOLS` / `CURLOPT_REDIR_PROTOCOLS`, deprecated
-  since curl 7.85. Now uses the `*_STR` variants when the headers provide
-  them, keeping the LONG forms for older curl.
-- `make test-fetch` linked `-lcjson` through the global `LDFLAGS` and so
-  required libcjson-dev even though the suite never calls cJSON; it now links
-  curl only and reports a cJSON requirement precisely if the parser vtables
-  `context.c` resolves cannot be found.
-- `make sanitize` no longer depends on `all`, so it works on a machine that
-  can run the tests but lacks the headers needed for the examples.
-
-**zlib was missing from the link line.** `src/decompress.c` needs zlib for
-gzip, but the makefile never put `-lz` in `LDFLAGS`. The build compiled every
-object cleanly and then failed at the very last link step with
-`undefined reference to 'inflateEnd'` / `DSO missing from command line`. That
-message reads like a broken zlib install; it was actually a missing flag, and
-`libz.so.1` was present the whole time. The makefile now queries zlib through
-pkg-config alongside curl and cJSON, with `-lz` as the fallback, and queries
-each module separately rather than in one `pkg-config --libs a b c` call --
-the single-call form fails wholesale if any one module is unknown, which would
-have silently dropped the multiarch include paths for the others too.
-
-**Two more bugs, found by running the examples rather than the tests.**
-Neither the unit suites nor `make check` build the examples, so both lived
-undetected until the binaries were actually run:
-
-- `snap_tar_extract` returned `SNAP_OK` with `files == 0` for any payload
-  shorter than one 512-byte block. `poll_once --extract-tar` on a plain CSV
-  printed "extracted 0 file(s)" and wrote nothing at all -- the download was
-  discarded with exit code 0. A tar is always a whole number of blocks, so an
-  unaligned payload is now rejected with `SNAP_ERR_PARSE`; a genuine empty
-  archive (two zero blocks) is still accepted. Three new checks cover this,
-  and they were confirmed to fail against the previous behaviour.
-- `poll_once` never created its destination directory. Pointed at a path that
-  did not exist it failed with "cannot write /tmp/x/f.csv", which reads like a
-  permissions problem rather than a missing directory. It now creates parents
-  like the tar path always did, and when `--extract-tar` is given a
-  non-archive it writes the payload instead of throwing it away.
-
-With cJSON installed, `make` now builds all three examples and
-`libsnapshot.so` (60 KB) with no warnings, `test-fetch` runs for real rather
-than reporting SKIP, and `audit_ldfd_bridge.py` reaches its live tier: 13/13.
-
-Final state of every suite on this machine:
-
-| suite | result |
-|---|---|
-| assoc regression | 20/20 |
-| assoc | 50/50 |
-| core | 35/35 |
-| decompress | 35/35 |
-| fetch (real curl) | 22/22 |
-| bridge audit (real .so) | 13/13 |
-| ASan/UBSan | all clean |
-| stress full | 23/23 release, 13/13 debug |
-| parent `make check` | pass |
-
-A note on why the curl stub was not good enough: it completed every handle on
-every pass, so the scheduler always had work to do. Real curl correctly
-reports zero running between transfers, which is precisely the state the exit
-test mishandled. Stub-based verification of concurrency logic is close to
-worthless; only a real library exercises the idle path.
+## Stress runner debug mode
 
 `run_stress.sh` gained a debug mode: it rebuilds the stress binaries into
 `build-debug/` with sanitizers so the release build and `liblancius.a` are

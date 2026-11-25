@@ -1,9 +1,15 @@
 # Lancius Current Status
 
-Current internal milestone: **v12R2**
+Current internal milestone: **v12R2** (point release **v12R2.4**)
 Previous internal milestone: **v12R1**
-Public equivalent: **V1.2RC3**
-Release line: **12 R2 development**
+Public equivalent: **V1.2-RC3.4**
+Release line: **12 R2 development — RC3.x model line**
+
+V1.2-RC3.4 publishes the compact four-family I6 verifier set, its corpus,
+checkpoints, and expanded stress audit. It also corrects training/runtime
+numerics and removes the obsolete dataset-bridge integration. The current
+release metrics and scope limits are recorded in `CHANGELOG.md` and
+`generation_1/I6/README.md`.
 
 ## Phase
 
@@ -25,19 +31,89 @@ Live v12R2 gate is Validation batch below (`make check/long/sanitizers`
 + despot probes + `probe_v6`); historical checklist above is not the
 current gate.
 
-## V1.2RC3.1 (2026-10-24): shell fixes + model-release lineage
+## RC3.x point releases (V1.2-RC3.1 → V1.2-RC3.4)
 
-The RC3.x line starts: model/dataset/fabric iterations cut from an unchanged
-`v12R2` core — no format break, no ABI change, no numerical change, so no
-MANIFEST contract movement and no `v12S` scope claim. This first point
-release fixes four composition-layer defects only (I2's removed-sentinel repo
-resolution + CLI locator backport, the CLI's three stale root-relative binary
-probes reporting 0/5 on a built tree, the `train_i3`/`train_i4` missing-BINS
-makefile omission, and the `generation_1` README/card count drift including
-the I1 58M claim and the "12 clones" pool wording), and puts I4 in the tree
-ahead of its release assets. Verified per fix in `CHANGELOG.md`; `make check`
-RC=0 with the batch in tree. The I3 verifier and the I4 export are the RC3.1
-assets; provenance blocks in `docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.1.md`.
+The RC3.x line carries development point releases. RC3.4 changes training and
+runtime numerical behavior but keeps the v2 model format and stable C ABI;
+it makes no `v12S` scope claim. The current point is `V1.2-RC3.4`.
+
+### V1.2RC3.1 (2026-10-24): shell fixes + model-release lineage
+
+The first point release fixes four composition-layer defects only (I2's
+removed-sentinel repo resolution + CLI locator backport, the CLI's three stale
+root-relative binary probes reporting 0/5 on a built tree, the
+`train_i3`/`train_i4` missing-BINS makefile omission, and the
+`generation_1` README/card count drift including the I1 58M claim and the
+"12 clones" pool wording), and puts I4 in the tree ahead of its release
+assets. Verified per fix in `CHANGELOG.md`; `make check` RC=0 with the batch
+in tree. The I3 verifier and the I4 export are the RC3.1 assets; provenance
+blocks in `docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.1.md`.
+
+### V1.2RC3.2 (2026-11-06): I6 flagship verifier lands; I5 rules engine
+
+RC3.2 brings the I6 lineage into the tree — `examples/train_i6.c`
+(65→4096→2560→5, fused cross-entropy, warm start from the I3 ALU pool, pinned
+normalizer, hard-negative mining, checkpoint/resume, `--verify-lancius`),
+`generation_1/I6/gen_data_i6.py`, `run_big_i6.py`, `paths.py`, and the model
+card — alongside the I5 generic decision-surface trainer and its evaluation
+and acquisition tooling. Corpus/model/result directories remain generated and
+gitignored. Full enumeration in `CHANGELOG.md`; release notes in
+`docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.2.md`.
+
+### V1.2-RC3.3 (2026-11-23): I6 corpus clean + all four experts (historical)
+
+The corpus label-noise floor is removed
+(`verifier5.level_realized()` is the single source of truth; the generator
+refuses unrealized labels; 0 conflicting labels across 11,349 train / 3,655
+test overall feature keys), feature 57 is `n_wrong` instead of `mean_rel`,
+and the verdict is continuous — expected level under the 5-class softmax,
+clipped to `(-1+1e-6, 1-1e-6)`, with `-2` reserved for non-logic faults.
+All four family experts are trained and exported; see the table below. Full
+enumeration in `CHANGELOG.md`; release notes in
+`docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.3.md`.
+
+### V1.2-RC3.4 (2026-11-25): compact I6 flagship + complete audit bundle
+
+RC3.4 uses four fresh 65→128→64→5 experts (17,029 parameters each), seven
+checker-derived features, algorithm-held-out splits, and independent
+continuous MAE/MSE. Each expert scored 100% exact agreement on 741,544
+overall and 2,785,441 local-step generated labels; 68,056 condition slices
+were all exact. These are generated feature-rule verdict results, not a
+human-judged math benchmark. The release attaches exports, training
+checkpoints/logs, the 233,381-row corpus and normalizer, and the full
+scenario-/step-level stress outputs. Numerical training corrections and
+obsolete external-data integration removal are also included. Details are in
+`docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.4.md`.
+
+## I6 verifier status (historical V1.2RC3.3 release)
+
+I6 keeps the proven `65 → 4096 → 2560 → 5` shape (10,771,461 parameters),
+warm-starts from `generation_1/I3/alu_pool/alu_01.lancius`, and routes rows
+to four family experts by `FAM_ID` (feature index 58): algebra, calculus,
+linear algebra, number theory. The corpus is
+`generation_1/I6/corpus_clean/` — 186,824 train / 46,706 test rows over 150
+algorithms and 5 levels.
+
+The previously published sub-millilevel results are withdrawn: the MAEs were
+computed from argmax labels, and the MSEs were estimated as `MAE²`. A direct
+continuous-output audit of the saved artifacts found MAE ranges of
+0.252607–0.258127 (algebra), 0.005315–0.010808 (calculus),
+0.003623–0.012003 (linear algebra), and 0.417701–0.420918 (number theory)
+across two evaluation paths. All miss the `1e-3` target. Corrected MSE for
+those artifacts has not been established. Training settings and export
+history are in `I6_TRAINING_STATUS.md` and `generation_1/I6/README.md`.
+
+## I6 current release status (V1.2-RC3.4)
+
+The current release uses four 65 → 128 → 64 → 5 experts, fresh
+initialization, seven checker-derived semantic coordinates, and
+algorithm-held-out train/validation/test splits. The 233,381-row corpus has
+zero label-rule mismatches and no algorithm overlap between splits. The
+held-out test metrics for all four experts pass the strict `1e-3` gates for
+both continuous expected-level MAE and independently computed per-row MSE,
+for overall rows and local-step rows. The 150-algorithm stress sweep matched
+all generated labels exactly across five levels and three tiers; see the I6
+README for condition-level continuous metrics and the I3 baseline comparison.
 
 ## v12R2 theme: mute mathematician learns (R2-1..R2-6)
 
@@ -102,32 +178,6 @@ Full per-batch record lives in `CHANGELOG.md`; essence only here
   v2 mkstemp/ftello/CONST/ROPE/scale; v1 tmp+FP32; quantizer/optimizer/vision;
   capped fetches; distill checks; tar-slip; .d purge. See CHANGELOG §V6
   and `docs/DESPOT_TRUTH_V2.md` §12 + `probe_v6`.
-
-## 3463-LDFD integration (live dataset acquisition)
-
-Datasets are no longer fetched by hand. `tools/data/manage_datasets.py` routes through
-the Lancius Live Data Feeding Framework (3463-LDFD, a submodule at
-`3463-LDFD/`, wired via `.gitmodules`) when `libsnapshot.so` is available,
-and falls back to the hardened urllib path when it is not:
-
-- `tools/data/manage_datasets.py status` reports which path is live.
-- `make ldfd-test` runs the LDFD suites plus the bridge audit; SKIPs
-  honestly when the library or its headers are absent, never silently
-  passes.
-- LDFD adds streaming gzip + tar decode, an atomic file sink, a real
-  `interval_sec` scheduler, and a buffer-only C entry point
-  (`snap_fetch_to_buffer`) so the Python side needs no ctypes callbacks.
-- MNIST and CIFAR-10 now land already decompressed/extracted, which is why
-  they can use the LDFD path; the remaining sets are plain `.jsonl`
-  (GSM8K, PRM800K, SVAMP) and go through unchanged.
-- Parquet (MATH, miniF2F, ProofWriter) and the RuleTaker clone still use
-  Python (`datasets`/pyarrow) — LDFD has no parquet codec, and adding one
-  is not justified when pyarrow is already a dependency of those sets.
-
-The integration landed on top of nine defect fixes in 3463 itself; see
-`CHANGELOG.md`. LDFD is a separate component with its own makefile and its
-own dependencies (libcurl, zlib), deliberately not folded into `all` so a
-machine without libcurl headers can still build and gate the ML runtime.
 
 ## Feature freeze
 
@@ -228,14 +278,6 @@ and `.tar.gz` digests cannot be compared across mirrors because gzip is not
 byte-reproducible, so datasets are verified by content rather than digest.
 
 ## Validation batch — v12R2
-
-3463-LDFD evidence: `make -C 3463-LDFD test` = 4 dependency-free suites,
-92 checks, 0 failures, ASan/UBSan clean. The assoc regression suite fails
-15/20 against the pre-fix code, so the fixes are pinned rather than
-asserted. `make ldfd-test` additionally runs `tools/audit/audit_ldfd_bridge.py`, which
-compiles against the C headers to prove the ctypes struct layout and enum
-values match, and exits 77 (skip) when the library is absent.
-
 
 Build clean under `-Wall -Wextra -Werror`; `audit_v7_hardening` 346/346
 (H1-H9: sticky-error contract, softmax/attention stability at |z|=1e5, arena

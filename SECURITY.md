@@ -62,9 +62,9 @@ CLI topk 1..100 + 100k display bound. See `CHANGELOG.md` and
   multiplication, and every absurd request returns `OVERFLOW` rather than
   wrapping into a multi-gigabyte grow. `H4` of the V7 audit pins the cap from
   both sides (`1<<60` refused, `1<<20` still honoured).
-- **Extraction is contained.** 3463-LDFD's tar reader rejects `../` members and
-  absolute-path members, and both the C and Python paths verify that nothing was
-  written outside the destination.
+- **Extraction is contained.** The Python archive readers reject `../` members
+  and absolute-path members, and verify that nothing was written outside the
+  destination.
 - **No shell, ever.** User-supplied paths reach external programs through
   `fork` + `execvp`; `os.system` is not used. `LANCIUS_DATA_DIR` cannot be used
   to inject a command or to point a destructive operation at `/`.

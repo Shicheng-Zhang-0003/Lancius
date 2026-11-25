@@ -1,0 +1,1923 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
+\documentclass[
+  10pt,
+]{article}
+\usepackage{xcolor}
+\usepackage[margin=0.82in]{geometry}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{longtable,booktabs,array}
+\newcounter{none} % for unnumbered tables
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\let\lanciusOriginalTableOfContents\tableofcontents
+\renewcommand{\tableofcontents}{\begingroup\small\lanciusOriginalTableOfContents\endgroup}
+\setlength{\emergencystretch}{2em}
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={Lancius Mathematics Engine: Research and Development Plan},
+  colorlinks=true,
+  linkcolor={blue},
+  filecolor={Maroon},
+  citecolor={Blue},
+  urlcolor={blue},
+  pdfcreator={LaTeX via pandoc}}
+
+\title{Lancius Mathematics Engine: Research and Development Plan}
+\author{}
+\date{2026-11-24}
+
+\begin{document}
+\maketitle
+
+{
+\setcounter{tocdepth}{1}
+\tableofcontents
+}
+\clearpage
+
+\textbf{Purpose:} establish a comprehensive, staged plan for making
+Lancius's mathematical reasoning more accurate, explainable, and
+resource-efficient.
+
+\textbf{Status:} research plan. It records directions to investigate and
+criteria for choosing them; it does not claim that the proposed
+algorithms have been implemented or benchmarked.
+
+\textbf{Starting-point snapshot:} 2026-11-24. The I6 baseline described
+below was recorded on that date. V1.2-RC3.4 publishes a later model with a
+different sparse input schema and held-out evaluation contract; see
+\href{../generation_1/I6/README.md}{\texttt{generation\_1/I6/README.md}}
+for its implementation and measurements.
+
+\section{1. Goal}\label{goal}
+
+Build a mathematics engine that can solve and check supported problems
+with exact arithmetic, explain each transformation, and reject or
+abstain on work outside its supported domain. Keep the trusted checker
+small. Let more complicated routines propose answers or proof steps,
+then require the checker to validate a compact certificate.
+
+For known, formalized mathematics, use the domain algorithm as the
+source of the result. Use learned or heuristic methods for parsing,
+candidate generation, and prioritizing work. Keep them outside the final
+trust boundary.
+
+The aim is a strong collection of dependable methods for specific
+mathematical domains. A single procedure that decides every mathematical
+theorem is not an achievable target: first-order logic is undecidable in
+general
+(\href{https://plato.stanford.edu/entries/goedel-incompleteness/}{Church's
+theorem}). Each solver therefore needs a stated domain, assumptions,
+resource limit, and failure mode.
+
+\section{2. Current starting point}\label{current-starting-point}
+
+\begin{itemize}
+\tightlist
+\item
+  \href{../tools/prm/algos.py}{\texttt{tools/prm/algos.py}} defines the
+  original mathematical workload with exact \texttt{Fraction} values and
+  canonical derivation steps. The verifier lineage has expanded this
+  into 150 algorithms across algebra, calculus, linear algebra, and
+  number theory.
+\item
+  \href{../tools/prm/verifier5.py}{\texttt{tools/prm/verifier5.py}}
+  computes exact step agreement and structural agreement, then emits
+  measurements used by the I6 training corpus.
+\item
+  The 2026-11-24 I6 baseline used a 65 → 4096 → 2560 → 5 network with
+  10,771,461 parameters per family expert. RC3.4 uses 65 → 128 → 64 → 5
+  with seven semantic inputs and 17,029 parameters per expert, fresh
+  initialization, and algorithm-held-out splits. See
+  \href{../generation_1/I6/README.md}{\texttt{generation\_1/I6/README.md}}.
+\item
+  The I6 feature schema changed coordinate 57 from \texttt{mean\_rel} to
+  \texttt{n\_wrong}; the earlier I1--I3 models retain the old meaning.
+  RC3.4 has a separate sparse feature-generation path
+  and rejects incompatible I3 warm starts. Preserve this separation in
+  any new corpus, checkpoint, or evaluator.
+\item
+  The retained I3 normalizer is not a fitted I6 z-score for
+  \texttt{n\_wrong}. Existing model artifacts depend on their training
+  transform. Future model formats should identify the feature schema and
+  normalizer explicitly.
+\item
+  Prior saved-model continuous-error claims were audited and withdrawn.
+  Any new algorithm should be compared with exact, per-row measurements
+  on a fixed evaluation set; no score should be inferred from argmax
+  accuracy or from \texttt{MAE²}.
+\end{itemize}
+
+\section{3. Target architecture}\label{target-architecture}
+
+\begin{center}
+\fbox{\begin{minipage}{0.92\linewidth}
+\centering
+\textbf{Problem or candidate derivation}\\[0.35em]
+$\downarrow$\\[0.25em]
+\textbf{Typed expression tree with domain and assumptions}\\[0.35em]
+$\downarrow$\\[0.25em]
+\textbf{Bounded exact solver}\\[-0.1em]
+{\small (heuristic or learned proposer may supply candidate steps)}\\[0.35em]
+$\downarrow$\\[0.25em]
+\textbf{Result and proof certificate} $\longrightarrow$ \textbf{Independent checker}\\[0.35em]
+$\downarrow$\\[0.25em]
+\textbf{Verified result or explicit unknown}
+\end{minipage}}
+\end{center}
+
+\subsection{Trust boundary}\label{trust-boundary}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Parser and type checker:} determine whether a symbol denotes
+  an integer, rational, real approximation, matrix, modular residue, or
+  proposition. Preserve the distinction between these domains.
+\item
+  \textbf{Solver:} simplify, solve, or construct a proof. It may be
+  optimized, heuristic, or eventually external.
+\item
+  \textbf{Certificate:} state the theorem, assumptions, rule
+  identifiers, substitutions, premises, and conclusion for each step.
+\item
+  \textbf{Checker:} independently confirm each local inference and the
+  final result using exact operations. A timeout, unsupported construct,
+  failed precondition, or invalid certificate returns \texttt{unknown}
+  or \texttt{invalid}; it never silently becomes a guessed answer.
+\end{enumerate}
+
+Lean uses a related arrangement: tactics construct proof terms and a
+small kernel checks them. This is a useful architecture to study,
+without requiring Lancius to adopt Lean as a runtime dependency.
+\href{https://lean-lang.org/doc/reference/latest/Elaboration-and-Compilation/}{Lean
+kernel and proof-checking reference}
+
+\section{4. Foundational mathematics to
+formalize}\label{foundational-mathematics-to-formalize}
+
+The first deliverable should be a versioned \textbf{mathematical
+contract}: exact definitions, preconditions, accepted input forms, and
+expected outputs for every supported rule. These are the rules the
+algorithms must preserve.
+
+\subsection{4.1 Logic and equality}\label{logic-and-equality}
+
+Implement the inference rules used by every later domain:
+
+\begin{itemize}
+\tightlist
+\item
+  Equality: reflexivity, symmetry, transitivity, and congruence.
+\item
+  Substitution: replace equals with equals only in a well-typed context.
+\item
+  Propositional logic: conjunction/disjunction introduction and
+  elimination, implication, modus ponens, negation, and contradiction.
+\item
+  Quantifiers: variable binding, capture-avoiding substitution, and
+  explicit universal instantiation where supported.
+\item
+  Equivalence: record both directions when a transformation is
+  reversible; record a one-way implication when it is not.
+\end{itemize}
+
+Every rule has a small checker and a certificate form. A proof step
+should identify the rule used rather than merely show two strings that
+appear equal.
+
+\subsection{4.2 Arithmetic domains}\label{arithmetic-domains}
+
+Represent the domain in the expression itself:
+
+\begin{itemize}
+\tightlist
+\item
+  Integers \(\mathbb Z\).
+\item
+  Rationals \(\mathbb Q\), represented as normalized \(p/q\), with
+  \(q>0\).
+\item
+  Modular integers \(\mathbb Z/n\mathbb Z\), with an explicit modulus.
+\item
+  Real numbers represented by exact algebraic objects or by certified
+  intervals when needed.
+\item
+  Floating point as a separate finite-precision domain, never as an
+  implicit substitute for exact real arithmetic.
+\end{itemize}
+
+Core laws include the semiring/ring laws, field laws when division is
+allowed, order laws, and the domain-specific rules for modular
+arithmetic. Division, square roots, logarithms, and inequality
+transformations must carry their preconditions.
+
+Examples of preconditions that must be represented:
+
+\begin{itemize}
+\tightlist
+\item
+  Dividing both sides by \(a\) requires \(a\ne0\).
+\item
+  Multiplying an inequality by a negative value reverses its direction.
+\item
+  Cancelling a factor requires proving it is nonzero.
+\item
+  \(\sqrt{x}\) over the reals requires \(x\ge0\).
+\item
+  Reducing a congruence or taking a modular inverse depends on the
+  modulus and, for inverses, coprimality.
+\end{itemize}
+
+\subsection{4.3 Algebra identities and
+equations}\label{algebra-identities-and-equations}
+
+Prioritize identities already represented in the corpus, then expand by
+demand:
+
+\begin{itemize}
+\tightlist
+\item
+  Linear equation: \(ax+b=c\), with explicit cases for \(a=0\).
+\item
+  Quadratic formula and discriminant: \(D=b^2-4ac\),
+  \(x=(-b\pm\sqrt D)/(2a)\), with \(a\ne0\) and real-domain checks.
+\item
+  Difference of squares, perfect-square trinomials, sums/differences of
+  cubes, binomial theorem, and polynomial expansion.
+\item
+  Arithmetic and geometric sequences and finite sums.
+\item
+  Polynomial equality and factorization over a declared coefficient
+  domain.
+\item
+  Rational-expression equality, with denominator restrictions retained.
+\end{itemize}
+
+\subsection{4.4 Number theory}\label{number-theory}
+
+\begin{itemize}
+\tightlist
+\item
+  Euclidean algorithm for \(\gcd(a,b)\).
+\item
+  Extended Euclidean algorithm for Bézout coefficients
+  \(ax+by=\gcd(a,b)\).
+\item
+  Divisibility, prime-factor checks within a bounded range, congruences,
+  and modular inverses.
+\item
+  Modular exponentiation by repeated squaring.
+\item
+  Integer square-root and perfect-square checks.
+\item
+  Later: stronger primality/factorization algorithms only if a real
+  workload requires them.
+\end{itemize}
+
+\subsection{4.5 Linear algebra}\label{linear-algebra}
+
+\begin{itemize}
+\tightlist
+\item
+  Row operations and their effect on the solution set.
+\item
+  Gaussian elimination for small rational systems, including pivoting,
+  rank, consistency, and free variables.
+\item
+  Determinant, inverse, nullspace, dot product, matrix-vector product,
+  and matrix identities.
+\item
+  For integer matrices, evaluate fraction-free Bareiss elimination
+  before standard rational elimination. Its updates use exact divisions
+  and can avoid large intermediate fractions; FLINT's algorithm notes
+  give a useful implementation reference, alongside Bareiss's original
+  paper.
+  \href{https://doi.org/10.1090/S0025-5718-1968-0226829-0}{Bareiss
+  paper},
+  \href{https://flintlib.org/doc/algorithms/linear-algebra/fraction-free.html}{FLINT
+  fraction-free elimination}.
+\end{itemize}
+
+\subsection{4.6 Calculus}\label{calculus}
+
+Start with the parts having small exact checkers:
+
+\begin{itemize}
+\tightlist
+\item
+  Derivative of constants, sums, products, quotients, integer powers,
+  and compositions.
+\item
+  Polynomial derivatives and exact polynomial antiderivatives.
+\item
+  Definite polynomial integrals by evaluating an antiderivative at the
+  endpoints.
+\item
+  Basic limit rules only with explicit side conditions.
+\item
+  Fundamental theorem of calculus in a formal statement with its
+  continuity/integrability assumptions.
+\end{itemize}
+
+General antiderivatives, transcendental identities, and unrestricted
+limits are a later research area. They require stronger domain and
+branch-cut semantics than the polynomial cases.
+
+\subsection{4.7 Probability and
+inequalities}\label{probability-and-inequalities}
+
+\begin{itemize}
+\tightlist
+\item
+  Counting and finite sums using exact integers/rationals.
+\item
+  Conditional probability, complement, total probability, Bayes'
+  theorem, and expectation for finite distributions.
+\item
+  Order transitivity, triangle inequality, sign-aware multiplication,
+  AM--GM, Cauchy--Schwarz, and Pythagorean identities.
+\item
+  Separate a proof of an inequality from a numerical approximation to
+  its two sides.
+\end{itemize}
+
+\section{5. Candidate algorithms and when to use
+them}\label{candidate-algorithms-and-when-to-use-them}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Method
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Best use
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Accuracy and cost considerations
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Priority
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Exact rational evaluation & Arithmetic and finite derivations & Exact
+results; cost grows with integer bit-length. & Immediate \\
+Canonical polynomial form & Polynomial identities and equality & Store
+monomials in a fixed variable order and combine coefficients. Expression
+expansion can grow rapidly, so cap terms and bit-length. & Immediate \\
+Oriented rewrite rules & Simplifying expressions and checking steps &
+Cheap and explainable when each rewrite decreases a well-founded
+measure. Unrestricted bidirectional rules can loop. & Immediate \\
+Horner evaluation & Evaluating polynomials & Linear in polynomial degree
+with fewer multiplications and less intermediate growth than naive
+evaluation. & Immediate \\
+Euclid / extended Euclid & GCD, divisibility, modular inverses & Very
+small memory; logarithmic number of division steps in input magnitude. &
+Immediate \\
+Repeated squaring & Powers and modular powers & \(O(\log n)\)
+multiplications for exponent \(n\); check overflow or work in an
+explicit modular domain. & Immediate \\
+Linear/quadratic solvers & Common equation classes & Constant-size
+logic; enumerate degenerate coefficients and exact-root cases. &
+Immediate \\
+Sparse exact Gaussian elimination & Small systems over \(\mathbb Q\) &
+Pivoting and sparsity matter; rational numerators/denominators may grow.
+& High \\
+Bareiss fraction-free elimination & Integer matrices & Exact divisions
+can control fraction growth; requires correct pivot bookkeeping. &
+High \\
+Interval arithmetic & Certified bounds for irrational or floating
+quantities & A result is an enclosure, not an exact equality. Use
+directed rounding and report interval width. & High when needed \\
+SMT / DPLL(T) & Conjunctions of logic, equality, and supported
+arithmetic constraints & Reuses specialized decision procedures. Bound
+solver time and validate proof/counterexample output. SMT-LIB defines
+logics including linear integer/real arithmetic and bit vectors.
+\href{https://smt-lib.org/language.shtml}{SMT-LIB standard},
+\href{https://smt-lib.org/logics.shtml}{supported logics}. & Medium \\
+Equality saturation / e-graphs & Searching among equivalent expression
+forms & Can find useful simplifications without destructive rewrite
+order; e-graphs can grow quickly. Apply node/time limits and extract a
+proof path. \href{https://doi.org/10.1145/3434304}{egg paper}. &
+Later \\
+Polynomial GCD / Gröbner bases & Multivariate polynomial equations and
+ideal membership & Potentially expensive; do not put in the small
+trusted core. Use only for demonstrated workloads, with checkable
+outputs. & Later \\
+\end{longtable}
+}
+
+For matrix and polynomial code, compare custom exact routines against
+mature arithmetic libraries such as GMP or FLINT before deciding whether
+to depend on them. The comparison must include build footprint,
+portability, license, memory, and certificate/checker requirements---not
+just speed.
+
+\subsection{Questions to answer before choosing an
+implementation}\label{questions-to-answer-before-choosing-an-implementation}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Is Lancius checking a known procedure or judging an unknown
+  derivation?} For a known procedure, compare direct execution plus a
+  proof certificate against the learned verifier. For unknown
+  procedures, keep theorem search separate from certificate checking.
+\item
+  \textbf{Which mathematical domain is intended for each claim?}
+  Establish whether each value is in the integers, rationals, reals,
+  modular arithmetic, or floating point before selecting
+  transformations.
+\item
+  \textbf{Which current failures are arithmetic failures, and which are
+  parsing, semantic, feature, or training failures?} Preserve these as
+  distinct failure codes and benchmark each separately.
+\item
+  \textbf{When does exact arithmetic become too expensive?} Measure
+  operand bits and expression growth; choose a declared cutoff and a
+  certified interval fallback rather than silent floating conversion.
+\item
+  \textbf{Which normal form works for each family?} Compare sparse
+  polynomial collection, rational-function normalization, ordered
+  rewriting, and later e-graph search. Do not force one normalizer on
+  every domain.
+\item
+  \textbf{Which linear constraint fragment covers the next workload?}
+  Compare simple substitution/elimination with Fourier--Motzkin or a
+  bounded SMT solver. General integer/nonlinear arithmetic has different
+  completeness and cost properties from rational linear arithmetic.
+\item
+  \textbf{Which library dependencies are acceptable?} Compare custom
+  integers with GMP/FLINT for C integration; compare solver libraries
+  only after certificate export and independent checking are
+  demonstrated.
+\item
+  \textbf{What is the resource budget?} Set a per-problem time, memory,
+  integer-bit, AST-node, and certificate-size limit before enabling more
+  advanced search.
+\end{enumerate}
+
+\subsection{Prototype and integration
+policy}\label{prototype-and-integration-policy}
+
+\begin{itemize}
+\tightlist
+\item
+  Prototype mathematical semantics in \texttt{tools/prm} using the
+  existing exact-rational workflow and explicit proof records.
+\item
+  Keep each algorithm callable independently so it can be cross-checked
+  without training or running the full I6 pipeline.
+\item
+  Port stable routines to C only when the runtime needs them and the
+  certificate contract is settled.
+\item
+  Preserve a small C checker for certificates even if a larger solver is
+  added in Python, Lean, an SMT solver, or a computer-algebra library.
+\item
+  Add a model or heuristic only for work that cannot be decided cheaply
+  by a supported exact routine, such as candidate parsing or tactic
+  selection.
+\item
+  Version every rule set and certificate format. Version feature
+  meanings and normalizers separately for any learned fallback.
+\end{itemize}
+
+\section{6. Efficiency work to
+investigate}\label{efficiency-work-to-investigate}
+
+\subsection{6.1 Exact rational
+arithmetic}\label{exact-rational-arithmetic}
+
+\begin{itemize}
+\tightlist
+\item
+  Benchmark eager reduction after every operation against
+  delayed/cross-cancelled reduction.
+\item
+  For multiplication \((a/b)(c/d)\), cancel \(\gcd(|a|,d)\) and
+  \(\gcd(|c|,b)\) before multiplying.
+\item
+  For addition, use the denominator gcd to form a
+  least-common-denominator path instead of multiplying both denominators
+  blindly.
+\item
+  Track numerator/denominator bit-length, gcd count, and total
+  big-integer allocations.
+\item
+  If fixed-width C integers are used, detect overflow before it occurs.
+  Never wrap and continue as if the result were exact.
+\item
+  Compare a bounded built-in integer representation, GMP, and FLINT on
+  the actual Lancius corpus before choosing a backend.
+\end{itemize}
+
+\subsection{6.2 Expression
+representation}\label{expression-representation}
+
+\begin{itemize}
+\tightlist
+\item
+  Use a typed abstract syntax tree (AST) with explicit literals,
+  symbols, operations, relations, and assumptions.
+\item
+  Hash-cons repeated subexpressions into a DAG; memoize exact
+  evaluations and normal forms.
+\item
+  Represent polynomials sparsely as
+  \texttt{(monomial,\ rational\ coefficient)} pairs with canonical
+  ordering.
+\item
+  Normalize signs, rational constants, and associative/commutative
+  operators in one defined pass.
+\item
+  Preserve original source spans and rewrite provenance so every
+  normalized result can be explained.
+\item
+  Add hard limits for AST nodes, polynomial terms, proof length, integer
+  bits, and wall-clock work.
+\end{itemize}
+
+\subsection{6.3 Rewrite safety}\label{rewrite-safety}
+
+\begin{itemize}
+\tightlist
+\item
+  Give each rewrite a formal rule name, typed signature, assumptions,
+  and proof obligation.
+\item
+  Orient basic rewrites toward a chosen normal form; prove or
+  structurally enforce termination for each rule set.
+\item
+  Keep transformations that are only implications distinct from
+  equivalences.
+\item
+  Never simplify across a denominator, square root, logarithm, absolute
+  value, or inequality without retaining the relevant condition.
+\item
+  Investigate e-graphs only after deterministic normal forms and rule
+  certificates work. Equality saturation is a search structure, not a
+  proof checker by itself.
+\end{itemize}
+
+\subsection{6.4 Linear algebra and polynomial
+growth}\label{linear-algebra-and-polynomial-growth}
+
+\begin{itemize}
+\tightlist
+\item
+  Compare rational elimination, fraction-free Bareiss, and modular
+  methods on realistic matrix sizes and coefficient lengths.
+\item
+  Select pivots that limit coefficient growth; preserve row permutation
+  and sign in certificates.
+\item
+  Use sparse storage when matrices are sparse; do not pay dense costs
+  for zero entries.
+\item
+  For polynomial expressions, measure term explosion before considering
+  Gröbner bases or general expansion.
+\item
+  Consider modular reconstruction for large integer determinants only
+  after small-matrix Bareiss performance is measured.
+\end{itemize}
+
+\subsection{6.5 Certified approximate
+mathematics}\label{certified-approximate-mathematics}
+
+\begin{itemize}
+\tightlist
+\item
+  Use exact rationals whenever the problem is rational.
+\item
+  Use outward-rounded intervals for certified bounds, not a floating
+  tolerance pretending to prove equality.
+\item
+  Return ``proved by interval'' only when the enclosure establishes the
+  required sign or containment; return ``inconclusive'' when it
+  straddles the boundary.
+\item
+  Treat algebraic roots as a later type: polynomial plus isolating
+  interval, with exact root-count evidence if required.
+\end{itemize}
+
+\section{7. Work phases and decision
+gates}\label{work-phases-and-decision-gates}
+
+\subsection{Phase 0 --- Freeze the mathematical
+contract}\label{phase-0-freeze-the-mathematical-contract}
+
+\textbf{Deliverables:} theorem/rule catalogue; type/domain definitions;
+versioned feature schema; certificate format; unsupported-case behavior.
+
+\textbf{Gate:} every current corpus label and every mathematical
+operation has a precise definition and explicit preconditions. I1--I3
+and I6 feature schemas, normalizers, and saved-model metadata remain
+distinguishable.
+
+\subsection{Phase 1 --- Exact arithmetic
+kernel}\label{phase-1-exact-arithmetic-kernel}
+
+Implement normalized rationals, exact comparison, integer division, gcd,
+powers, perfect-square checks, and explicit resource limits. Record
+bit-growth and allocation counters.
+
+\textbf{Gate:} all arithmetic operations either return an exact result
+or an explicit failure. No overflow, failed division, or malformed
+rational can produce an accepted answer.
+
+\subsection{Phase 2 --- Proof certificates and small
+checker}\label{phase-2-proof-certificates-and-small-checker}
+
+Implement certificate records for arithmetic, equality, substitution,
+linear solving, and existing canonical steps. Keep the checker
+independent of the routine that generated the answer.
+
+\textbf{Gate:} deliberately corrupted certificates are rejected. Valid
+certificates round-trip through serialization and are accepted by the
+checker.
+
+\subsection{Phase 3 --- High-value equation and identity
+modules}\label{phase-3-high-value-equation-and-identity-modules}
+
+Implement linear equations, quadratics, polynomial identities, binomial
+expansion, arithmetic/geometric sums, and rational-expression checks.
+Compare canonical forms with step-by-step certificates.
+
+\textbf{Gate:} exact results for all supported cases; explicit unknown
+for unsupported roots, invalid domains, and resource-limit cases.
+
+\subsection{Phase 4 --- Number theory and small linear
+algebra}\label{phase-4-number-theory-and-small-linear-algebra}
+
+Implement Euclid, extended Euclid, modular exponentiation/inverse,
+small-prime/perfect-square checks, row reduction, rank, determinant, and
+small-system solving. Benchmark Bareiss against ordinary rational
+elimination.
+
+\textbf{Gate:} independently cross-check each solver; certificates
+preserve divisibility, pivot, rank, and permutation facts.
+
+\subsection{Phase 5 --- Calculus, probability, and
+inequalities}\label{phase-5-calculus-probability-and-inequalities}
+
+Implement exact finite probability first, then derivative rules and
+polynomial integration. Add inequality transformations with sign/domain
+conditions. Add certified intervals only where exact forms are
+insufficient.
+
+\textbf{Gate:} each theorem checker validates its assumptions and exact
+result; interval cases report bounds and inconclusive outcomes honestly.
+
+\subsection{Phase 6 --- Bounded
+automation}\label{phase-6-bounded-automation}
+
+Prototype SMT for supported linear arithmetic and equality constraints.
+Prototype equality saturation for expression simplification. Measure
+proof/certificate extraction costs and impose hard resource limits.
+
+\textbf{Gate:} every accepted automated result is checked by the Lancius
+checker or a separately trusted checker. A timeout is not a proof of
+falsehood.
+
+\subsection{Phase 7 --- Optional model
+assistance}\label{phase-7-optional-model-assistance}
+
+Keep any learned model as a parser, tactic selector, or candidate-step
+proposer. Feed its suggestions into the exact checker. Retain an
+explicit fallback to exact routines and an abstention result.
+
+\textbf{Gate:} learned components cannot directly issue a mathematically
+verified verdict without a valid certificate.
+
+\section{8. Verification and benchmark
+protocol}\label{verification-and-benchmark-protocol}
+
+This section specifies future evaluation; it does not report test runs.
+
+\subsection{8.1 Correctness tests}\label{correctness-tests}
+
+\begin{itemize}
+\tightlist
+\item
+  Exhaustively enumerate small integer/rational inputs for each bounded
+  rule.
+\item
+  Generate random exact inputs independently of the solver
+  implementation.
+\item
+  Mutate one proof step at a time: sign, operator, denominator, pivot,
+  exponent, omitted step, or assumption.
+\item
+  Include degeneracies: zero coefficients, zero denominators, negative
+  values, repeated roots, singular matrices, empty sums, modulus 1,
+  non-coprime modular inverses, missing values, and long derivations.
+\item
+  Use metamorphic checks: commutative rearrangement, equivalent fraction
+  scaling, applying an identity then its inverse, and row operations
+  that preserve a linear system.
+\item
+  Cross-check selected cases with an independently implemented exact
+  system. Never use the same generator logic as both the sole oracle and
+  the implementation under test.
+\end{itemize}
+
+\subsection{8.2 Dataset and generalization
+checks}\label{dataset-and-generalization-checks}
+
+\begin{itemize}
+\tightlist
+\item
+  Preserve a fixed clean test set and exact row-level metrics.
+\item
+  Report separate results for known algorithms, held-out parameter
+  ranges, held-out algorithms, and held-out families.
+\item
+  Distinguish step correctness, final-answer correctness, structural
+  correctness, proof validity, and unsupported-case abstention.
+\item
+  Evaluate the exact engine and I6 on identical cases with each model
+  receiving its own versioned feature schema and normalization.
+\item
+  Avoid using the synthetic distribution as evidence for unrestricted
+  human-written proof competence.
+\end{itemize}
+
+\subsection{8.3 Efficiency measurements}\label{efficiency-measurements}
+
+Record, by algorithm family and input size:
+
+\begin{itemize}
+\tightlist
+\item
+  Median and 95th-percentile runtime.
+\item
+  Peak memory and allocation count.
+\item
+  Integer/rational operand bit-length and polynomial term count.
+\item
+  Number of rewrite steps, solver decisions, and certificate nodes.
+\item
+  Checker time separately from solver time.
+\item
+  Cold and warm cache results.
+\item
+  Model parameters and inference operations for any learned fallback.
+\end{itemize}
+
+\subsection{8.4 Acceptance rules}\label{acceptance-rules}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Soundness:} no false acceptance in the independent bounded
+  test suite; all supported outputs carry checkable evidence.
+\item
+  \textbf{Coverage:} unsupported inputs return a clear
+  unknown/unsupported result, with no forced class.
+\item
+  \textbf{Accuracy:} report exact answer and proof-step metrics
+  separately; no MAE/MSE inferred from class accuracy.
+\item
+  \textbf{Efficiency:} retain a method only if it improves latency,
+  memory, coverage, or clarity for a measured workload.
+\item
+  \textbf{Reproducibility:} version theorem rules, domains, feature
+  schemas, normalizers, corpus generation, and benchmarks.
+\end{itemize}
+
+\section{9. Risks and boundaries}\label{risks-and-boundaries}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Undecidability:} no general procedure can settle all
+  first-order mathematical claims. Specialize to decidable fragments and
+  bounded algorithms.
+\item
+  \textbf{Domain confusion:} an integer, rational, real approximation,
+  and modular residue obey different laws. Implicit conversion can make
+  a valid-looking but false proof.
+\item
+  \textbf{Unsound cancellation:} algebraic cancellation and inequality
+  transformations require nonzero/sign assumptions.
+\item
+  \textbf{Expression swell:} exactness can consume time and memory when
+  numerators, denominators, or polynomial term counts grow. Use limits
+  and explicit unknown results.
+\item
+  \textbf{Shared-bug validation:} agreement with the same generator or
+  checker is weak evidence. Keep independent oracles and mutation tests.
+\item
+  \textbf{Feature-schema drift:} dimensions alone do not identify
+  feature meaning. Store a schema ID and normalizer with every trained
+  artifact.
+\item
+  \textbf{Overclaiming:} success on the generated 150-algorithm corpus
+  establishes competence on that formalized workload, not general
+  mathematical reasoning.
+\end{itemize}
+
+\section{10. Research references}\label{research-references}
+
+These are starting references for the proposed workstreams, not
+endorsements of adopting the referenced software as a dependency.
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \href{https://lean-lang.org/doc/reference/latest/Elaboration-and-Compilation/}{Lean
+  language reference: kernel and proof checking} --- small trusted
+  checker architecture.
+\item
+  \href{https://smt-lib.org/language.shtml}{SMT-LIB language standard}
+  and \href{https://smt-lib.org/logics.shtml}{logic catalogue} ---
+  standard encodings and supported arithmetic/bit-vector fragments.
+\item
+  Erwin H. Bareiss,
+  \href{https://doi.org/10.1090/S0025-5718-1968-0226829-0}{``Sylvester's
+  Identity and Multistep Integer-Preserving Gaussian Elimination''},
+  1968 --- fraction-free elimination.
+\item
+  \href{https://flintlib.org/doc/algorithms/linear-algebra/fraction-free.html}{FLINT
+  fraction-free elimination notes} --- practical pivoting, exact
+  division, and integer-growth details; cross-check implementation
+  claims against the original paper.
+\item
+  Max Willsey et al., \href{https://doi.org/10.1145/3434304}{``egg: Fast
+  and Extensible Equality Saturation''}, POPL 2021 --- equality
+  saturation and e-graphs for rewrite search.
+\item
+  \href{https://plato.stanford.edu/entries/goedel-incompleteness/}{Church's
+  theorem overview} --- boundary on general theorem decision procedures.
+\end{enumerate}
+
+\section{11. Immediate next actions}\label{immediate-next-actions}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  Freeze and document the mathematical domains and rule preconditions
+  for the existing corpus.
+\item
+  Define a certificate format and a minimal independent checker for
+  exact rational steps.
+\item
+  Implement and benchmark cross-cancelled rational arithmetic and sparse
+  polynomial normalization.
+\item
+  Reproduce the current 150-algorithm workload with exact rule-based
+  outputs and compare against I6.
+\item
+  Add Euclid/extended Euclid, modular exponentiation, linear solving,
+  and small-matrix Bareiss as the first new algorithm set.
+\item
+  Build the independent correctness and resource benchmark suite before
+  pursuing SMT, e-graphs, Gröbner bases, or broader calculus.
+\end{enumerate}
+
+\section{Appendix A --- Individual theorem and equation
+registry}\label{appendix-a-individual-theorem-and-equation-registry}
+
+This registry turns the broad math families into concrete rules with
+domains and checks. These are mathematical targets for a versioned
+engine contract. A formula appearing in the current synthetic corpus may
+be tested only on a small parameter range or a single instance; Appendix
+B lists those source descriptions individually.
+
+\subsection{A.1 First rules for the trusted exact
+kernel}\label{a.1-first-rules-for-the-trusted-exact-kernel}
+
+These rules are the highest priority because every later solver depends
+on them.
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Equality reflexivity:} \(a=a\). Check that both sides have the
+  same typed expression.
+\item
+  \textbf{Equality symmetry:} \(a=b\Rightarrow b=a\). Reference the
+  earlier equality and reverse its sides.
+\item
+  \textbf{Equality transitivity:} \(a=b\land b=c\Rightarrow a=c\). The
+  middle terms must be the same typed expression.
+\item
+  \textbf{Congruence:} \(a=b\Rightarrow f(a)=f(b)\), only where \(f\) is
+  defined for both values in the declared domain.
+\item
+  \textbf{Rational normalization:} represent \(p/q\) with \(q>0\) and
+  \(\gcd(|p|,q)=1\); normalize zero to \(0/1\). Reject \(q=0\).
+\item
+  \textbf{Rational equality:} for \(b,d\ne0\), \(a/b=c/d\iff ad=bc\).
+  Check by integer cross multiplication.
+\item
+  \textbf{Rational addition and multiplication:}
+  \(a/b+c/d=(ad+bc)/(bd)\) and \((a/b)(c/d)=ac/(bd)\), with \(b,d\ne0\).
+  Reduce without changing the value.
+\item
+  \textbf{Rational division:} \((a/b)/(c/d)=ad/(bc)\), requiring
+  \(b,d,c\ne0\). The divisor must be nonzero.
+\item
+  \textbf{Euclidean division:} for integer \(a\) and positive integer
+  \(b\), there are unique integers \(q,r\) with \(a=qb+r\) and
+  \(0\le r<b\).
+\item
+  \textbf{GCD remainder step:} \(\gcd(a,b)=\gcd(b,a\bmod b)\) for
+  \(b\ne0\); stop at remainder zero and return a nonnegative gcd.
+\item
+  \textbf{Bézout identity:} extended Euclid returns \(x,y\) with
+  \(ax+by=\gcd(a,b)\). Verify this equality directly.
+\item
+  \textbf{Divisibility cancellation:} if \(d\mid ab\) and
+  \(\gcd(d,a)=1\), then \(d\mid b\). Never cancel without the
+  coprimality condition.
+\item
+  \textbf{Congruence definition:} \(a\equiv b\pmod m\iff m\mid(a-b)\),
+  for integer \(m>0\).
+\item
+  \textbf{Modular inverse existence:} \(a^{-1}\pmod m\) exists exactly
+  when \(\gcd(a,m)=1\). Verify a claimed inverse with
+  \(ax\equiv1\pmod m\).
+\item
+  \textbf{Order under multiplication:} if \(x<y\), multiplying by
+  \(c>0\) preserves the inequality; multiplying by \(c<0\) reverses it;
+  multiplying by zero makes both sides equal.
+\end{itemize}
+
+\subsection{A.2 Algebra equations and
+identities}\label{a.2-algebra-equations-and-identities}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Linear equation (\texttt{linear\_solve}):} for \(ax+b=c\), if
+  \(a\ne0\), the unique solution is \(x=(c-b)/a\). If \(a=0\), there are
+  all solutions when \(b=c\) and no solutions otherwise; the current
+  routine covers only \(a\ne0\).
+\item
+  \textbf{Two-equation sum/difference system
+  (\texttt{substitution\_system}):} \(x+y=S,\ x-y=D\) gives
+  \(x=(S+D)/2,\ y=(S-D)/2\). Substitute both answers into both original
+  equations.
+\item
+  \textbf{Quadratic formula (\texttt{quadratic\_formula}):} for
+  \(ax^2+bx+c=0\) and \(a\ne0\), let \(\Delta=b^2-4ac\); then
+  \(x=(-b\pm\sqrt\Delta)/(2a)\). Over the reals, \(\Delta<0\) means no
+  real roots, \(\Delta=0\) one repeated root, and \(\Delta>0\) two
+  roots. Current generated cases use rational perfect-square
+  discriminants.
+\item
+  \textbf{Quadratic Vieta identities:} if roots are \(r_1,r_2\), then
+  \(r_1+r_2=-b/a\) and \(r_1r_2=c/a\), for \(a\ne0\).
+\item
+  \textbf{Cubic Vieta identities (\texttt{vieta\_cubic}):} if
+  \(a(x-r_1)(x-r_2)(x-r_3)=ax^3+bx^2+cx+d\), then \(r_1+r_2+r_3=-b/a\),
+  \(r_1r_2+r_1r_3+r_2r_3=c/a\), and \(r_1r_2r_3=-d/a\), for \(a\ne0\).
+\item
+  \textbf{Completing the square (\texttt{completing\_square}):}
+  \(x^2+bx+c=(x+b/2)^2-(b^2/4-c)\).
+\item
+  \textbf{Difference of squares (\texttt{difference\_of\_squares}):}
+  \(a^2-b^2=(a-b)(a+b)\).
+\item
+  \textbf{Square of a sum (\texttt{perfect\_square\_trinomial}):}
+  \((a+b)^2=a^2+2ab+b^2\); similarly \((a-b)^2=a^2-2ab+b^2\).
+\item
+  \textbf{Cube of a sum (\texttt{cube\_of\_binomial}):}
+  \((a+b)^3=a^3+3a^2b+3ab^2+b^3\); for a difference, the two middle
+  terms have negative signs.
+\item
+  \textbf{Sum of cubes (\texttt{sum\_of\_cubes}):}
+  \(a^3+b^3=(a+b)(a^2-ab+b^2)\).
+\item
+  \textbf{Difference of cubes:} \(a^3-b^3=(a-b)(a^2+ab+b^2)\).
+\item
+  \textbf{Difference of powers (\texttt{power\_difference}):} for
+  integer \(n\ge1\), \(a^n-b^n=(a-b)\sum_{k=0}^{n-1}a^{n-1-k}b^k\).
+\item
+  \textbf{Exponent laws (\texttt{expo\_laws}):} for integers
+  \(m,n\ge0\), \(a^ma^n=a^{m+n}\) and \((a^m)^n=a^{mn}\); negative
+  exponents require \(a\ne0\).
+\item
+  \textbf{Binomial theorem (\texttt{binomial\_expand}):} for integer
+  \(n\ge0\), \((x+y)^n=\sum_{k=0}^{n}\binom nk x^{n-k}y^k\), where
+  \(\binom nk=n!/(k!(n-k)!)\).
+\item
+  \textbf{Arithmetic progression term and sum
+  (\texttt{arithmetic\_series}):} \(a_k=a+(k-1)d\) and
+  \(\sum_{k=1}^{n}a_k=n(2a+(n-1)d)/2\), for integer \(n\ge0\).
+\item
+  \textbf{Geometric progression sum (\texttt{geometric\_series}):}
+  \(\sum_{k=0}^{n-1}ar^k=a(r^n-1)/(r-1)\) for \(r\ne1\); if \(r=1\), the
+  sum is \(an\).
+\item
+  \textbf{Gauss sum / triangular numbers:} \(\sum_{k=1}^{n}k=n(n+1)/2\),
+  for integer \(n\ge0\).
+\item
+  \textbf{Sum of squares (\texttt{sum\_of\_squares}):}
+  \(\sum_{k=1}^{n}k^2=n(n+1)(2n+1)/6\), for integer \(n\ge0\).
+\item
+  \textbf{Sum of cubes:} \(\sum_{k=1}^{n}k^3=[n(n+1)/2]^2\), for integer
+  \(n\ge0\).
+\item
+  \textbf{Sum of fourth powers (\texttt{sum\_fourth\_powers}):}
+  \(\sum_{k=1}^{n}k^4=n(n+1)(2n+1)(3n^2+3n-1)/30\), for integer
+  \(n\ge0\).
+\item
+  \textbf{Sum of the first odd numbers (\texttt{sum\_first\_odds}):}
+  \(\sum_{k=1}^{n}(2k-1)=n^2\), for integer \(n\ge0\).
+\item
+  \textbf{Telescoping reciprocal sum (\texttt{telescoping\_series}):}
+  \(\sum_{k=1}^{n}1/[k(k+1)]=n/(n+1)\) because
+  \(1/[k(k+1)]=1/k-1/(k+1)\).
+\item
+  \textbf{Horner evaluation (\texttt{horner\_eval}):}
+  \(a_3x^3+a_2x^2+a_1x+a_0=((a_3x+a_2)x+a_1)x+a_0\). The rewrite
+  preserves value and reduces multiplications.
+\item
+  \textbf{Factor theorem:} for polynomial \(p\), \(p(r)=0\iff(x-r)\)
+  divides \(p(x)\). Certificate: exact polynomial division with zero
+  remainder.
+\item
+  \textbf{Rational root theorem (\texttt{rational\_root}):} for
+  integer-coefficient \(p(x)=a_nx^n+\cdots+a_0\), a reduced rational
+  root \(u/v\) must have \(u\mid a_0\) and \(v\mid a_n\), with \(v>0\).
+\item
+  \textbf{Partial fraction identity (\texttt{partial\_fractions}):} for
+  \(a\ne b\) and \(x\ne-a,-b\),
+  \(1/((x+a)(x+b))=[1/(b-a)](1/(x+a)-1/(x+b))\). The current workload
+  checks selected values; the engine must check the symbolic identity
+  and exclusions.
+\item
+  \textbf{Affine composition (\texttt{composition\_affine}):} if
+  \(f(x)=ax+b\) and \(g(x)=cx+d\), then \((f\circ g)(x)=acx+ad+b\).
+\item
+  \textbf{Inverse of a linear-fractional function
+  (\texttt{inv\_function\_eval}):} for \(f(x)=ax/(x+b)\) with
+  \(ab\ne0\), \(f^{-1}(y)=by/(a-y)\), with \(x\ne-b\) and \(y\ne a\).
+\item
+  \textbf{Absolute-value linear equation (\texttt{abs\_linear}):} for
+  \(a\ne0\), \(|ax+b|=c\) has two solutions \((c-b)/a\) and \((-c-b)/a\)
+  if \(c>0\), one if \(c=0\), and none if \(c<0\).
+\item
+  \textbf{Ratio allocation (\texttt{ratio\_share}):} if \(p,q,r\ge0\)
+  and \(p+q+r>0\), splitting total \(N\) in ratio \(p:q:r\) gives
+  \(Np/(p+q+r),Nq/(p+q+r),Nr/(p+q+r)\); their sum is \(N\).
+\item
+  \textbf{Weighted mean bounds (\texttt{weighted\_average}):} if
+  \(w_i\ge0\) and \(\sum_iw_i>0\), then
+  \(\min_i v_i\le\sum_iw_iv_i/\sum_iw_i\le\max_i v_i\).
+\item
+  \textbf{AM-GM for two nonnegative values:} \((x+y)/2\ge\sqrt{xy}\) for
+  \(x,y\ge0\), since \((\sqrt{x}-\sqrt{y})^2\ge0\). Equality holds
+  exactly when \(x=y\).
+\item
+  \textbf{Cauchy-Schwarz:} for real vectors \(u,v\),
+  \((u\cdot v)^2\le(u\cdot u)(v\cdot v)\). The checker must establish
+  the nonnegative difference, not just compare decimals.
+\item
+  \textbf{Two-square product identity (\texttt{cauchy\_identity}):}
+  \((a^2+b^2)(c^2+d^2)=(ac+bd)^2+(ad-bc)^2\).
+\end{itemize}
+
+\subsection{A.3 Number-theory equations and
+tests}\label{a.3-number-theory-equations-and-tests}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Least common multiple (\texttt{lcm\_pair}):} for positive
+  integers \(a,b\), \(\operatorname{lcm}(a,b)=ab/\gcd(a,b)\).
+\item
+  \textbf{Modular exponentiation (\texttt{mod\_pow\_fast}):} maintain
+  \(r b^e\equiv a^{e_0}\pmod m\); for even \(e\), square \(b\) and halve
+  \(e\); for odd \(e\), multiply \(r\) by \(b\) and decrement \(e\).
+  Require \(m\ge2\) and \(e\ge0\).
+\item
+  \textbf{Fermat's little theorem (\texttt{fermat\_little}):} if \(p\)
+  is prime and \(p\nmid a\), then \(a^{p-1}\equiv1\pmod p\). This is not
+  a primality test by itself.
+\item
+  \textbf{Euler's theorem:} if \(\gcd(a,n)=1\), then
+  \(a^{\varphi(n)}\equiv1\pmod n\), where
+  \(\varphi(n)=|\{1\le k\le n:\gcd(k,n)=1\}|\).
+\item
+  \textbf{Totient product formula:} if \(n=\prod_i p_i^{e_i}\), then
+  \(\varphi(n)=n\prod_{p\mid n}(1-1/p)\), over the distinct prime
+  divisors of \(n\).
+\item
+  \textbf{Wilson's theorem (\texttt{wilson\_check}):} integer \(p>1\) is
+  prime exactly when \((p-1)!\equiv-1\pmod p\). Direct factorial
+  calculation is not efficient for large \(p\).
+\item
+  \textbf{Chinese remainder theorem (\texttt{crt\_verify}):} for
+  pairwise coprime positive moduli \(m_i\), each residue tuple has one
+  solution class modulo \(M=\prod_i m_i\). Checking residues verifies a
+  candidate; uniqueness also requires proving pairwise coprimality.
+\item
+  \textbf{Modular inverse:} \(ax\equiv1\pmod m\) has a solution iff
+  \(\gcd(a,m)=1\); extended-Euclid coefficients produce one.
+\item
+  \textbf{Binomial coefficient recurrence (\texttt{pascal\_row\_mult}):}
+  \(\binom nk=\binom n{k-1}(n-k+1)/k\) for \(1\le k\le n\); division is
+  exact in integers.
+\item
+  \textbf{Catalan numbers:} \(C_n=\frac1{n+1}\binom{2n}{n}\) and
+  \(C_n=C_{n-1}\,2(2n-1)/(n+1)\) for \(n\ge1\), with \(C_0=1\).
+\item
+  \textbf{Pythagorean triple identity (\texttt{pyth\_triple\_verify}):}
+  for integers \(m>n>0\), \((m^2-n^2)^2+(2mn)^2=(m^2+n^2)^2\).
+  Primitivity additionally requires \(\gcd(m,n)=1\) and opposite parity.
+\item
+  \textbf{Perfect-square test (\texttt{perfect\_square\_check}):} for
+  integer \(N\ge0\), \(N\) is a square iff
+  \(\lfloor\sqrt N\rfloor^2=N\). Negative integers are not integer
+  squares.
+\item
+  \textbf{Prime trial division:} integer \(N>1\) is prime iff no integer
+  \(d\) with \(2\le d\le\lfloor\sqrt N\rfloor\) divides it. A shorter
+  divisor list is only a screen.
+\item
+  \textbf{Divisor-square sum:} for distinct primes \(p,q\) and
+  \(N=p^2q\), \(\sum_{d\mid N}d^2=(1+p^2+p^4)(1+q^2)\). Distinctness
+  matters because otherwise the divisor list changes.
+\item
+  \textbf{Fibonacci recurrence:} \(F_0=0,F_1=1,F_n=F_{n-1}+F_{n-2}\) for
+  \(n\ge2\). A finite run checks only a prefix.
+\item
+  \textbf{Tribonacci recurrence:} \(T_n=T_{n-1}+T_{n-2}+T_{n-3}\) for
+  \(n\ge3\), after all three initial values are specified.
+\item
+  \textbf{Collatz iteration:} \(T(n)=n/2\) for even \(n\) and
+  \(T(n)=3n+1\) for odd \(n\). A fixed number of steps proves only those
+  steps, not that every positive integer reaches 1.
+\end{itemize}
+
+\subsection{A.4 Linear-algebra
+identities}\label{a.4-linear-algebra-identities}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Two-by-two determinant (\texttt{matrix\_det\_2x2}):}
+  \(\det\begin{pmatrix}a&b\\c&d\end{pmatrix}=ad-bc\).
+\item
+  \textbf{Two-by-two inverse:} when \(ad-bc\ne0\),
+  \(A^{-1}=\frac1{ad-bc}\begin{pmatrix}d&-b\\-c&a\end{pmatrix}\); verify
+  \(AA^{-1}=I=A^{-1}A\).
+\item
+  \textbf{Cramer's rule (\texttt{cramer\_2x2}):} for \(Ax=b\) with
+  \(\det A\ne0\), \(x_i=\det(A_i)/\det(A)\). If \(\det A=0\), analyze
+  rank and consistency instead of dividing.
+\item
+  \textbf{Gaussian row operations:} swapping rows, multiplying a row by
+  nonzero \(c\), or adding a multiple of one row to another preserves
+  the solution set of the augmented system. Track row swaps and pivots.
+\item
+  \textbf{Rank-nullity:} for a finite-dimensional domain \(V\),
+  \(\dim V=\operatorname{rank}(A)+\operatorname{nullity}(A)\).
+\item
+  \textbf{Determinant product:} for square matrices of the same size,
+  \(\det(AB)=\det(A)\det(B)\).
+\item
+  \textbf{Cyclic trace:} for compatible finite matrices,
+  \(\operatorname{tr}(AB)=\operatorname{tr}(BA)\). This does not imply
+  \(AB=BA\).
+\item
+  \textbf{Rank-one trace (\texttt{outer\_trace}):}
+  \(\operatorname{tr}(uv^T)=v^Tu=u\cdot v\).
+\item
+  \textbf{Two-dimensional Gram identity (\texttt{gram\_det}):}
+  \((u\cdot u)(v\cdot v)-(u\cdot v)^2=(u_1v_2-u_2v_1)^2\ge0\).
+\item
+  \textbf{Parallelogram area (\texttt{area\_parallelogram2}):}
+  \(\operatorname{area}=|u_1v_2-u_2v_1|\).
+\item
+  \textbf{Projection onto a nonzero vector:} if \(v\ne0\),
+  \(\operatorname{proj}_v(u)=\frac{u\cdot v}{v\cdot v}v\). Check that
+  \(u-\operatorname{proj}_v(u)\) is orthogonal to \(v\).
+\item
+  \textbf{Symmetric two-by-two eigenvalues (\texttt{eigen\_sym}):} for
+  \(A=\begin{pmatrix}a&b\\b&d\end{pmatrix}\),
+  \(\lambda_{\pm}=(a+d\pm\sqrt{(a-d)^2+4b^2})/2\). Use an exact
+  algebraic or interval type if the radicand is not a rational square.
+\item
+  \textbf{Bareiss fraction-free update:}
+  \(a_{ij}^{(k+1)}=(a_{kk}^{(k)}a_{ij}^{(k)}-a_{ik}^{(k)}a_{kj}^{(k)})/a_{k-1,k-1}^{(k-1)}\),
+  with initial previous pivot 1. Require exact division and handle zero
+  pivots and singular matrices.
+\end{itemize}
+
+\subsection{A.5 Calculus theorems and numerical
+formulas}\label{a.5-calculus-theorems-and-numerical-formulas}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Constant and sum rules:} \((c)'=0\) and \((f+g)'=f'+g'\),
+  where the derivatives exist.
+\item
+  \textbf{Product rule (\texttt{product\_rule}):} \((fg)'=f'g+fg'\).
+\item
+  \textbf{Quotient rule (\texttt{quotient\_rule}):}
+  \((f/g)'=(f'g-fg')/g^2\), where \(g\ne0\) on the domain.
+\item
+  \textbf{Power rule (\texttt{power\_rule}):}
+  \(\frac{d}{dx}x^n=nx^{n-1}\); the real-domain statement depends on
+  \(n\) and \(x\), especially for negative or non-integer \(n\).
+\item
+  \textbf{Chain rule (\texttt{chain\_rule}):}
+  \((f\circ g)'(x)=f'(g(x))g'(x)\), when both derivatives exist.
+\item
+  \textbf{Second derivative of a power:}
+  \(\frac{d^2}{dx^2}(ax^n)=an(n-1)x^{n-2}\), where the derivatives
+  exist.
+\item
+  \textbf{Power antiderivative:} for \(n\ne-1\),
+  \(\int ax^n\,dx=ax^{n+1}/(n+1)+C\); for \(n=-1\), use \(a\ln|x|+C\) on
+  intervals not crossing zero.
+\item
+  \textbf{Definite power integral:} for \(n\ne-1\),
+  \(\int_l^h ax^n\,dx=\frac{a}{n+1}(h^{n+1}-l^{n+1})\), if the integrand
+  is defined and integrable on \([l,h]\).
+\item
+  \textbf{Fundamental theorem of calculus:} if \(F'=f\) on \([a,b]\)
+  with the required continuity/integrability assumptions,
+  \(\int_a^b f(x)\,dx=F(b)-F(a)\).
+\item
+  \textbf{Mean value theorem:} if \(f\) is continuous on \([a,b]\) and
+  differentiable on \((a,b)\), with \(a<b\), some \(c\in(a,b)\)
+  satisfies \(f'(c)=(f(b)-f(a))/(b-a)\).
+\item
+  \textbf{Rolle's theorem:} under the MVT conditions plus \(f(a)=f(b)\),
+  some \(c\in(a,b)\) has \(f'(c)=0\).
+\item
+  \textbf{L'Hôpital's rule:} for a differentiable quotient in a
+  punctured interval, an applicable \(0/0\) or \(\infty/\infty\) form,
+  and a suitable existing limit of \(f'/g'\) with \(g'\ne0\),
+  \(\lim f/g=\lim f'/g'\). This is not a general quotient rewrite.
+\item
+  \textbf{Taylor polynomial:}
+  \(f(x+h)=\sum_{k=0}^{n}f^{(k)}(x)h^k/k!+R_{n+1}\). A certified
+  approximation must also bound or identify the remainder.
+\item
+  \textbf{Trapezoid exactness:} the one-panel trapezoid rule integrates
+  every polynomial of degree at most 1 exactly.
+\item
+  \textbf{Simpson exactness:} the one-panel Simpson rule integrates
+  every polynomial of degree at most 3 exactly, with equal subintervals
+  and the standard \(1/3\) weights. Checking one quadratic does not
+  prove this theorem.
+\item
+  \textbf{Euler method recurrence:} \(y_{k+1}=y_k+h f(x_k,y_k)\) and
+  \(x_{k+1}=x_k+h\). This defines a numerical method, not an exact
+  solution in general; error bounds need regularity and step-size
+  assumptions.
+\item
+  \textbf{Newton square-root step:} for \(N>0,x_k>0\),
+  \(x_{k+1}=\tfrac12(x_k+N/x_k)\). This is numerical unless exact
+  divisibility or a certified interval argument applies.
+\end{itemize}
+
+\subsection{A.6 Probability and inequality
+rules}\label{a.6-probability-and-inequality-rules}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Probability normalization:} \(P(\Omega)=1\), \(P(A)\ge0\), and
+  for disjoint events \(A,B\), \(P(A\cup B)=P(A)+P(B)\).
+\item
+  \textbf{Complement and union:} \(P(A^c)=1-P(A)\) and
+  \(P(A\cup B)=P(A)+P(B)-P(A\cap B)\).
+\item
+  \textbf{Total probability:} for finite partition \(B_1,\ldots,B_n\),
+  \(P(A)=\sum_iP(A\mid B_i)P(B_i)\); do not condition on an event of
+  probability zero.
+\item
+  \textbf{Bayes' theorem:} when \(P(B)>0\),
+  \(P(A\mid B)=P(B\mid A)P(A)/P(B)\). Store the event and conditioning
+  direction explicitly.
+\item
+  \textbf{Finite expectation:} \(\mathbb E[X]=\sum_i x_iP(X=x_i)\) with
+  probabilities nonnegative and summing to one; linearity gives
+  \(\mathbb E[aX+bY]=a\mathbb E[X]+b\mathbb E[Y]\).
+\item
+  \textbf{Variance identity:}
+  \(\operatorname{Var}(X)=\mathbb E[X^2]-(\mathbb E[X])^2\ge0\), for a
+  finite distribution with finite second moment.
+\item
+  \textbf{Triangle inequality:} \(|x+y|\le|x|+|y|\), for real or complex
+  values.
+\item
+  \textbf{AM-GM and Cauchy-Schwarz:} use the nonnegative/real-vector
+  assumptions stated in A.2; check assumptions and prove the difference
+  nonnegative.
+\end{itemize}
+
+\subsection{A.7 How the current 150 entries map to this
+registry}\label{a.7-how-the-current-150-entries-map-to-this-registry}
+
+The source set contains 20 base entries, 12 I1 extensions, 68 further I1
+entries, and 50 I3 additions: 150 identifiers total. The family counts
+are algebra 41, calculus 36, linear algebra 33, and number theory 40.
+Appendix B lists every identifier and its source-level mathematical
+description. Those descriptions locate the intended workloads; an exact
+sample is not a proof of the general statement written beside it.
+
+Audit every entry before claiming theorem coverage:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  Does the formula hold over the full stated domain, or only for the
+  generator's parameter range?
+\item
+  Are exceptional cases represented: zero denominators, repeated roots,
+  negative radicands, singular matrices, non-coprime moduli, and empty
+  sums?
+\item
+  Does the implementation check a symbolic identity or only selected
+  numerical values?
+\item
+  Does its certificate prove the result, or only show that one candidate
+  gives the expected number?
+\item
+  Is the item a theorem, recurrence, numerical method, finite
+  computation, or test example? Keep those labels separate.
+\end{enumerate}
+
+The first implementation tranche should be the Tier 0 arithmetic rules,
+linear and quadratic solving with degenerate cases, polynomial
+identities and factor checks, Euclid/Bézout/modular inverse, two-by-two
+exact linear algebra, and derivative/integral rules with their domains.
+Add other registry entries only behind an independently checked
+certificate and a measured workload.
+
+\section{Appendix B --- Existing corpus entries, one by
+one}\label{appendix-b-existing-corpus-entries-one-by-one}
+
+This is a source-linked index of the exact 150 algorithm identifiers.
+Each description is copied or lightly condensed from the
+\texttt{math\_desc} attached to that identifier in code; its source link
+leads to the full implementation. Treat it as the author's intended
+workload description; verify it against the builder, step function,
+domain assumptions, and checker before promoting it to a general
+theorem. The source distribution is 20 base + 12 I1 + 68 extended I1 +
+50 I3 entries.
+
+\subsection{B.1 Algebra (41 entries)}\label{b.1-algebra-41-entries}
+
+\begin{itemize}
+\tightlist
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{abs\_linear}} ---
+  \texttt{abs(a*x\ +\ b)\ =\ c\ has\ exactly\ the\ two\ solutions\ x=(c-b)/a\ and\ x=(-c-b)/a\ for\ c\textgreater{}0,\ a!=0.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{am\_gm\_two}} ---
+  \texttt{AM-GM\ on\ the\ pair\ (a,\ 4a):\ (a+4a)/2\ \textgreater{}=\ sqrt(4a\^{}2)\ =\ 2a,\ gap\ a\ \textgreater{}=\ 0.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{arithmetic\_series}} ---
+  \texttt{sum\_\{k=0\}\^{}\{n-1\}\ (a\ +\ k*d)\ =\ n*(2a\ +\ (n-1)d)/2.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{binomial\_coeff}}
+  --- \texttt{C(n,k)\ by\ multiplicative\ formula.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{binomial\_expand}} ---
+  \texttt{(x\ +\ y)\^{}n\ =\ sum\_k\ C(n,k)\ x\^{}(n-k)\ y\^{}k.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{cauchy\_identity}}
+  --- \texttt{(a\^{}2+b\^{}2)(c\^{}2+d\^{}2)=(ac+bd)\^{}2+(ad-bc)\^{}2.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{completing\_square}}
+  --- \texttt{x\^{}2+bx+c\ =\ (x+b/2)\^{}2-((b/2)\^{}2-c).}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{composition\_affine}}
+  ---
+  \texttt{f(x)=ax+b\ composed\ with\ g(x)=cx+d\ is\ (ac)x\ +\ (ad+b).}
+\item
+  \href{../generation_1/I1/algos_gen1_ext.py}{\texttt{cube\_of\_binomial}}
+  --- \texttt{(a+b)\^{}3\ =\ a\^{}3+3a\^{}2b+3ab\^{}2+b\^{}3.}
+\item
+  \href{../generation_1/I1/algos_gen1_ext.py}{\texttt{difference\_of\_cubes}}
+  --- \texttt{a\^{}3\ -\ b\^{}3\ =\ (a-b)(a\^{}2+ab+b\^{}2).}
+\item
+  \href{../tools/prm/algos.py}{\texttt{difference\_of\_squares}} ---
+  \texttt{a\^{}2\ -\ b\^{}2\ =\ (a\ -\ b)(a\ +\ b).}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{digit\_sum\_base}} ---
+  \texttt{the\ base-b\ digit\ sum\ of\ N\ via\ the\ mod/div\ chain,\ exact\ for\ any\ base\ 2..8.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{expo\_laws}} ---
+  \texttt{a\^{}m\ *\ a\^{}n\ =\ a\^{}(m+n);\ verified\ exactly\ on\ small\ integer\ powers.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{gauss\_pairing}} ---
+  \texttt{Gauss\ pairing:\ sum\_\{1..n\}\ =\ (n/2)(n+1);\ both\ factor\ forms\ agree\ exactly.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{geometric\_mean\_pair}}
+  ---
+  \texttt{GM\ of\ (sQ\^{}2,\ s)\ equals\ sQ\ exactly;\ AM\ \textgreater{}=\ GM\ with\ gap\ (s(Q-1)\^{}2\ ...\ )/2\ \textgreater{}=\ 0.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{geometric\_series}} ---
+  \texttt{sum\_\{k=0\}\^{}\{n-1\}\ a*r\^{}k\ =\ a*(r\^{}n\ -\ 1)/(r\ -\ 1),\ for\ r\ !=\ 1.}
+\item
+  \href{../generation_1/I1/algos_gen1_ext.py}{\texttt{horner\_eval}} ---
+  \texttt{p(x)\ =\ ((a3*x+a2)*x+a1)*x+a0.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{inv\_function\_eval}}
+  ---
+  \texttt{f(x)=ax/(x+b)\ inverts\ to\ x\ =\ yb/(a-y),\ and\ the\ round\ trip\ is\ exact.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{linear\_recurrence}}
+  --- \texttt{u\_n\ =\ p*u\_\{n-1\}+q*u\_\{n-2\},\ three\ terms.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{linear\_solve}} ---
+  \texttt{a*x\ +\ b\ =\ c\ \ =\textgreater{}\ \ x\ =\ (c\ -\ b)/a,\ for\ a\ !=\ 0.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{log2\_pow2}} ---
+  \texttt{if\ N\ is\ a\ power\ of\ two,\ N\ =\ 2\^{}k\ and\ k\ is\ the\ halving\ count.}
+\item
+  \href{../generation_1/I1/algos_gen1_ext.py}{\texttt{log\_product}} ---
+  \texttt{log2(a*b)\ =\ log2(a)+log2(b),\ a,b\ powers\ of\ two.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{median\_five}} ---
+  \texttt{median\ of\ five\ distinct\ numbers:\ two\ pair\ partitions\ leave\ three\ candidates;\ sum-min-max\ is\ the\ middle.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{nested\_radical}}
+  --- \texttt{(sqrt(a)+sqrt(b))\^{}2\ =\ a+b+2sqrt(ab).}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{partial\_fractions}}
+  --- \texttt{1/((x+a)(x+b))\ split\ verified\ at\ x0.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{percentage\_pair}} ---
+  \texttt{q\%\ of\ n\ is\ qn/100\ and\ reversing\ recovers\ n\ exactly.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{perfect\_square\_trinomial}} ---
+  \texttt{a\^{}2\ +\ 2ab\ +\ b\^{}2\ =\ (a\ +\ b)\^{}2.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{power\_difference}}
+  --- \texttt{a\^{}n-b\^{}n\ =\ (a-b)*sum,\ n\textless{}=4.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{quadratic\_formula}} ---
+  \texttt{a*x\^{}2\ +\ b*x\ +\ c\ =\ 0\ \ =\textgreater{}\ \ x\ =\ (-b\ +-\ sqrt(b\^{}2-4ac))\ /\ (2a).}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{quartic\_horner}}
+  --- \texttt{Degree-4\ Horner\ in\ 3\ stages.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{ratio\_share}} ---
+  \texttt{N\ split\ in\ ratio\ p:q:r\ gives\ unit\ N/(p+q+r)\ and\ shares\ unit*p,\ unit*q,\ unit*r.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{rational\_root}}
+  --- \texttt{p(r)=0\ via\ Horner\ for\ (x-r)(ax+b).}
+\item
+  \href{../tools/prm/algos.py}{\texttt{slope\_from\_points}} ---
+  \texttt{Through\ (x1,y1),(x2,y2):\ m\ =\ (y2-y1)/(x2-x1),\ b\ =\ y1\ -\ m*x1,\ so\ y\ =\ m*x\ +\ b.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{substitution\_system}} ---
+  \texttt{x\ +\ y\ =\ S\ and\ x\ -\ y\ =\ D\ \ =\textgreater{}\ \ x\ =\ (S+D)/2,\ y\ =\ (S-D)/2.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{sum\_first\_odds}} ---
+  \texttt{the\ sum\ of\ the\ first\ n\ odd\ numbers\ is\ n\^{}2:\ average\ (2n-1+1)/2\ =\ n,\ times\ n\ terms.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{sum\_fourth\_powers}}
+  --- \texttt{sum\ k\^{}4\ =\ n(n+1)(2n+1)(3n\^{}2+3n-1)/30.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{sum\_odd}} ---
+  \texttt{Sum\ of\ first\ odds\ telescopes\ in\ partials.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{sum\_of\_cubes}} ---
+  \texttt{a\^{}3\ +\ b\^{}3\ =\ (a\ +\ b)(a\^{}2\ -\ ab\ +\ b\^{}2).}
+\item
+  \href{../generation_1/I1/algos_gen1_ext.py}{\texttt{sum\_of\_squares}}
+  --- \texttt{1\^{}2\ +\ ...\ +\ n\^{}2\ =\ n(n+1)(2n+1)/6.}
+\item
+  \href{../generation_1/I1/algos_gen1_ext.py}{\texttt{vieta\_cubic}} ---
+  \texttt{For\ roots\ r1,r2,r3:\ sum,\ pairwise\ sum,\ product.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{weighted\_average}} ---
+  \texttt{weighted\ mean\ (k1\ v1\ +\ k2\ v2)/(k1\ +\ k2)\ lies\ between\ v1\ and\ v2,\ computed\ exactly.}
+\end{itemize}
+
+\subsection{B.2 Calculus (36 entries)}\label{b.2-calculus-36-entries}
+
+\begin{itemize}
+\tightlist
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{area\_under\_linear}}
+  ---
+  \texttt{area\ under\ mx+c\ on\ {[}a,b{]}:\ m(b\^{}2-a\^{}2)/2\ +\ c(b-a),\ exact.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{asymptote\_oblique}} ---
+  \texttt{divide\ (Ax\^{}2+Bx+C)\ by\ (x-d):\ quotient\ A\ x\ +\ (B+Ad),\ remainder\ C+d(B+Ad),\ vertical\ at\ d.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{average\_linear}}
+  --- \texttt{Average\ of\ a*x+b\ on\ {[}0,2{]}\ is\ a+b.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{chain\_poly}} ---
+  \texttt{d/dx\ (ax+b)\^{}n\ at\ x0.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{chain\_rule}} ---
+  \texttt{d/dx\ (a*x\^{}n\ +\ b)\ =\ a*n*x\^{}(n-1);\ the\ constant\ b\ differentiates\ to\ 0.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{concavity\_quad}}
+  ---
+  \texttt{f\textquotesingle{}\textquotesingle{}\ =\ 2a\ sign\ for\ a*x\^{}2.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{critical\_cubic}} ---
+  \texttt{critical\ points\ of\ x\^{}3+ax\^{}2+bx+c\ via\ the\ perfect-square\ discriminant\ of\ f\textquotesingle{}.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{definite\_integral}} ---
+  \texttt{int\_lo\^{}hi\ a*x\^{}n\ dx\ =\ a/(n+1)\ *\ (hi\^{}(n+1)\ -\ lo\^{}(n+1)).}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{definite\_quad}}
+  --- \texttt{int\_0\^{}1\ (ax\^{}2+bx+c).}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{euler\_method\_linear}}
+  ---
+  \texttt{Euler\ method\ for\ y\textquotesingle{}=kx,\ y(x0)=y0:\ two\ steps\ with\ rational\ h\ are\ exact.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{ftc\_check}} ---
+  \texttt{F(1)-F(0)\ for\ a*x\^{}n.}
+\item
+  \href{../generation_1/I1/algos_gen1_ext.py}{\texttt{harmonic\_partial}}
+  ---
+  \texttt{H\_n\ =\ sum\_\{k=1..n\}\ 1/k\ exact,\ n\ \textless{}=\ 6.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{implicit\_circle}}
+  --- \texttt{Circle\ slope\ at\ (0,r)\ is\ 0.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{inflection\_cubic}}
+  --- \texttt{x\^{}3+b*x\ inflects\ at\ 0.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{inverse\_slope}}
+  --- \texttt{Inverse\ slope\ 1/m.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{lhopital\_poly}}
+  --- \texttt{lim\ (x\^{}2-a\^{}2)/(x-a)\ =\ 2a.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{monotonic\_quad}}
+  --- \texttt{Derivative\ of\ a*x\^{}2+x\ at\ 0\ and\ 1.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{mvt\_quadratic}} ---
+  \texttt{Mean\ value\ theorem\ for\ a\ quadratic:\ the\ tangent-slope\ point\ is\ exactly\ (p+q)/2.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{newton\_sqrt\_step}} ---
+  \texttt{one\ Newton\ step\ for\ sqrt(N):\ x1=(x0+N/x0)/2,\ kept\ exact\ because\ x0\ \textbar{}\ N.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{power\_rule}} ---
+  \texttt{d/dx\ (a*x\^{}n)\ =\ a*n*x\^{}(n-1).}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{power\_rule\_integrate}}
+  ---
+  \texttt{integral\ of\ c\ x\^{}n\ over\ {[}0,B{]}\ is\ c\ B\^{}(n+1)/(n+1),\ exact\ in\ rationals.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{product\_rule}} ---
+  \texttt{d/dx\ {[}\ (a\ x\^{}m)(b\ x\^{}n)\ {]}\ =\ a*m*b*x\^{}(n+m-1)\ +\ a*b*n*x\^{}(m+n-1).}
+\item
+  \href{../tools/prm/algos.py}{\texttt{quotient\_rule}} ---
+  \texttt{d/dx\ {[}\ u/v\ {]}\ =\ (u\textquotesingle{}v\ -\ uv\textquotesingle{})/v\^{}2,\ with\ u\ =\ a\ x\^{}2\ +\ b,\ v\ =\ c\ x\ +\ d\ evaluated\ at\ x\ =\ 1.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{riemann\_mid2}}
+  --- \texttt{2-rectangle\ midpoint\ of\ x\^{}2\ on\ {[}0,2{]}.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{rolle\_check}} ---
+  \texttt{f=A(x-p)(x-q):\ f\ vanishes\ at\ p,q\ and\ f\textquotesingle{}\ vanishes\ exactly\ at\ (p+q)/2,\ strictly\ between.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{secant\_poly\_slope}}
+  ---
+  \texttt{secant\ slope\ of\ Ax\^{}2+B\ between\ x1,\ x2\ equals\ A(x1+x2)\ exactly.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{second\_derivative}}
+  --- \texttt{Second\ derivative\ of\ a*x\^{}n\ at\ x0.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{second\_diff\_central}}
+  ---
+  \texttt{central\ second\ difference\ of\ Ax\^{}3\ equals\ 6Ax\ exactly,\ the\ h\^{}2\ error\ term\ vanishing\ for\ cubics.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{shadow\_rates}}
+  --- \texttt{Similar-triangle\ shadow\ =\ 2h.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{simpson\_quadratic}} ---
+  \texttt{Simpson\textquotesingle{}s\ rule\ is\ exact\ for\ quadratics:\ S\ -\ I\ =\ 0,\ verified\ exactly.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{tangent\_line\_quad}}
+  ---
+  \texttt{tangent\ to\ ax\^{}2+bx+c\ at\ x0:\ slope\ 2ax0+b,\ intercept\ c\ -\ a\ x0\^{}2.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{tangent\_point}}
+  --- \texttt{Value\ and\ slope\ of\ a*x\^{}n\ at\ x0.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{taylor\_linear}}
+  --- \texttt{Linear\ approx\ of\ a*x\^{}2\ at\ x0+h.}
+\item
+  \href{../generation_1/I1/algos_gen1_ext.py}{\texttt{telescoping\_series}}
+  --- \texttt{sum\_\{k=1..n\}\ 1/(k(k+1))\ =\ n/(n+1).}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{trapezoid\_linear}}
+  --- \texttt{Trapezoid\ of\ a*x+b\ on\ {[}0,2{]}\ is\ exact.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{usub\_linear}} ---
+  \texttt{d/dx\ (ax+b)\^{}n\ at\ x=1.}
+\end{itemize}
+
+\subsection{B.3 Linear algebra (33
+entries)}\label{b.3-linear-algebra-33-entries}
+
+\begin{itemize}
+\tightlist
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{affine\_point}} ---
+  \texttt{r\ =\ p\ +\ alpha(q-p)\ is\ the\ affine\ interpolation\ point\ on\ segment\ pq,\ exact\ in\ rationals.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{area\_parallelogram2}}
+  ---
+  \texttt{parallelogram\ area\ from\ column\ vectors\ is\ \textbar{}a1\ b2\ -\ a2\ b1\textbar{},\ exact.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{commutator\_trace}}
+  --- \texttt{tr(AB)-tr(BA)\ =\ 0.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{cramer\_2x2}} ---
+  \texttt{Cramer\ solution\ of\ 2x2.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{cross\_2d}} ---
+  \texttt{2-D\ cross\ a1b2-a2b1.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{dep\_pair\_cross}} ---
+  \texttt{two\ vectors\ are\ parallel\ exactly\ when\ their\ 2D\ cross\ product\ is\ zero;\ the\ ratio\ is\ the\ scale.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{det\_3x3\_cofactor}} ---
+  \texttt{det\ of\ a\ 3x3\ by\ the\ six\ Sarrus\ triple\ products,\ exact\ integers.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{det\_product}} ---
+  \texttt{det(AB)\ from\ both\ sides.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{diag\_trace}} ---
+  \texttt{Trace\ of\ a\ squared\ diagonal.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{diagonal\_eigencheck}}
+  ---
+  \texttt{a\ diagonal\ matrix\ has\ its\ eigenvalues\ exactly\ on\ the\ diagonal;\ det\ and\ trace\ confirm.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{dot\_product\_3d}} ---
+  \texttt{a\ .\ b\ =\ a1*b1\ +\ a2*b2\ +\ a3*b3.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{eigen\_sym}} ---
+  \texttt{Eigenvalues\ of\ symmetric\ 2x2,\ exact.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{gauss\_2x2}} ---
+  \texttt{Solve\ {[}{[}a,b{]},{[}c,d{]}{]}\ x\ =\ {[}e,f{]}:\ det\ =\ ad-bc,\ x1\ =\ (de-bf)/det,\ x2\ =\ (af-ce)/det.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{gram\_det}} ---
+  \texttt{Gram\ determinant\ identity.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{hadamard\_trace}}
+  --- \texttt{Entrywise-square\ trace.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{idempotent\_tr}}
+  --- \texttt{Rank-1\ projector\ trace\ is\ 1.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{inverse\_2x2}} ---
+  \texttt{det\ and\ diagonal\ of\ the\ inverse.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{inverse\_mult\_identity2}}
+  ---
+  \texttt{A\^{}\{-1\}\ times\ A\ is\ the\ identity:\ all\ four\ product\ entries\ are\ det/det,\ 0,\ 0,\ det/det.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{mat\_add}} ---
+  \texttt{Entrywise\ sums\ s11,\ s22.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{mat\_square}} ---
+  \texttt{Diagonal\ of\ A\^{}2.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{matrix\_det\_2x2}} ---
+  \texttt{det({[}{[}a,b{]},{[}c,d{]}{]})\ =\ ad\ -\ bc.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{matrix\_sym\_part}} ---
+  \texttt{the\ symmetric\ part\ (A+A\^{}T)/2\ of\ a\ 2x2\ averages\ each\ off-diagonal\ pair\ exactly.}
+\item
+  \href{../generation_1/I1/algos_gen1_ext.py}{\texttt{matrix\_trace\_product}}
+  --- \texttt{tr(AB)\ =\ (AB)\_11\ +\ (AB)\_22\ for\ 2x2.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{matvec\_3}} ---
+  \texttt{3x3\ matrix\ times\ a\ 3-vector,\ three\ exact\ dot\ products.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{nilpotent\_sq}}
+  --- \texttt{Strictly-upper\ 2x2\ squares\ to\ zero.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{outer\_trace}} ---
+  \texttt{tr(uvT)\ =\ u.v.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{proj\_pyth}} ---
+  \texttt{orthogonal\ projection\ of\ u\ onto\ a\ Pythagorean\ vector\ (m,n,\textbar{}v\textbar{}=s)\ with\ exact\ coef\ uv/\textbar{}v\textbar{}\^{}2.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{project\_axis}}
+  --- \texttt{Projection\ onto\ a\ coordinate\ axis.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{rotate\_twice}}
+  --- \texttt{Two\ 90-degree\ rotations\ negate.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{row\_reduce\_rank2}} ---
+  \texttt{rank\ of\ a\ 2x3:\ one\ exact\ elimination\ row\ op,\ then\ count\ the\ free\ columns.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{scalar\_mult}} ---
+  \texttt{Scalar\ multiples.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{trace\_frobenius2}} ---
+  \texttt{Frobenius\ norm\ squared\ of\ a\ 2x2:\ four\ entry\ squares\ summed,\ exact.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{vector\_angle\_cossq}}
+  ---
+  \texttt{cos\^{}2\ of\ the\ angle\ between\ Pythagorean\ vectors\ is\ (u.v)\^{}2/(\textbar{}u\textbar{}\^{}2\textbar{}v\textbar{}\^{}2),\ fully\ rational.}
+\end{itemize}
+
+\subsection{B.4 Number theory (40
+entries)}\label{b.4-number-theory-40-entries}
+
+\begin{itemize}
+\tightlist
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{bayes\_two\_events}} ---
+  \texttt{two-way\ contingency\ table\ with\ exact\ prior\ and\ posterior\ probabilities.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{bezout\_witness}}
+  --- \texttt{Small\ Bezout\ witnesses.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{binary\_value}}
+  --- \texttt{Binary\ digit\ accumulation.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{catalan\_small}} ---
+  \texttt{Catalan\ numbers\ by\ the\ exact\ multiplicative\ recurrence\ C\_k\ =\ C\_\{k-1\}\ *\ 2(2k-1)/(k+1).}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{collatz\_5}} ---
+  \texttt{First\ five\ Collatz\ iterates.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{contfrac\_2}} ---
+  \texttt{a0+1/(a1+1/a2)\ exact.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{crt\_verify}} ---
+  \texttt{Residues\ of\ a\ CRT\ solution.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{digit\_flipper}} ---
+  \texttt{reverse\ a\ three-digit\ number\ through\ its\ mod/div\ digits;\ then\ take\ the\ signed\ difference.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{digital\_root}}
+  --- \texttt{Digit\ sum\ and\ mod-9\ root.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{divisor\_count}}
+  --- \texttt{tau(n)\ by\ counting.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{divisor\_sq\_two\_primes}}
+  ---
+  \texttt{sigma\_2\ of\ N=p\^{}2\ q\ sums\ d\^{}2\ over\ all\ six\ divisors,\ exact\ while\ p,q\ stay\ prime.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{euclid\_gcd}} ---
+  \texttt{gcd(x,y)\ by\ repeated\ remainder:\ gcd(x,y)\ =\ gcd(y,\ x\ mod\ y)\ until\ the\ remainder\ is\ 0.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{euler\_phi}} ---
+  \texttt{phi(n)\ by\ counting,\ small\ n.}
+\item
+  \href{../generation_1/I1/algos_gen1_ext.py}{\texttt{factorial\_recurrence}}
+  --- \texttt{n!\ by\ recurrence,\ n\ \textless{}=\ 7.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{fermat\_little}}
+  --- \texttt{a\^{}(p-1)\ =\ 1\ mod\ p.}
+\item
+  \href{../generation_1/I1/algos_gen1_ext.py}{\texttt{fibonacci\_iter}}
+  --- \texttt{Fibonacci\ by\ iteration\ to\ F\_n,\ n\ \textless{}=\ 10.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{gcd\_three}} ---
+  \texttt{gcd(a,b,c)\ in\ two\ steps.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{lcm\_pair}} ---
+  \texttt{lcm\ =\ a*b/gcd.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{legendre\_euler}}
+  --- \texttt{Euler\ criterion\ power\ mod\ p.}
+\item
+  \href{../tools/prm/algos.py}{\texttt{mod\_pow\_fast}} ---
+  \texttt{base\^{}exp\ mod\ m\ by\ binary\ (square-and-multiply)\ exponentiation.}
+\item
+  \href{../generation_1/I1/algos_gen1_ext.py}{\texttt{modular\_inverse}}
+  --- \texttt{a*x\ =\ 1\ (mod\ m)\ for\ coprime\ a,m.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{mult\_order}} ---
+  \texttt{Multiplicative\ order\ mod\ m.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{multiple\_six}}
+  --- \texttt{6k\ mod\ 6\ is\ 0.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{pascal\_row\_mult}} ---
+  \texttt{Pascal\ row\ n\ by\ the\ exact\ multiplicative\ formula\ C(n,k)=C(n,k-1)(n-k+1)/k.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{pell\_check}} ---
+  \texttt{x\^{}2-Dy\^{}2=1\ for\ tabulated\ minimal\ solutions.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{perfect\_square\_check}}
+  ---
+  \texttt{N\ is\ a\ perfect\ square\ exactly\ when\ isqrt(N)\^{}2\ ==\ N;\ verified\ in\ integers.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{popcount\_halve}} ---
+  \texttt{popcount\ of\ N\textless{}=31\ by\ five\ halving\ rounds,\ exact\ bit\ arithmetic.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{power\_two}} ---
+  \texttt{2\^{}e\ and\ its\ parity.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{prime\_divisor}}
+  --- \texttt{A\ divisor\ and\ zero\ remainder.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{prime\_factor\_small}}
+  ---
+  \texttt{factor\ N=p\^{}a\ q\^{}b\ by\ trial\ division\ through\ the\ small\ primes,\ exact.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{prob\_urn}} ---
+  \texttt{drawing\ from\ an\ urn\ with\ r\ red\ and\ b\ blue:\ P\ values\ are\ exact\ rationals\ summing\ to\ 1.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{pyth\_triple\_verify}}
+  ---
+  \texttt{Euclid\textquotesingle{}s\ formula:\ legs\ 2mn\ and\ m\^{}2-n\^{}2\ give\ hypotenuse\ m\^{}2+n\^{}2,\ verified\ to\ c\^{}2=a\^{}2+b\^{}2.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{repunit\_mod}} ---
+  \texttt{Repunit\ residue.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{sigma\_small}} ---
+  \texttt{Divisor-sum\ partials.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{square\_part}} ---
+  \texttt{n\ =\ d*s\^{}2\ decomposition.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{triangular\_mod}}
+  --- \texttt{Triangular\ number\ and\ 8T+1.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{triangular\_verify}}
+  --- \texttt{T\_n\ by\ recurrence\ and\ closed\ form.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{tribonacci\_general}}
+  ---
+  \texttt{generalized\ tribonacci\ T(n)=T(n-1)+T(n-2)+T(n-3)\ from\ starts\ a,b,c,\ six\ exact\ terms.}
+\item
+  \href{../generation_1/I3/algos_i3.py}{\texttt{twin\_prime\_screen}}
+  ---
+  \texttt{twin-prime\ screen:\ p,\ p+2\ checked\ against\ small-divisor\ residues,\ verdict\ from\ primality.}
+\item
+  \href{../generation_1/I1/algos_gen1_big.py}{\texttt{wilson\_check}}
+  --- \texttt{(p-1)!\ =\ p-1\ mod\ p.}
+\end{itemize}
+
+\end{document}

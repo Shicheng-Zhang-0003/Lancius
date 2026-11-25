@@ -24,7 +24,10 @@
 - `execute_broadcast_binary:106-176`: NumPy trailing-rank, `out=max(a,b)`, compat `da==1||db==1||da==db`, strides + `SIZE_MAX` checks, per-elem decode, bounds. Fixes flat `a[k]+b[k]` OOB. Correct.
 - `ADD/MUL/SUB`: same-shape fast path else N-dim broadcast. Correct. INT8 Add is **row-bias only** (`[1,N]+[R,N]`); any other INT8 broadcast falls through to exact FP64 broadcast, never miscomputes via `shape[1]` assumption. Correct.
 - `ReLU max(0,x)`, `ReLU_BWD g·(fwd>0)`, `Softmax max-sub + NUMERICAL on sum≤0/NaN`, `Softmax_BWD y·(dy-dot)`, `Tanh tanh`, `MSE Σ(p-t)²/N + 2g(p-t)/N`, `Sum/Axis0/1`, `BROADCAST` scalar-splat + N-dim strided path with checked strides, `Permute` validated perm with **checked stride products**, `Batched-matmul` per-batch `kernel_matmul` with **checked batch offsets**. Correct.
-- `CrossEntropy`: per-row `log-sum-exp`, `-Σy·logsm/R`, `dx=(sm-y)·g/R`, `sum≤0|NaN→NUMERICAL`, tiny-neg `→0`. Mean `1/R`. 2D-only. Correct.
+- `CrossEntropy`: per-row `log-sum-exp`, `-Σy·logsm/R`,
+  `dx=((Σy)sm-y)·g/R` (normalized targets simplify to `(sm-y)·g/R`),
+  invalid targets/degenerate sums → `NUMERICAL`, tiny negative roundoff `→0`.
+  Mean `1/R`. 2D-only. Correct.
 - Attention dispatch: cache+`q_seq==1` requires cache heads/dim match; else requires K/V heads/dim match; `q_seq!=kv_seq→UNSUPPORTED_OP` loud. GQA/ROPE/LayerNorm/RMSNorm shape/divisibility checks. Correct.
 - FP32 gate: only `MATMUL/INPUT/CONST` FP32 else `UNSUPPORTED_DTYPE`. Correct.
 - Hot paths use `_checked` element/byte counts; `lancius_node_elements/bytes` aborting never called on hot paths. `liveness` uses `bytes_checked`. Correct.
@@ -33,7 +36,7 @@
 ## 3. Autodiff (`src/math/lancius_autodiff.c`) — the despot core
 
 VJPs (all correct calculus):
-`MATMUL dA=dY·Bᵀ,dB=Aᵀ·dY`, `RELU 0-subgrad at 0`, `TRANSPOSE self-inverse`, `PERMUTE inv[axes[i]]=i`, `SOFTMAX y·(dy-dot)`, `CE (sm-y)·g/R`, `TANH g·(1-y²)`, `MSE 2g(p-t)/N`, `FLATTEN reshape`, `CONV/BWD` thread-local reduce, `MAXPOOL += at argmax`, `SUB -grad`, `SUM d_input[i]=g[0]`, `SUM_AXIS0 d[r,c]=g[0,c]`, `SUM_AXIS1 d[r,c]=g[r,0]`, `RESHAPE reshape-back`, `MUL product rule with scalar lift`.
+`MATMUL dA=dY·Bᵀ,dB=Aᵀ·dY`, `RELU 0-subgrad at 0`, `TRANSPOSE self-inverse`, `PERMUTE inv[axes[i]]=i`, `SOFTMAX y·(dy-dot)`, `CE ((Σy)sm-y)·g/R` (normalized `y`: `(sm-y)·g/R`), `TANH g·(1-y²)`, `MSE 2g(p-t)/N`, `FLATTEN reshape`, `CONV/BWD` thread-local reduce, `MAXPOOL += at argmax`, `SUB -grad`, `SUM d_input[i]=g[0]`, `SUM_AXIS0 d[r,c]=g[0,c]`, `SUM_AXIS1 d[r,c]=g[r,0]`, `RESHAPE reshape-back`, `MUL product rule with scalar lift`.
 
 Truth machinery:
 - `lancius_broadcast_to_shape(g,a,shape,ndim)` (new, `ir.c/ir.h`): exact N-dim scalar lift for 1..4-D. Scheduler already executes N-dim; constructor makes it reachable. Used by SUM grads (any ndim) and MUL scalar lifts.
@@ -69,7 +72,7 @@ V7 fixed `lancius_broadcast_to_shape`.
 ## 6. Training
 
 - Loss: CE `1/R` fwd/bwd consistent, pinned `CE([0,0],[1,0])==log2`, MSE `1/3`. Correct.
-- CIFAR `((x/255)-0.5)/0.5 ∈ [-1,1]` matches PyTorch `Normalize((0.5,),(0.5,))`. MNIST `(x/255)-0.5 ∈ [-0.5,0.5]` (half scale, Adam-tolerant, documented inconsistency). He `√(2/fan_in)` Box-Muller avoiding `log(0)`, biases 0. Correct for ReLU. Verifier uniform `√(1/fan)` for tanh (avoids saturation). Correct.
+- CIFAR `((x/255)-0.5)/0.5 ∈ [-1,1]` matches PyTorch `Normalize((0.5,),(0.5,))`. MNIST `(x/255)-0.5 ∈ [-0.5,0.5]` (half scale, Adam-tolerant, documented inconsistency). He `√(2/fan_in)` is for ReLU. Current tanh verifier trainers use Glorot-normal scale `√(2/(fan_in+fan_out))`; the PRM implementation uses Glorot-uniform bounds `±√(6/(fan_in+fan_out))`.
 - Adam canonical with bias correction; CIFAR global-norm clip `max_norm=1.0` direction-preserving. Correct. LR: MNIST `0.001` fixed, CIFAR `0.0003→×0.5@15,25`, PyTorch ref `0.001/batch64` vs C `batch32` — 3.3× LR + 2× batch gap documented, not transferred. Correct update, unproven LR (documented).
 - Grad-check `EPS=1e-5,TOL=1e-4` central diff, trunc `1e-10`, round `1e-6` ≪ `1e-4`. Proves Conv/CE/MatMul VJPs. Narrow (biases, bcast reductions, extreme logits, single seed) documented.
 - Honesty: CIFAR raw gate aborts on `NaN/>1000/<0` immediately (was clamped-average hiding explosion); both trainers exit 1 if accuracy ≤ chance (was unconditional `return 0`); `test_ffi_error` exits 1 on unexpected success + non-NULL handle check (was always 0). `make check` gates `test_grad_check + audit_* + train_verifier_head + distill --selftest`, not `train_mnist/cifar10` (documented: green says nothing about MNIST/CIFAR convergence).
@@ -276,7 +279,7 @@ converter 1D-helper + ndim lies (parity RED), micromodel FEAT gap, eval
 tautology. All closed above; parity re-measured `3.42e-07` (not marked
 RED — the bug was the converter, the number reproduces exactly).
 
-## 15. R3 training-wrap (in progress) — N-dim, batched, norm exactness
+## 15. R3 training-wrap (landed; verified in V7) — N-dim, batched, norm exactness
 
 Closed VJPs (all re-proven by independent execution + finite differences;
 oracles in `temp/proofs/r3_probe_nd.c`, `temp/proofs/r3_probe_bwd.c`):
@@ -540,27 +543,36 @@ that — not 1.0000 — is the number a model must clear to have shown anything.
 
 ### 18.2 The 3-class verifier, and four defects that would each have printed a plausible number
 
-`examples/train_prm_verifier.c`: `logits = X@W1 + b1 -> tanh -> @W2 + b2`,
-minimising `mean((logits - onehot)^2)`. With the step-size defect below fixed,
-final held-out result **acc 0.5104, macro-F1 0.3953, CE 1.0395** (was
-**0.4957 / 0.3932 / 1.0432**).
+**Historical-metric note (2026-11-23):** C-trainer confusion matrices used
+predicted-class counts for both Cohen-kappa marginals. Kappa values in the
+historical trainer output below are withdrawn until recomputed using true-row
+and predicted-column marginals. Accuracy, MAE and macro-F1 are separate
+calculations.
+
+Historical PRM runs used `logits = X@W1 + b1 -> tanh -> @W2 + b2` and
+minimized `mean((logits - onehot)^2)` while reporting softmax CE. The recorded
+held-out results (**acc 0.5104, macro-F1 0.3953, CE 1.0395**, previously
+**0.4957 / 0.3932 / 1.0432**) describe that older implementation, not the
+current trainer. The current PRM framework and pure-C reference optimize
+mean-row softmax CE; their new metrics have not been rerun.
 
 1. Multiplying logits by `rows/2` "to make MSE `0.5*||.||^2`". MSE is a
    *mean*, so `d/dz mean((s*z - T)^2) = (2/pe)*s^2*(z-T)`: the multiplier enters
    twice, scaling the gradient by `s^2 = 1024`, not `s`. Diverged to NaN.
 2. `softmax_ce` returned `mean log p`, i.e. **negative** cross-entropy, so a
    working run reported `-1.04`.
-3. The graph's MSE VJP is `(2/pe)*(z-T)`; softmax CE gives `(1/rows)*(z-T)`.
-   The relationship is the constant `2/NCLASS`, not `2/pe`. **This one was
-   documented here and then left in the code.** Both trainers stepped with
-   `lr_eff = LR * 2/pe`, on top of a VJP that already contains `2/pe`, so
-   `2/pe` was applied twice and the effective step scaled as **1/rows^2**.
-   Corrected to `lr_eff = LR * NCLASS/2`, the unique constant turning the step
-   into `LR*(1/rows)*sum_r (z_r - T_r)*x_r` — the form a mean-CE trainer takes
-   as `LR*(1/rows)*sum_r (p_r - T_r)*x_r`. Fixed in `train_prm_verifier.c`,
-   `train_verifier5.c` and `train_gen1.c`; `tools/prm/ref_prm.c` mirrored it
-   (`LR*(2/pe)*(2/NCLASS)` -> `LR`, since its hand-derived gradient is already
-   the mean CE gradient). See §18.2.1 for the behavioural proof.
+3. The graph's mean-element MSE VJP is `(2/(rows*NCLASS))*(z-T)`; mean-row
+   softmax CE gives `((sum(T)*softmax(z))-T)/rows`, or
+   `(softmax(z)-T)/rows` for one-hot labels. No constant converts these
+   gradients: they differ by the input-dependent softmax Jacobian. The legacy
+   MSE trainers stepped with `lr_eff = LR*2/pe` on top of an MSE VJP that
+   already contains `2/pe`, making the update scale as **1/rows²**. Using
+   `lr_eff = LR*NCLASS/2` fixes that extra batch-size factor: the resulting
+   update is `LR/rows * (z-T)` per row, still an MSE-residual update, not a
+   CE gradient. `train_prm_verifier.c` has since been changed to optimize CE
+   directly; `train_verifier5.c` and `train_gen1.c` retain the documented MSE
+   objective. `tools/prm/ref_prm.c` now mirrors the CE trainer with its true
+   mean-row CE gradient and step `LR`.
 4. The held-out baseline evaluated `(model_t){0}`, whose `W1/b1/W2/b2` are all
    NULL — segfault. Separately, one `metrics_t` was reused for both splits, so
    the `train-acc` column printed test accuracy.
@@ -587,22 +599,21 @@ trained model and noise.
 ### 18.3 Gradients verified independently, not asserted
 
 `tools/prm/ref_prm.c` is a pure-C trainer with hand-derived softmax-CE backprop
-and no framework in it, mirroring every hyperparameter, the RNG stream and the
-He init. It reaches **test acc 0.5046** against the framework's **0.5104**
-(pre-fix: 0.4959 vs 0.4957). The near-exact pre-fix agreement was itself a
-warning: it meant the mirror was faithfully reproducing the shared `1/rows^2`
-step, not independently confirming it. Both now step with `LR` times the mean
-gradient *of their own objective*, so the two paths differ only by
-`(z-T)` versus `(softmax(z)-T)` — the residual a constant cannot convert — and a
-disagreement here is evidence about gradients, not about a step convention.
-The graph path trains correctly.
+and no framework in it. Its objective, initialization family, hyperparameters
+and shuffle stream now mirror the framework trainer. The previously recorded
+0.5046/0.5104 test accuracies and pre-fix 0.4959/0.4957 comparison belong to
+older code and do not establish parity for the current CE implementation.
+Both current source paths use the mean-row CE gradient and step with `LR`;
+their post-change trajectories still need a fresh run.
 
-The self-contained gradient check finite-differences the **graph's own
-mean-MSE objective**, not cross-entropy, and pins at **9.5e-09**. Three false
+The historical self-contained gradient check finite-differenced the graph's
+mean-MSE objective and recorded **9.5e-09**. The current PRM trainer's check is
+now configured to finite-difference the same mean-row CE objective that it
+trains; it has not been rerun here. Three false
 alarms preceded it, two of which were my harness rather than the framework:
 `MSE_BWD` was exact to `0e+00` in isolation and a hand-derived CE gradient
 matched central differences to all printed digits, so the residual came from
-converting mean-MSE to CE with the wrong prefactor (twice) and from a metric
+incorrectly treating the MSE residual as a CE gradient and from a metric
 that divides by gradients at the `1e-12` level where a central difference is
 pure float noise. An RMS-relative denominator was required.
 
@@ -675,8 +686,8 @@ into the gradient, He init via Box-Muller (the PRM trainer multiplied a
 
 ```
 gradient check: 20 probes on W1, worst scale-relative err = 8.891e-08  OK
-overall    n=1574  exact=0.9377  within1=0.9752  macroF1=0.6385  MAE=0.0562  kappa=0.9218
-per-step   n=6764  exact=0.9808  within1=0.9871  macroF1=0.6499  MAE=0.0203  kappa=0.9708
+overall    n=1574  exact=0.9377  within1=0.9752  macroF1=0.6385  MAE=0.0562  kappa=withdrawn
+per-step   n=6764  exact=0.9808  within1=0.9871  macroF1=0.6499  MAE=0.0203  kappa=withdrawn
 ```
 
 Two separate defects were hiding behind those numbers. The `macroF1` column was
@@ -693,8 +704,8 @@ With the metric fixed and the step-size fixed, the same architecture scores
 (60 epochs, batch 128, RM, seed unchanged):
 
 ```
-overall    n=2366  exact=0.9970  within1=0.9979  macroF1=0.9971  MAE=0.0025  kappa=0.9963
-per-step   n=9921  exact=0.9988  within1=0.9988  macroF1=0.9968  MAE=0.0013  kappa=0.9982
+overall    n=2366  exact=0.9970  within1=0.9979  macroF1=0.9971  MAE=0.0025  kappa=withdrawn
+per-step   n=9921  exact=0.9988  within1=0.9988  macroF1=0.9968  MAE=0.0013  kappa=withdrawn
 ```
 
 Note these tables come from **different splits**: the first three rows are the
@@ -762,7 +773,7 @@ the one-epoch batch-1024 sweep brackets the optimum:
 At **LR=0.002 the model reaches val-exact 0.9489 in one epoch — 41 steps** —
 against the shipped trainer's 0.7201 in its first epoch and 0.8957 after 961
 steps. Test metrics at that epoch: overall exact **0.9497**, within1 0.9793,
-macro-F1 0.6433, MAE 0.0408, kappa 0.9370.
+macro-F1 0.6433, MAE 0.0408; kappa withdrawn due to incorrect marginals.
 
 The 5-epoch, batch-256 run at LR=0.002, selected on validation (epoch 4, val
 exact 0.9935), closes it:
@@ -794,8 +805,9 @@ correct, which is why its F1 figures were trustworthy throughout.
 
 Detected by recomputing the matrix that the same run printed: verifier5's
 `0.6385` was **0.9971**, Gen1's `0.6172` was **0.8941**. Accuracy, MAE and
-kappa were never affected. The published "verifiers have low macro-F1" reading
-was an artifact of the metric, not of the models.
+kappa should not be read from those C-trainer logs: its expected-agreement
+term used predicted-class marginals twice. The published "verifiers have low
+macro-F1" reading was an artifact of the metric, not of the models.
 
 #### 18.6.2 A default path that evaluated the wrong network
 
@@ -906,11 +918,12 @@ does not exist.
 
 | H | test exact (mean ± sd) | range | MAE | kappa |
 |---|---|---|---|---|
-| 64 | 0.9070 ± 0.0388 | [0.8793, 0.9619] | 0.0664 | 0.8815 |
-| **96** | **0.9290 ± 0.0170** | [0.9053, 0.9441] | **0.0613** | **0.9107** |
-| 128 | 0.9183 ± 0.0280 | [0.8793, 0.9435] | 0.0649 | 0.8973 |
+| 64 | 0.9070 ± 0.0388 | [0.8793, 0.9619] | 0.0664 | withdrawn |
+| **96** | **0.9290 ± 0.0170** | [0.9053, 0.9441] | **0.0613** | withdrawn |
+| 128 | 0.9183 ± 0.0280 | [0.8793, 0.9435] | 0.0649 | withdrawn |
 
-All nine: exact **0.9181 ± 0.0306**, kappa 0.8965 ± 0.0394. **H=96 is the
+All nine: exact **0.9181 ± 0.0306**. Kappa is withdrawn pending recomputation.
+**H=96 is the
 configuration to ship** — highest mean *and* lowest variance; H=64 is both the
 worst mean and the least stable.
 

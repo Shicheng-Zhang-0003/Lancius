@@ -58,19 +58,20 @@ generation_1/
     models/           exported .lancius + checkpoints
     results_big/      eval outputs
     (also cloned at 243-BDC/I5/)
-  I4/                 <- 1I4 research prototype: next-year fire risk
-    (also cloned at 243-BDC/I4/)
-  I6/                 <- 1I6 flagship verifier (MAE/MSE < 1e-3 target)
-    paths.py          repo resolution, pinned MU/SD loader, lancius locator
-    gen_data_i6.py    expanded corpus builder + hard-negative mining vs I3 ALU pool
-    run_big_i6.py     head-to-head vs all 12 I3 ALUs on identical cells
-    gen1_mu_sd.txt    PINNED normalizer (shared with I3, FEAT=65)
-    README.md         full reproduce instructions: build -> corpus -> train -> eval
-    corpus/           158K train / 46K test rows, FEAT=65 NCLASS=5
-    models/           i6_alu_00.lancius + best.bin / last.bin checkpoints
-    results_big/      big_summary.txt + per-epoch prelims
-    train_i6.c        (in ../examples/) CE loss, persistent graph, warm start,
-                      hard-negative mining, checkpoint/resume
+  I6/                 <- 1I6 verifier line (V1.2-RC3.4 flagship release)
+    paths.py          repo resolution, I6 corpus/model/result locators
+    gen_data_i6.py    cleaned 150-algo corpus builder (refuses unrealized labels)
+    run_big_i6.py     multi-expert eval + continuous verdict
+    orchestrate_i6.py sequential family training/eval orchestrator
+    split_corpus_by_family.py  A algorithm-ID splitter -> four experts
+    evaluate_i6_multi.py / monitor_i6.py  training/eval automation
+    corpus_verified/  233,381 rows; train/val/test hold out whole algorithms
+    corpus_verified/mu_sd.txt  train-algorithm-only I6 normalizer
+    README.md         model card + reproduce instructions: build -> corpus -> train -> eval
+    models_verified/  four family experts (.lancius) + best/last checkpoints
+    results_verified/ I6 stress reports and condition matrices
+    train_i6.c        (in ../examples/) 65->128->64->5 CE trainer, sparse I6
+                      inputs, validation-only confidence calibration
 ```
 
 ## Lineage
@@ -107,10 +108,16 @@ attribution to be trusted. Synthetic smoke test (FEAT=10, NCLASS=2) in
 `data_synthetic/`; real fire-risk corpus (FEAT=77, NCLASS=2) in
 `data_i5_real/`.
 
-I6 (1I6) returns to the verifier flagship: 65→4096→2560→5, warm-started
-from the I3 ALU pool, trained with CE loss + hard-negative mining, targeting
-MAE/MSE < 1e-3. All 4 family experts complete — see `I6_TRAINING_STATUS.md` and
-`I6/models/train_i6.log`.
+I6 (1I6) is the verifier line. RC3.3's 65→4096→2560→5 experts and
+sub-millilevel claims are historical; its reported MAE used argmax labels and
+its MSE used `MAE²`. RC3.4 publishes four 65→128→64→5 experts (17,029
+parameters each), trained from fresh initialization with seven sparse
+checker-derived predicates and algorithm-held-out splits. Both independently
+computed continuous MAE/MSE are below `1e-3` on held-out rows. The expanded
+150-algorithm audit scored 100% exact feature-rule agreement across 741,544
+overall and 2,785,441 local-step rows per expert. This tests verdict
+classification, not free-form math solving; metrics, assets, and limits are
+documented in `I6/README.md`.
 
 ## Run
 ```
@@ -159,4 +166,5 @@ python3 generation_1/I1/run_big.py 200
 ```
 I2 depends on I1: the ALU weights, the algorithm corpus, and the feature
 builder all live there. Keep `generation_1/I1/` stable. I3 warm-starts from
-the I2 basis and owns the preferred lineage head going into gen 4.
+the I2 basis. Current I6 uses a separate feature contract and does not
+warm-start from the I3 pool; I3 models remain its stress-test baselines.

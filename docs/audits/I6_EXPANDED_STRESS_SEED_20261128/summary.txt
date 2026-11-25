@@ -1,0 +1,337 @@
+I6 expanded crossed stress suite
+seed=20261128 algorithms=150 valid_builder_inputs_per_algorithm=1000
+random_parameter_sets=150000 explicit_edge_input_sets=6
+unique_algorithm_builder_parameter_vectors=57300
+design=each valid parameter set crossed with all five verdict labels
+overall_cases=741544 local_step_rows=2785441 explicit_edge_cases=26
+continuous_gate_overall=PASS local_step=PASS all_condition_slices=PASS
+perfect_accuracy_overall_and_step=PASS all_condition_slices=PASS
+condition_rows=68056
+build_failures=0 rejected_builder_trials=0 candidate_failures=0 unrealizable_labels_dropped=8482
+
+Per-expert totals (accuracy percentages are exact class agreement):
+algebra overall=741544/741544 (100.000000%) MAE=4.04574779e-07 MSE=4.04574779e-13; local_step=2785441/2785441 (100.000000%) MAE=6.9472877e-07 MSE=6.9472877e-13
+calculus overall=741544/741544 (100.000000%) MAE=4.04574779e-07 MSE=4.04574779e-13; local_step=2785441/2785441 (100.000000%) MAE=6.9472877e-07 MSE=6.9472877e-13
+linear_algebra overall=741544/741544 (100.000000%) MAE=4.04574779e-07 MSE=4.04574779e-13; local_step=2785441/2785441 (100.000000%) MAE=6.9472877e-07 MSE=6.9472877e-13
+number_theory overall=741544/741544 (100.000000%) MAE=4.04574779e-07 MSE=4.04574779e-13; local_step=2785441/2785441 (100.000000%) MAE=6.9472877e-07 MSE=6.9472877e-13
+
+Successfully generated builder inputs by algorithm:
+abs_linear inputs=1000
+affine_point inputs=1000
+am_gm_two inputs=1000
+area_parallelogram2 inputs=1000
+area_under_linear inputs=1000
+arithmetic_series inputs=1000
+asymptote_oblique inputs=1000
+average_linear inputs=1000
+bayes_two_events inputs=1000
+bezout_witness inputs=1000
+binary_value inputs=1000
+binomial_coeff inputs=1000
+binomial_expand inputs=1000
+catalan_small inputs=1000
+cauchy_identity inputs=1000
+chain_poly inputs=1000
+chain_rule inputs=1000
+collatz_5 inputs=1000
+commutator_trace inputs=1000
+completing_square inputs=1000
+composition_affine inputs=1000
+concavity_quad inputs=1000
+contfrac_2 inputs=1000
+cramer_2x2 inputs=1000
+critical_cubic inputs=1000
+cross_2d inputs=1000
+crt_verify inputs=1000
+cube_of_binomial inputs=1000
+definite_integral inputs=1000
+definite_quad inputs=1000
+dep_pair_cross inputs=1000
+det_3x3_cofactor inputs=1000
+det_product inputs=1000
+diag_trace inputs=1000
+diagonal_eigencheck inputs=1000
+difference_of_cubes inputs=1000
+difference_of_squares inputs=1000
+digit_flipper inputs=1000
+digit_sum_base inputs=1000
+digital_root inputs=1000
+divisor_count inputs=1000
+divisor_sq_two_primes inputs=1000
+dot_product_3d inputs=1000
+eigen_sym inputs=1000
+euclid_gcd inputs=1000
+euler_method_linear inputs=1000
+euler_phi inputs=1000
+expo_laws inputs=1000
+factorial_recurrence inputs=1000
+fermat_little inputs=1000
+fibonacci_iter inputs=1000
+ftc_check inputs=1000
+gauss_2x2 inputs=1000
+gauss_pairing inputs=1000
+gcd_three inputs=1000
+geometric_mean_pair inputs=1000
+geometric_series inputs=1000
+gram_det inputs=1000
+hadamard_trace inputs=1000
+harmonic_partial inputs=1000
+horner_eval inputs=1000
+idempotent_tr inputs=1000
+implicit_circle inputs=1000
+inflection_cubic inputs=1000
+inv_function_eval inputs=1000
+inverse_2x2 inputs=1000
+inverse_mult_identity2 inputs=1000
+inverse_slope inputs=1000
+lcm_pair inputs=1000
+legendre_euler inputs=1000
+lhopital_poly inputs=1000
+linear_recurrence inputs=1000
+linear_solve inputs=1000
+log2_pow2 inputs=1000
+log_product inputs=1000
+mat_add inputs=1000
+mat_square inputs=1000
+matrix_det_2x2 inputs=1000
+matrix_sym_part inputs=1000
+matrix_trace_product inputs=1000
+matvec_3 inputs=1000
+median_five inputs=1000
+mod_pow_fast inputs=1000
+modular_inverse inputs=1000
+monotonic_quad inputs=1000
+mult_order inputs=1000
+multiple_six inputs=1000
+mvt_quadratic inputs=1000
+nested_radical inputs=1000
+newton_sqrt_step inputs=1000
+nilpotent_sq inputs=1000
+outer_trace inputs=1000
+partial_fractions inputs=1000
+pascal_row_mult inputs=1000
+pell_check inputs=1000
+percentage_pair inputs=1000
+perfect_square_check inputs=1000
+perfect_square_trinomial inputs=1000
+popcount_halve inputs=1000
+power_difference inputs=1000
+power_rule inputs=1000
+power_rule_integrate inputs=1000
+power_two inputs=1000
+prime_divisor inputs=1000
+prime_factor_small inputs=1000
+prob_urn inputs=1000
+product_rule inputs=1000
+proj_pyth inputs=1000
+project_axis inputs=1000
+pyth_triple_verify inputs=1000
+quadratic_formula inputs=1000
+quartic_horner inputs=1000
+quotient_rule inputs=1000
+ratio_share inputs=1000
+rational_root inputs=1000
+repunit_mod inputs=1000
+riemann_mid2 inputs=1000
+rolle_check inputs=1000
+rotate_twice inputs=1000
+row_reduce_rank2 inputs=1000
+scalar_mult inputs=1000
+secant_poly_slope inputs=1000
+second_derivative inputs=1000
+second_diff_central inputs=1000
+shadow_rates inputs=1000
+sigma_small inputs=1000
+simpson_quadratic inputs=1000
+slope_from_points inputs=1000
+square_part inputs=1000
+substitution_system inputs=1000
+sum_first_odds inputs=1000
+sum_fourth_powers inputs=1000
+sum_odd inputs=1000
+sum_of_cubes inputs=1000
+sum_of_squares inputs=1000
+tangent_line_quad inputs=1000
+tangent_point inputs=1000
+taylor_linear inputs=1000
+telescoping_series inputs=1000
+trace_frobenius2 inputs=1000
+trapezoid_linear inputs=1000
+triangular_mod inputs=1000
+triangular_verify inputs=1000
+tribonacci_general inputs=1000
+twin_prime_screen inputs=1000
+usub_linear inputs=1000
+vector_angle_cossq inputs=1000
+vieta_cubic inputs=1000
+weighted_average inputs=1000
+wilson_check inputs=1000
+
+Rejected builder/candidate trials by algorithm:
+abs_linear rejected=0
+affine_point rejected=0
+am_gm_two rejected=0
+area_parallelogram2 rejected=0
+area_under_linear rejected=0
+arithmetic_series rejected=0
+asymptote_oblique rejected=0
+average_linear rejected=0
+bayes_two_events rejected=0
+bezout_witness rejected=0
+binary_value rejected=0
+binomial_coeff rejected=0
+binomial_expand rejected=0
+catalan_small rejected=0
+cauchy_identity rejected=0
+chain_poly rejected=0
+chain_rule rejected=0
+collatz_5 rejected=0
+commutator_trace rejected=0
+completing_square rejected=0
+composition_affine rejected=0
+concavity_quad rejected=0
+contfrac_2 rejected=0
+cramer_2x2 rejected=0
+critical_cubic rejected=0
+cross_2d rejected=0
+crt_verify rejected=0
+cube_of_binomial rejected=0
+definite_integral rejected=0
+definite_quad rejected=0
+dep_pair_cross rejected=0
+det_3x3_cofactor rejected=0
+det_product rejected=0
+diag_trace rejected=0
+diagonal_eigencheck rejected=0
+difference_of_cubes rejected=0
+difference_of_squares rejected=0
+digit_flipper rejected=0
+digit_sum_base rejected=0
+digital_root rejected=0
+divisor_count rejected=0
+divisor_sq_two_primes rejected=0
+dot_product_3d rejected=0
+eigen_sym rejected=0
+euclid_gcd rejected=0
+euler_method_linear rejected=0
+euler_phi rejected=0
+expo_laws rejected=0
+factorial_recurrence rejected=0
+fermat_little rejected=0
+fibonacci_iter rejected=0
+ftc_check rejected=0
+gauss_2x2 rejected=0
+gauss_pairing rejected=0
+gcd_three rejected=0
+geometric_mean_pair rejected=0
+geometric_series rejected=0
+gram_det rejected=0
+hadamard_trace rejected=0
+harmonic_partial rejected=0
+horner_eval rejected=0
+idempotent_tr rejected=0
+implicit_circle rejected=0
+inflection_cubic rejected=0
+inv_function_eval rejected=0
+inverse_2x2 rejected=0
+inverse_mult_identity2 rejected=0
+inverse_slope rejected=0
+lcm_pair rejected=0
+legendre_euler rejected=0
+lhopital_poly rejected=0
+linear_recurrence rejected=0
+linear_solve rejected=0
+log2_pow2 rejected=0
+log_product rejected=0
+mat_add rejected=0
+mat_square rejected=0
+matrix_det_2x2 rejected=0
+matrix_sym_part rejected=0
+matrix_trace_product rejected=0
+matvec_3 rejected=0
+median_five rejected=0
+mod_pow_fast rejected=0
+modular_inverse rejected=0
+monotonic_quad rejected=0
+mult_order rejected=0
+multiple_six rejected=0
+mvt_quadratic rejected=0
+nested_radical rejected=0
+newton_sqrt_step rejected=0
+nilpotent_sq rejected=0
+outer_trace rejected=0
+partial_fractions rejected=0
+pascal_row_mult rejected=0
+pell_check rejected=0
+percentage_pair rejected=0
+perfect_square_check rejected=0
+perfect_square_trinomial rejected=0
+popcount_halve rejected=0
+power_difference rejected=0
+power_rule rejected=0
+power_rule_integrate rejected=0
+power_two rejected=0
+prime_divisor rejected=0
+prime_factor_small rejected=0
+prob_urn rejected=0
+product_rule rejected=0
+proj_pyth rejected=0
+project_axis rejected=0
+pyth_triple_verify rejected=0
+quadratic_formula rejected=0
+quartic_horner rejected=0
+quotient_rule rejected=0
+ratio_share rejected=0
+rational_root rejected=0
+repunit_mod rejected=0
+riemann_mid2 rejected=0
+rolle_check rejected=0
+rotate_twice rejected=0
+row_reduce_rank2 rejected=0
+scalar_mult rejected=0
+secant_poly_slope rejected=0
+second_derivative rejected=0
+second_diff_central rejected=0
+shadow_rates rejected=0
+sigma_small rejected=0
+simpson_quadratic rejected=0
+slope_from_points rejected=0
+square_part rejected=0
+substitution_system rejected=0
+sum_first_odds rejected=0
+sum_fourth_powers rejected=0
+sum_odd rejected=0
+sum_of_cubes rejected=0
+sum_of_squares rejected=0
+tangent_line_quad rejected=0
+tangent_point rejected=0
+taylor_linear rejected=0
+telescoping_series rejected=0
+trace_frobenius2 rejected=0
+trapezoid_linear rejected=0
+triangular_mod rejected=0
+triangular_verify rejected=0
+tribonacci_general rejected=0
+twin_prime_screen rejected=0
+usub_linear rejected=0
+vector_angle_cossq rejected=0
+vieta_cubic rejected=0
+weighted_average rejected=0
+wilson_check rejected=0
+
+Unrealizable target requests by algorithm/input source/level:
+bezout_witness source=algorithm_builder level=+0.5 dropped=215
+cross_2d source=algorithm_builder level=+0.5 dropped=1000
+diag_trace source=algorithm_builder level=+0.5 dropped=1000
+divisor_count source=algorithm_builder level=+0.5 dropped=1000
+euler_phi source=algorithm_builder level=+0.5 dropped=1000
+factorial_recurrence source=algorithm_builder level=+0.5 dropped=157
+fermat_little source=algorithm_builder level=+0.5 dropped=1000
+hadamard_trace source=algorithm_builder level=+0.5 dropped=1000
+legendre_euler source=algorithm_builder level=+0.5 dropped=1000
+sum_odd source=algorithm_builder level=+0.5 dropped=110
+wilson_check source=algorithm_builder level=+0.5 dropped=1000
+
+Candidate failures by algorithm/source/level/error:
+
+Files: condition_accuracy.csv, class_accuracy.csv, input_accuracy.csv.gz, parameter_coverage.csv, strata_coverage.csv, scenario_cases.csv.gz, step_cases.csv.gz

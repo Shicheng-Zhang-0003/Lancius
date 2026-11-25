@@ -34,11 +34,11 @@ considered experimental development preview, not production-grade.
 
 ### Trainer step size divided by `pe` twice (fixed; effect recorded)
 
-All three `examples/` trainers (`train_prm_verifier.c`, `train_verifier5.c`,
-`train_gen1.c`) built a graph of `mean((logits - onehot)^2)`, whose VJP is
-already `(2/pe)*(z-T)` with `pe = rows*NCLASS`, and then stepped with
-`lr_eff = LR * 2/pe` — applying `2/pe` a second time. The effective step
-therefore scaled as **1/rows^2**, so larger batches learned *worse*.
+The legacy `train_verifier5.c` and `train_gen1.c` trainers build
+`mean((logits - onehot)^2)`, whose VJP is `(2/pe)*(z-T)` with
+`pe = rows*NCLASS`. Their old step also multiplied the learning rate by
+`2/pe`, applying that batch factor twice and making the update scale as
+**1/rows²**. The PRM framework trainer now uses mean-row softmax CE directly.
 
 Measured on the 3-class verifier, same data and LR, 25 epochs:
 
@@ -48,13 +48,12 @@ Measured on the 3-class verifier, same data and LR, 25 epochs:
 | 256 | 0.4821 | 0.5030 |
 | 1024 | **0.3306** (chance) | **0.5155** |
 
-At batch 1024 the shipped step was `2.1e-8` per parameter per step, leaving the
-model at chance and *below* the 0.4418 majority baseline. Corrected to
-`lr_eff = LR * NCLASS/2`, which is the unique constant turning the step into
-`LR*(1/rows)*sum_r (z_r - T_r)*x_r` — the form a mean-CE trainer takes. The
-correction is worth ~2 points at batch 64 (the 16-byte-feature ceiling is the
-binding constraint there) but is the difference between a trained model and
-noise at batch 1024. `tools/prm/ref_prm.c` was updated in lockstep.
+At batch 1024 the historical shipped step was `2.1e-8` per parameter per
+step, leaving the model at chance and *below* the 0.4418 majority baseline.
+The `lr_eff = LR * NCLASS/2` correction scales the MSE residual update to
+`LR/rows * (z-T)`; it does not turn it into a CE gradient. The old batch-size
+measurements document that scaling defect. `tools/prm/ref_prm.c` now mirrors
+the PRM trainer's actual CE objective and mean-row gradient.
 
 Note what the fix does **not** do: `C/2` matches the *step form*, not the
 *gradient*. The MSE-on-logits VJP and a true CE gradient differ by the softmax
@@ -66,13 +65,42 @@ logit vector, not a calibrated distribution.
 **Resolved (superseded).** `examples/train_verifier.c` is now the canonical
 verifier trainer and sidesteps this entire class of defect: it trains the
 framework's own fused softmax cross-entropy (`lancius_cross_entropy`, exact VJP
-`(softmax-y)/R`), reads the loss every step, clips global grad norm, and uses
+`((sum(y)*softmax)-y)/R`, simplifying to `(softmax-y)/R` for normalized
+targets), reads the loss every step, clips global grad norm, and uses
 the framework's `lancius_lr_warmup_cosine`. Gradient-checked against central
 differences (worst scale-relative error < 1e-7). `train_verifier5.c`,
 `train_gen1.c` and `train_prm_verifier.c` are legacy and superseded by it; a
 corpus consumed by the new trainer must carry a `corpus.hdr` (FEAT, NCLASS,
 NTRAIN, NTEST) and graphs are built once per run (persistent training graph,
 buffers bound by pointer).
+
+### I6 verifier status and scope
+
+RC3.3's 65 → 4096 → 2560 → 5 warm-started experts are historical release
+artifacts; their old continuous MAE/MSE target claim was withdrawn. The
+current V1.2-RC3.4 release in `generation_1/I6/` uses a new sparse input
+schema, fresh initialization, and algorithm-held-out evaluation. Its four
+experts pass the held-out `1e-3` gates and the expanded generated-condition
+sweep; test scores and measured limits are recorded in
+`generation_1/I6/README.md`.
+
+- **Synthetic labels.** Training labels come from the generator's
+  injected-defect derivations, not human-written proofs. The scale and
+  machinery are validated; real-world grading accuracy is not claimed.
+- **Semantic inputs.** The current I6 schema uses coordinates 50, 53, 55,
+  57, 59, 60, and 61; all other coordinates are zero. It represents exact
+  checker-derived predicates, not general proof understanding.
+- **Ordinal verdict.** The continuous verdict is the expected level under
+  the 5-class softmax, clipped to `(-1+1e-6, 1-1e-6)`; it is not a calibrated
+  probability. `-2` is the non-logic fault sentinel, not a truth value.
+- **Family routing.** The four experts are routed by the algorithm-to-family
+  map stored in the corpus metadata (`A` IDs), not by an input feature.
+- **Normalizer.** The current I6 scaler is fit on training algorithms only
+  and stored at `corpus_verified/mu_sd.txt`. It is separate from the legacy
+  I1–I3 `mean_rel` scaler.
+- **Model size.** RC3.4 uses 65 → 128 → 64 → 5, 17,029
+  parameters per expert. It remains a research micromodel, not a production
+  serving stack.
 
 ## Backend Support
 
@@ -258,9 +286,6 @@ Proven by `make check-mutation`:
 
 **Not proven, and therefore not claimed:**
 
-- The 3463-LDFD submodule's own gates are its responsibility; this repo runs
-  `make ldfd-test` as a gate member and reports an honest SKIP when the library
-  is absent
 - ONNX conversion beyond LeNet-class graphs, dynamic shapes, GPU paths,
   multi-process or multi-threaded *user* code, and the FP32 path beyond matmul
 - Performance. Throughput is now *measured* by `make bench_kernels`

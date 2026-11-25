@@ -295,8 +295,7 @@
     "Platt calibration is fit on only 97 validation positives; calibration uncertainty is high"
   ],
   "provenance": {
-    "brief": "3463-LDFD/BDC_2026-27_Research_and_Project_Ideas.md.pdf",
-    "brief_sha256": "fa4da786a49c3002683030b86e5fedd187bf1c6ef8e3150ef0b95b671e845fe2",
+    "brief": "I4 fire-risk research plan; source document is not included in this repository",
     "sources": [
       "NBAC/CWFIS WFS",
       "MODIS MOD13Q1 via Planetary Computer",
@@ -305,7 +304,7 @@
       "ESA WorldCover 2021",
       "GBIF"
     ],
-    "supersedes": "earlier LDFD-only 1 km study-box plan"
+    "supersedes": "earlier 1 km study-box plan"
   },
   "results": {
     "test_metrics": "results/i4_test_metrics.json",

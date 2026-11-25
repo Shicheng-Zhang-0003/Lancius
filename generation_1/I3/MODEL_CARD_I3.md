@@ -40,7 +40,7 @@ Corpus `generation_1/I3/corpus/` with seed 20261019, all 150 algorithms drawn:
 | within1 | 0.9797 | 0.9949 |
 | macroF1 | 0.9736 | 0.9857 |
 | MAE(level) | 0.0249 | 0.0059 |
-| kappa | 0.9675 | 0.9909 |
+| kappa | withdrawn (incorrect predicted marginals) | withdrawn (incorrect predicted marginals) |
 
 Levels: -1.0 plain false, -0.5 probably false, +0.0 undecidable, +0.5 mostly true, +1.0 plain true.
 The same-cell caveat: '+0.0 undecidable' rows are likewise emitted both when a derivation is genuinely

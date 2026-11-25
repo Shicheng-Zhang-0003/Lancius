@@ -1,0 +1,1764 @@
+models i6=generation_1/I6/models_verified/alu_algebra.lancius built 2026-11-25 11:02:58 (137896 bytes) | musd=generation_1/I6/corpus_verified/mu_sd.txt
+overall_i6 1.0000 per_step_i6 1.0000
+i6_MAE 0 i6_MSE 0
+i6_continuous_MAE 4.03247889e-07 i6_continuous_MSE 4.03247889e-13
+i6_per_step_continuous_MAE 6.91047146e-07 i6_per_step_continuous_MSE 6.91047146e-13
+target_MAE_1e-3 PASS target_MSE_1e-3 PASS
+target_continuous_MAE_1e-3 PASS target_continuous_MSE_1e-3 PASS
+target_per_step_continuous_MAE_1e-3 PASS target_per_step_continuous_MSE_1e-3 PASS
+condition_slices 348/348 metrics_PASS coverage_PASS
+condition_matrix label n MAE MSE
+condition family/algebra n=7235 MAE=4.03178991e-07 MSE=4.03178991e-13
+condition family/algebra/tier/base n=2665 MAE=4.06754221e-07 MSE=4.06754221e-13
+condition family/algebra/tier/big n=2595 MAE=3.9344894e-07 MSE=3.9344894e-13
+condition family/algebra/tier/neg n=1975 MAE=4.11139241e-07 MSE=4.11139241e-13
+condition family/calculus n=6628 MAE=4.00573325e-07 MSE=4.00573325e-13
+condition family/calculus/tier/base n=2385 MAE=4.04192872e-07 MSE=4.04192872e-13
+condition family/calculus/tier/big n=2338 MAE=3.87938409e-07 MSE=3.87938409e-13
+condition family/calculus/tier/neg n=1905 MAE=4.11548556e-07 MSE=4.11548556e-13
+condition family/linear_algebra n=6480 MAE=3.95679012e-07 MSE=3.95679012e-13
+condition family/linear_algebra/tier/base n=2133 MAE=3.91467417e-07 MSE=3.91467417e-13
+condition family/linear_algebra/tier/big n=2118 MAE=3.90462701e-07 MSE=3.90462701e-13
+condition family/linear_algebra/tier/neg n=2229 MAE=4.04665769e-07 MSE=4.04665769e-13
+condition family/number_theory n=5951 MAE=4.14552176e-07 MSE=4.14552176e-13
+condition family/number_theory/tier/base n=2493 MAE=4.21981548e-07 MSE=4.21981548e-13
+condition family/number_theory/tier/big n=2102 MAE=4.15318744e-07 MSE=4.15318744e-13
+condition family/number_theory/tier/neg n=1356 MAE=3.99705015e-07 MSE=3.99705015e-13
+condition level/-1.0 n=5306 MAE=1e-06 MSE=1e-12
+condition level/-0.5 n=5405 MAE=0 MSE=0
+condition level/0.0 n=5358 MAE=1.51695038e-27 MSE=8.88819217e-54
+condition level/0.5 n=4928 MAE=0 MSE=0
+condition level/1.0 n=5297 MAE=1e-06 MSE=1e-12
+condition tier/base n=9676 MAE=4.06676313e-07 MSE=4.06676313e-13
+condition tier/big n=9153 MAE=3.96372774e-07 MSE=3.96372774e-13
+condition tier/neg n=7465 MAE=4.07233758e-07 MSE=4.07233758e-13
+condition algorithm/arithmetic_series n=200 MAE=4.05e-07 MSE=4.05e-13
+condition algorithm/binomial_expand n=99 MAE=3.53535354e-07 MSE=3.53535354e-13
+condition algorithm/chain_rule n=200 MAE=4.25e-07 MSE=4.25e-13
+condition algorithm/definite_integral n=200 MAE=3.75e-07 MSE=3.75e-13
+condition algorithm/difference_of_squares n=200 MAE=4.3e-07 MSE=4.3e-13
+condition algorithm/dot_product_3d n=200 MAE=3.55e-07 MSE=3.55e-13
+condition algorithm/euclid_gcd n=200 MAE=4.35e-07 MSE=4.35e-13
+condition algorithm/gauss_2x2 n=200 MAE=4e-07 MSE=4e-13
+condition algorithm/geometric_series n=199 MAE=4.42211055e-07 MSE=4.42211055e-13
+condition algorithm/linear_solve n=200 MAE=3.85e-07 MSE=3.85e-13
+condition algorithm/matrix_det_2x2 n=200 MAE=3.8e-07 MSE=3.8e-13
+condition algorithm/mod_pow_fast n=189 MAE=4.55026455e-07 MSE=4.55026455e-13
+condition algorithm/perfect_square_trinomial n=200 MAE=3.75e-07 MSE=3.75e-13
+condition algorithm/power_rule n=200 MAE=4.35e-07 MSE=4.35e-13
+condition algorithm/product_rule n=200 MAE=4.45e-07 MSE=4.45e-13
+condition algorithm/quadratic_formula n=200 MAE=3.95e-07 MSE=3.95e-13
+condition algorithm/quotient_rule n=200 MAE=3.7e-07 MSE=3.7e-13
+condition algorithm/slope_from_points n=200 MAE=4.15e-07 MSE=4.15e-13
+condition algorithm/substitution_system n=200 MAE=3.95e-07 MSE=3.95e-13
+condition algorithm/sum_of_cubes n=200 MAE=3.75e-07 MSE=3.75e-13
+condition algorithm/sum_of_squares n=200 MAE=4.6e-07 MSE=4.6e-13
+condition algorithm/difference_of_cubes n=200 MAE=4.25e-07 MSE=4.25e-13
+condition algorithm/cube_of_binomial n=200 MAE=3.85e-07 MSE=3.85e-13
+condition algorithm/telescoping_series n=119 MAE=4.20168067e-07 MSE=4.20168067e-13
+condition algorithm/log_product n=200 MAE=4.45e-07 MSE=4.45e-13
+condition algorithm/modular_inverse n=200 MAE=3.15e-07 MSE=3.15e-13
+condition algorithm/matrix_trace_product n=200 MAE=3.85e-07 MSE=3.85e-13
+condition algorithm/vieta_cubic n=200 MAE=3.7e-07 MSE=3.7e-13
+condition algorithm/factorial_recurrence n=94 MAE=4.89361702e-07 MSE=4.89361702e-13
+condition algorithm/fibonacci_iter n=77 MAE=3.37662338e-07 MSE=3.37662338e-13
+condition algorithm/harmonic_partial n=125 MAE=3.84e-07 MSE=3.84e-13
+condition algorithm/horner_eval n=200 MAE=4.55e-07 MSE=4.55e-13
+condition algorithm/sum_fourth_powers n=200 MAE=3.7e-07 MSE=3.7e-13
+condition algorithm/nested_radical n=200 MAE=3.85e-07 MSE=3.85e-13
+condition algorithm/completing_square n=200 MAE=3.95e-07 MSE=3.95e-13
+condition algorithm/quartic_horner n=200 MAE=3.8e-07 MSE=3.8e-13
+condition algorithm/partial_fractions n=200 MAE=3.65e-07 MSE=3.65e-13
+condition algorithm/cauchy_identity n=200 MAE=4.55e-07 MSE=4.55e-13
+condition algorithm/pell_check n=200 MAE=4.1e-07 MSE=4.1e-13
+condition algorithm/rational_root n=200 MAE=3.85e-07 MSE=3.85e-13
+condition algorithm/power_difference n=200 MAE=3.8e-07 MSE=3.8e-13
+condition algorithm/binomial_coeff n=200 MAE=3.9e-07 MSE=3.9e-13
+condition algorithm/linear_recurrence n=200 MAE=3.75e-07 MSE=3.75e-13
+condition algorithm/contfrac_2 n=200 MAE=3.4e-07 MSE=3.4e-13
+condition algorithm/sum_odd n=137 MAE=4.16058394e-07 MSE=4.16058394e-13
+condition algorithm/triangular_verify n=152 MAE=4.47368421e-07 MSE=4.47368421e-13
+condition algorithm/binary_value n=127 MAE=4.48818898e-07 MSE=4.48818898e-13
+condition algorithm/gcd_three n=200 MAE=4.35e-07 MSE=4.35e-13
+condition algorithm/lcm_pair n=200 MAE=4e-07 MSE=4e-13
+condition algorithm/second_derivative n=200 MAE=3.8e-07 MSE=3.8e-13
+condition algorithm/implicit_circle n=200 MAE=4.25e-07 MSE=4.25e-13
+condition algorithm/lhopital_poly n=200 MAE=4.45e-07 MSE=4.45e-13
+condition algorithm/riemann_mid2 n=200 MAE=3.6e-07 MSE=3.6e-13
+condition algorithm/trapezoid_linear n=200 MAE=4.1e-07 MSE=4.1e-13
+condition algorithm/usub_linear n=200 MAE=3.65e-07 MSE=3.65e-13
+condition algorithm/average_linear n=200 MAE=3.6e-07 MSE=3.6e-13
+condition algorithm/tangent_point n=200 MAE=4.35e-07 MSE=4.35e-13
+condition algorithm/concavity_quad n=200 MAE=4.65e-07 MSE=4.65e-13
+condition algorithm/inflection_cubic n=200 MAE=4.3e-07 MSE=4.3e-13
+condition algorithm/definite_quad n=200 MAE=4.05e-07 MSE=4.05e-13
+condition algorithm/ftc_check n=200 MAE=4.3e-07 MSE=4.3e-13
+condition algorithm/monotonic_quad n=200 MAE=3.6e-07 MSE=3.6e-13
+condition algorithm/shadow_rates n=200 MAE=3.75e-07 MSE=3.75e-13
+condition algorithm/chain_poly n=200 MAE=4.1e-07 MSE=4.1e-13
+condition algorithm/taylor_linear n=200 MAE=4.6e-07 MSE=4.6e-13
+condition algorithm/inverse_slope n=200 MAE=4.3e-07 MSE=4.3e-13
+condition algorithm/mat_add n=200 MAE=3.45e-07 MSE=3.45e-13
+condition algorithm/scalar_mult n=200 MAE=3.65e-07 MSE=3.65e-13
+condition algorithm/inverse_2x2 n=200 MAE=4.4e-07 MSE=4.4e-13
+condition algorithm/eigen_sym n=200 MAE=3.75e-07 MSE=3.75e-13
+condition algorithm/cramer_2x2 n=200 MAE=3.7e-07 MSE=3.7e-13
+condition algorithm/outer_trace n=200 MAE=4.2e-07 MSE=4.2e-13
+condition algorithm/mat_square n=200 MAE=3.85e-07 MSE=3.85e-13
+condition algorithm/cross_2d n=156 MAE=5.32051282e-07 MSE=5.32051282e-13
+condition algorithm/project_axis n=200 MAE=3.85e-07 MSE=3.85e-13
+condition algorithm/rotate_twice n=200 MAE=3.8e-07 MSE=3.8e-13
+condition algorithm/gram_det n=200 MAE=3.7e-07 MSE=3.7e-13
+condition algorithm/nilpotent_sq n=200 MAE=3.85e-07 MSE=3.85e-13
+condition algorithm/idempotent_tr n=200 MAE=4.35e-07 MSE=4.35e-13
+condition algorithm/commutator_trace n=200 MAE=3.75e-07 MSE=3.75e-13
+condition algorithm/det_product n=200 MAE=3.65e-07 MSE=3.65e-13
+condition algorithm/hadamard_trace n=160 MAE=5e-07 MSE=5e-13
+condition algorithm/diag_trace n=164 MAE=5.42682927e-07 MSE=5.42682927e-13
+condition algorithm/euler_phi n=156 MAE=4.67948718e-07 MSE=4.67948718e-13
+condition algorithm/sigma_small n=136 MAE=4.77941176e-07 MSE=4.77941176e-13
+condition algorithm/digital_root n=128 MAE=4.53125e-07 MSE=4.53125e-13
+condition algorithm/collatz_5 n=200 MAE=4.3e-07 MSE=4.3e-13
+condition algorithm/bezout_witness n=191 MAE=4.34554974e-07 MSE=4.34554974e-13
+condition algorithm/crt_verify n=200 MAE=3.2e-07 MSE=3.2e-13
+condition algorithm/legendre_euler n=153 MAE=4.96732026e-07 MSE=4.96732026e-13
+condition algorithm/repunit_mod n=132 MAE=4.46969697e-07 MSE=4.46969697e-13
+condition algorithm/triangular_mod n=200 MAE=3.9e-07 MSE=3.9e-13
+condition algorithm/prime_divisor n=200 MAE=4.1e-07 MSE=4.1e-13
+condition algorithm/square_part n=200 MAE=4.25e-07 MSE=4.25e-13
+condition algorithm/multiple_six n=200 MAE=4.05e-07 MSE=4.05e-13
+condition algorithm/power_two n=200 MAE=3.55e-07 MSE=3.55e-13
+condition algorithm/divisor_count n=167 MAE=4.91017964e-07 MSE=4.91017964e-13
+condition algorithm/mult_order n=200 MAE=3.55e-07 MSE=3.55e-13
+condition algorithm/fermat_little n=161 MAE=5.27950311e-07 MSE=5.27950311e-13
+condition algorithm/wilson_check n=119 MAE=4.28571429e-07 MSE=4.28571429e-13
+condition algorithm/am_gm_two n=136 MAE=4.04411765e-07 MSE=4.04411765e-13
+condition algorithm/abs_linear n=85 MAE=4.23529412e-07 MSE=4.23529412e-13
+condition algorithm/expo_laws n=90 MAE=4.66666667e-07 MSE=4.66666667e-13
+condition algorithm/log2_pow2 n=124 MAE=4.03225806e-07 MSE=4.03225806e-13
+condition algorithm/geometric_mean_pair n=136 MAE=3.52941176e-07 MSE=3.52941176e-13
+condition algorithm/gauss_pairing n=124 MAE=4.35483871e-07 MSE=4.35483871e-13
+condition algorithm/ratio_share n=130 MAE=4.46153846e-07 MSE=4.46153846e-13
+condition algorithm/percentage_pair n=200 MAE=4.2e-07 MSE=4.2e-13
+condition algorithm/composition_affine n=200 MAE=3.5e-07 MSE=3.5e-13
+condition algorithm/weighted_average n=200 MAE=3.8e-07 MSE=3.8e-13
+condition algorithm/inv_function_eval n=200 MAE=4.7e-07 MSE=4.7e-13
+condition algorithm/digit_sum_base n=77 MAE=3.8961039e-07 MSE=3.8961039e-13
+condition algorithm/median_five n=172 MAE=4.12790698e-07 MSE=4.12790698e-13
+condition algorithm/sum_first_odds n=126 MAE=3.96825397e-07 MSE=3.96825397e-13
+condition algorithm/tangent_line_quad n=200 MAE=3.95e-07 MSE=3.95e-13
+condition algorithm/secant_poly_slope n=200 MAE=3.8e-07 MSE=3.8e-13
+condition algorithm/power_rule_integrate n=200 MAE=3.65e-07 MSE=3.65e-13
+condition algorithm/newton_sqrt_step n=129 MAE=3.56589147e-07 MSE=3.56589147e-13
+condition algorithm/euler_method_linear n=200 MAE=3.95e-07 MSE=3.95e-13
+condition algorithm/simpson_quadratic n=200 MAE=3.7e-07 MSE=3.7e-13
+condition algorithm/mvt_quadratic n=140 MAE=3.78571429e-07 MSE=3.78571429e-13
+condition algorithm/critical_cubic n=65 MAE=4.46153846e-07 MSE=4.46153846e-13
+condition algorithm/asymptote_oblique n=177 MAE=3.67231638e-07 MSE=3.67231638e-13
+condition algorithm/area_under_linear n=135 MAE=4.14814815e-07 MSE=4.14814815e-13
+condition algorithm/second_diff_central n=200 MAE=3.8e-07 MSE=3.8e-13
+condition algorithm/rolle_check n=138 MAE=3.76811594e-07 MSE=3.76811594e-13
+condition algorithm/det_3x3_cofactor n=200 MAE=4.35e-07 MSE=4.35e-13
+condition algorithm/matvec_3 n=200 MAE=4.65e-07 MSE=4.65e-13
+condition algorithm/row_reduce_rank2 n=200 MAE=3.65e-07 MSE=3.65e-13
+condition algorithm/trace_frobenius2 n=200 MAE=3.85e-07 MSE=3.85e-13
+condition algorithm/inverse_mult_identity2 n=200 MAE=3.9e-07 MSE=3.9e-13
+condition algorithm/dep_pair_cross n=200 MAE=3.55e-07 MSE=3.55e-13
+condition algorithm/diagonal_eigencheck n=200 MAE=3.55e-07 MSE=3.55e-13
+condition algorithm/proj_pyth n=200 MAE=3.95e-07 MSE=3.95e-13
+condition algorithm/area_parallelogram2 n=200 MAE=3.75e-07 MSE=3.75e-13
+condition algorithm/affine_point n=200 MAE=3.5e-07 MSE=3.5e-13
+condition algorithm/matrix_sym_part n=200 MAE=3.4e-07 MSE=3.4e-13
+condition algorithm/vector_angle_cossq n=200 MAE=4.35e-07 MSE=4.35e-13
+condition algorithm/prime_factor_small n=101 MAE=4.55445545e-07 MSE=4.55445545e-13
+condition algorithm/perfect_square_check n=139 MAE=3.81294964e-07 MSE=3.81294964e-13
+condition algorithm/tribonacci_general n=142 MAE=3.87323944e-07 MSE=3.87323944e-13
+condition algorithm/digit_flipper n=92 MAE=4.34782609e-07 MSE=4.34782609e-13
+condition algorithm/divisor_sq_two_primes n=39 MAE=3.84615385e-07 MSE=3.84615385e-13
+condition algorithm/twin_prime_screen n=22 MAE=4.09090909e-07 MSE=4.09090909e-13
+condition algorithm/popcount_halve n=114 MAE=3.59649123e-07 MSE=3.59649123e-13
+condition algorithm/prob_urn n=123 MAE=3.65853659e-07 MSE=3.65853659e-13
+condition algorithm/bayes_two_events n=127 MAE=3.46456693e-07 MSE=3.46456693e-13
+condition algorithm/pyth_triple_verify n=126 MAE=4.36507937e-07 MSE=4.36507937e-13
+condition algorithm/catalan_small n=67 MAE=4.7761194e-07 MSE=4.7761194e-13
+condition algorithm/pascal_row_mult n=77 MAE=4.15584416e-07 MSE=4.15584416e-13
+condition step/family/algebra n=30278 MAE=7.0803884e-07 MSE=7.0803884e-13
+condition step/family/algebra/tier/base n=11114 MAE=7.0757603e-07 MSE=7.0757603e-13
+condition step/family/algebra/tier/big n=11502 MAE=7.11441488e-07 MSE=7.11441488e-13
+condition step/family/algebra/tier/neg n=7662 MAE=7.03602193e-07 MSE=7.03602193e-13
+condition step/family/calculus n=23193 MAE=6.83697667e-07 MSE=6.83697667e-13
+condition step/family/calculus/tier/base n=8437 MAE=6.8732962e-07 MSE=6.8732962e-13
+condition step/family/calculus/tier/big n=8613 MAE=6.81179612e-07 MSE=6.81179612e-13
+condition step/family/calculus/tier/neg n=6143 MAE=6.82239948e-07 MSE=6.82239948e-13
+condition step/family/linear_algebra n=21880 MAE=6.74771481e-07 MSE=6.74771481e-13
+condition step/family/linear_algebra/tier/base n=7201 MAE=6.73656437e-07 MSE=6.73656437e-13
+condition step/family/linear_algebra/tier/big n=7136 MAE=6.70964126e-07 MSE=6.70964126e-13
+condition step/family/linear_algebra/tier/neg n=7543 MAE=6.79437889e-07 MSE=6.79437889e-13
+condition step/family/number_theory n=20395 MAE=6.91640108e-07 MSE=6.91640108e-13
+condition step/family/number_theory/tier/base n=9263 MAE=7.06142718e-07 MSE=7.06142718e-13
+condition step/family/number_theory/tier/big n=8116 MAE=7.00221784e-07 MSE=7.00221784e-13
+condition step/family/number_theory/tier/neg n=3016 MAE=6.24005305e-07 MSE=6.24005305e-13
+condition step/level/-1.0 n=19254 MAE=1e-06 MSE=1e-12
+condition step/level/-0.5 n=5405 MAE=0 MSE=0
+condition step/level/0.0 n=19248 MAE=2.30914482e-22 MSE=6.20868269e-43
+condition step/level/0.5 n=4928 MAE=0 MSE=0
+condition step/level/1.0 n=46911 MAE=1e-06 MSE=1e-12
+condition step/tier/base n=36015 MAE=6.95682355e-07 MSE=6.95682355e-13
+condition step/tier/big n=35367 MAE=6.9332994e-07 MSE=6.9332994e-13
+condition step/tier/neg n=24364 MAE=6.80881629e-07 MSE=6.80881629e-13
+condition step/algorithm/arithmetic_series n=1000 MAE=7.09e-07 MSE=7.09e-13
+condition step/algorithm/binomial_expand n=657 MAE=6.84931507e-07 MSE=6.84931507e-13
+condition step/algorithm/chain_rule n=600 MAE=6.68333333e-07 MSE=6.68333333e-13
+condition step/algorithm/definite_integral n=1000 MAE=7.27e-07 MSE=7.27e-13
+condition step/algorithm/difference_of_squares n=600 MAE=7.33333333e-07 MSE=7.33333333e-13
+condition step/algorithm/dot_product_3d n=800 MAE=6.625e-07 MSE=6.625e-13
+condition step/algorithm/euclid_gcd n=1188 MAE=7.62626263e-07 MSE=7.62626263e-13
+condition step/algorithm/gauss_2x2 n=1000 MAE=7.12e-07 MSE=7.12e-13
+condition step/algorithm/geometric_series n=995 MAE=7.71859297e-07 MSE=7.71859297e-13
+condition step/algorithm/linear_solve n=600 MAE=6.31666667e-07 MSE=6.31666667e-13
+condition step/algorithm/matrix_det_2x2 n=600 MAE=6.36666667e-07 MSE=6.36666667e-13
+condition step/algorithm/mod_pow_fast n=1123 MAE=7.40872663e-07 MSE=7.40872663e-13
+condition step/algorithm/perfect_square_trinomial n=600 MAE=6.51666667e-07 MSE=6.51666667e-13
+condition step/algorithm/power_rule n=600 MAE=6.75e-07 MSE=6.75e-13
+condition step/algorithm/product_rule n=1000 MAE=7.53e-07 MSE=7.53e-13
+condition step/algorithm/quadratic_formula n=800 MAE=6.9875e-07 MSE=6.9875e-13
+condition step/algorithm/quotient_rule n=1000 MAE=6.66e-07 MSE=6.66e-13
+condition step/algorithm/slope_from_points n=800 MAE=6.8125e-07 MSE=6.8125e-13
+condition step/algorithm/substitution_system n=800 MAE=6.9125e-07 MSE=6.9125e-13
+condition step/algorithm/sum_of_cubes n=600 MAE=6.41666667e-07 MSE=6.41666667e-13
+condition step/algorithm/sum_of_squares n=800 MAE=7.075e-07 MSE=7.075e-13
+condition step/algorithm/difference_of_cubes n=600 MAE=6.71666667e-07 MSE=6.71666667e-13
+condition step/algorithm/cube_of_binomial n=1000 MAE=6.93e-07 MSE=6.93e-13
+condition step/algorithm/telescoping_series n=775 MAE=7.58709677e-07 MSE=7.58709677e-13
+condition step/algorithm/log_product n=800 MAE=7.3375e-07 MSE=7.3375e-13
+condition step/algorithm/modular_inverse n=400 MAE=5.525e-07 MSE=5.525e-13
+condition step/algorithm/matrix_trace_product n=600 MAE=6.81666667e-07 MSE=6.81666667e-13
+condition step/algorithm/vieta_cubic n=600 MAE=6.36666667e-07 MSE=6.36666667e-13
+condition step/algorithm/factorial_recurrence n=511 MAE=7.43639922e-07 MSE=7.43639922e-13
+condition step/algorithm/fibonacci_iter n=499 MAE=7.35470942e-07 MSE=7.35470942e-13
+condition step/algorithm/harmonic_partial n=804 MAE=7.37562189e-07 MSE=7.37562189e-13
+condition step/algorithm/horner_eval n=600 MAE=7.01666667e-07 MSE=7.01666667e-13
+condition step/algorithm/sum_fourth_powers n=1000 MAE=7.06e-07 MSE=7.06e-13
+condition step/algorithm/nested_radical n=600 MAE=6.85e-07 MSE=6.85e-13
+condition step/algorithm/completing_square n=600 MAE=6.88333333e-07 MSE=6.88333333e-13
+condition step/algorithm/quartic_horner n=600 MAE=6.63333333e-07 MSE=6.63333333e-13
+condition step/algorithm/partial_fractions n=800 MAE=6.6125e-07 MSE=6.6125e-13
+condition step/algorithm/cauchy_identity n=800 MAE=7.1e-07 MSE=7.1e-13
+condition step/algorithm/pell_check n=600 MAE=6.46666667e-07 MSE=6.46666667e-13
+condition step/algorithm/rational_root n=400 MAE=5.9e-07 MSE=5.9e-13
+condition step/algorithm/power_difference n=1000 MAE=7.16e-07 MSE=7.16e-13
+condition step/algorithm/binomial_coeff n=400 MAE=5.825e-07 MSE=5.825e-13
+condition step/algorithm/linear_recurrence n=600 MAE=6.45e-07 MSE=6.45e-13
+condition step/algorithm/contfrac_2 n=400 MAE=5.5e-07 MSE=5.5e-13
+condition step/algorithm/sum_odd n=903 MAE=7.99557032e-07 MSE=7.99557032e-13
+condition step/algorithm/triangular_verify n=738 MAE=7.75067751e-07 MSE=7.75067751e-13
+condition step/algorithm/binary_value n=793 MAE=7.44010088e-07 MSE=7.44010088e-13
+condition step/algorithm/gcd_three n=400 MAE=6.275e-07 MSE=6.275e-13
+condition step/algorithm/lcm_pair n=600 MAE=6.56666667e-07 MSE=6.56666667e-13
+condition step/algorithm/second_derivative n=400 MAE=5.975e-07 MSE=5.975e-13
+condition step/algorithm/implicit_circle n=600 MAE=6.58333333e-07 MSE=6.58333333e-13
+condition step/algorithm/lhopital_poly n=400 MAE=6.275e-07 MSE=6.275e-13
+condition step/algorithm/riemann_mid2 n=600 MAE=6.4e-07 MSE=6.4e-13
+condition step/algorithm/trapezoid_linear n=600 MAE=6.6e-07 MSE=6.6e-13
+condition step/algorithm/usub_linear n=400 MAE=5.75e-07 MSE=5.75e-13
+condition step/algorithm/average_linear n=400 MAE=5.825e-07 MSE=5.825e-13
+condition step/algorithm/tangent_point n=600 MAE=6.78333333e-07 MSE=6.78333333e-13
+condition step/algorithm/concavity_quad n=400 MAE=6.225e-07 MSE=6.225e-13
+condition step/algorithm/inflection_cubic n=400 MAE=6.325e-07 MSE=6.325e-13
+condition step/algorithm/definite_quad n=800 MAE=6.825e-07 MSE=6.825e-13
+condition step/algorithm/ftc_check n=600 MAE=6.93333333e-07 MSE=6.93333333e-13
+condition step/algorithm/monotonic_quad n=400 MAE=5.65e-07 MSE=5.65e-13
+condition step/algorithm/shadow_rates n=400 MAE=5.775e-07 MSE=5.775e-13
+condition step/algorithm/chain_poly n=400 MAE=6.1e-07 MSE=6.1e-13
+condition step/algorithm/taylor_linear n=400 MAE=6.3e-07 MSE=6.3e-13
+condition step/algorithm/inverse_slope n=400 MAE=6.3e-07 MSE=6.3e-13
+condition step/algorithm/mat_add n=400 MAE=5.825e-07 MSE=5.825e-13
+condition step/algorithm/scalar_mult n=400 MAE=5.725e-07 MSE=5.725e-13
+condition step/algorithm/inverse_2x2 n=600 MAE=6.86666667e-07 MSE=6.86666667e-13
+condition step/algorithm/eigen_sym n=600 MAE=6.75e-07 MSE=6.75e-13
+condition step/algorithm/cramer_2x2 n=600 MAE=6.6e-07 MSE=6.6e-13
+condition step/algorithm/outer_trace n=400 MAE=6.125e-07 MSE=6.125e-13
+condition step/algorithm/mat_square n=400 MAE=5.95e-07 MSE=5.95e-13
+condition step/algorithm/cross_2d n=156 MAE=5.32051282e-07 MSE=5.32051282e-13
+condition step/algorithm/project_axis n=400 MAE=5.975e-07 MSE=5.975e-13
+condition step/algorithm/rotate_twice n=800 MAE=6.8e-07 MSE=6.8e-13
+condition step/algorithm/gram_det n=600 MAE=6.53333333e-07 MSE=6.53333333e-13
+condition step/algorithm/nilpotent_sq n=400 MAE=5.9e-07 MSE=5.9e-13
+condition step/algorithm/idempotent_tr n=400 MAE=6e-07 MSE=6e-13
+condition step/algorithm/commutator_trace n=600 MAE=6.51666667e-07 MSE=6.51666667e-13
+condition step/algorithm/det_product n=600 MAE=6.38333333e-07 MSE=6.38333333e-13
+condition step/algorithm/hadamard_trace n=160 MAE=5e-07 MSE=5e-13
+condition step/algorithm/diag_trace n=164 MAE=5.42682927e-07 MSE=5.42682927e-13
+condition step/algorithm/euler_phi n=156 MAE=4.67948718e-07 MSE=4.67948718e-13
+condition step/algorithm/sigma_small n=988 MAE=7.70242915e-07 MSE=7.70242915e-13
+condition step/algorithm/digital_root n=256 MAE=6.2109375e-07 MSE=6.2109375e-13
+condition step/algorithm/collatz_5 n=1000 MAE=7.58e-07 MSE=7.58e-13
+condition step/algorithm/bezout_witness n=350 MAE=6.2e-07 MSE=6.2e-13
+condition step/algorithm/crt_verify n=400 MAE=5.225e-07 MSE=5.225e-13
+condition step/algorithm/legendre_euler n=153 MAE=4.96732026e-07 MSE=4.96732026e-13
+condition step/algorithm/repunit_mod n=264 MAE=6.06060606e-07 MSE=6.06060606e-13
+condition step/algorithm/triangular_mod n=400 MAE=5.65e-07 MSE=5.65e-13
+condition step/algorithm/prime_divisor n=400 MAE=6.15e-07 MSE=6.15e-13
+condition step/algorithm/square_part n=400 MAE=6.125e-07 MSE=6.125e-13
+condition step/algorithm/multiple_six n=400 MAE=6.125e-07 MSE=6.125e-13
+condition step/algorithm/power_two n=400 MAE=5.775e-07 MSE=5.775e-13
+condition step/algorithm/divisor_count n=167 MAE=4.91017964e-07 MSE=4.91017964e-13
+condition step/algorithm/mult_order n=400 MAE=5.75e-07 MSE=5.75e-13
+condition step/algorithm/fermat_little n=161 MAE=5.27950311e-07 MSE=5.27950311e-13
+condition step/algorithm/wilson_check n=119 MAE=4.28571429e-07 MSE=4.28571429e-13
+condition step/algorithm/am_gm_two n=680 MAE=7.45588235e-07 MSE=7.45588235e-13
+condition step/algorithm/abs_linear n=340 MAE=7.32352941e-07 MSE=7.32352941e-13
+condition step/algorithm/expo_laws n=360 MAE=7.58333333e-07 MSE=7.58333333e-13
+condition step/algorithm/log2_pow2 n=911 MAE=7.22283205e-07 MSE=7.22283205e-13
+condition step/algorithm/geometric_mean_pair n=680 MAE=7.05882353e-07 MSE=7.05882353e-13
+condition step/algorithm/gauss_pairing n=620 MAE=7.58064516e-07 MSE=7.58064516e-13
+condition step/algorithm/ratio_share n=650 MAE=7.47692308e-07 MSE=7.47692308e-13
+condition step/algorithm/percentage_pair n=600 MAE=6.66666667e-07 MSE=6.66666667e-13
+condition step/algorithm/composition_affine n=1000 MAE=7.5e-07 MSE=7.5e-13
+condition step/algorithm/weighted_average n=800 MAE=6.65e-07 MSE=6.65e-13
+condition step/algorithm/inv_function_eval n=800 MAE=7.475e-07 MSE=7.475e-13
+condition step/algorithm/digit_sum_base n=462 MAE=6.92640693e-07 MSE=6.92640693e-13
+condition step/algorithm/median_five n=2064 MAE=7.75193798e-07 MSE=7.75193798e-13
+condition step/algorithm/sum_first_odds n=756 MAE=7.47354497e-07 MSE=7.47354497e-13
+condition step/algorithm/tangent_line_quad n=800 MAE=7.4e-07 MSE=7.4e-13
+condition step/algorithm/secant_poly_slope n=800 MAE=7.025e-07 MSE=7.025e-13
+condition step/algorithm/power_rule_integrate n=800 MAE=6.95e-07 MSE=6.95e-13
+condition step/algorithm/newton_sqrt_step n=516 MAE=6.87984496e-07 MSE=6.87984496e-13
+condition step/algorithm/euler_method_linear n=800 MAE=6.95e-07 MSE=6.95e-13
+condition step/algorithm/simpson_quadratic n=1400 MAE=7.55714286e-07 MSE=7.55714286e-13
+condition step/algorithm/mvt_quadratic n=840 MAE=6.82142857e-07 MSE=6.82142857e-13
+condition step/algorithm/critical_cubic n=455 MAE=7.49450549e-07 MSE=7.49450549e-13
+condition step/algorithm/asymptote_oblique n=708 MAE=6.34180791e-07 MSE=6.34180791e-13
+condition step/algorithm/area_under_linear n=405 MAE=6.66666667e-07 MSE=6.66666667e-13
+condition step/algorithm/second_diff_central n=1000 MAE=7.24e-07 MSE=7.24e-13
+condition step/algorithm/rolle_check n=690 MAE=7.01449275e-07 MSE=7.01449275e-13
+condition step/algorithm/det_3x3_cofactor n=1400 MAE=7.65e-07 MSE=7.65e-13
+condition step/algorithm/matvec_3 n=600 MAE=7.15e-07 MSE=7.15e-13
+condition step/algorithm/row_reduce_rank2 n=1000 MAE=7.13e-07 MSE=7.13e-13
+condition step/algorithm/trace_frobenius2 n=1000 MAE=7.49e-07 MSE=7.49e-13
+condition step/algorithm/inverse_mult_identity2 n=1000 MAE=7.1e-07 MSE=7.1e-13
+condition step/algorithm/dep_pair_cross n=800 MAE=6.6625e-07 MSE=6.6625e-13
+condition step/algorithm/diagonal_eigencheck n=800 MAE=6.4375e-07 MSE=6.4375e-13
+condition step/algorithm/proj_pyth n=1000 MAE=6.95e-07 MSE=6.95e-13
+condition step/algorithm/area_parallelogram2 n=600 MAE=6.55e-07 MSE=6.55e-13
+condition step/algorithm/affine_point n=1200 MAE=7.125e-07 MSE=7.125e-13
+condition step/algorithm/matrix_sym_part n=1000 MAE=6.72e-07 MSE=6.72e-13
+condition step/algorithm/vector_angle_cossq n=800 MAE=7.0125e-07 MSE=7.0125e-13
+condition step/algorithm/prime_factor_small n=847 MAE=7.8866588e-07 MSE=7.8866588e-13
+condition step/algorithm/perfect_square_check n=417 MAE=6.73860911e-07 MSE=6.73860911e-13
+condition step/algorithm/tribonacci_general n=852 MAE=7.3943662e-07 MSE=7.3943662e-13
+condition step/algorithm/digit_flipper n=552 MAE=7.51811594e-07 MSE=7.51811594e-13
+condition step/algorithm/divisor_sq_two_primes n=273 MAE=7.8021978e-07 MSE=7.8021978e-13
+condition step/algorithm/twin_prime_screen n=110 MAE=7e-07 MSE=7e-13
+condition step/algorithm/popcount_halve n=1254 MAE=7.42424242e-07 MSE=7.42424242e-13
+condition step/algorithm/prob_urn n=492 MAE=6.70731707e-07 MSE=6.70731707e-13
+condition step/algorithm/bayes_two_events n=508 MAE=6.18110236e-07 MSE=6.18110236e-13
+condition step/algorithm/pyth_triple_verify n=756 MAE=7.87037037e-07 MSE=7.87037037e-13
+condition step/algorithm/catalan_small n=294 MAE=7.07482993e-07 MSE=7.07482993e-13
+condition step/algorithm/pascal_row_mult n=374 MAE=7.19251337e-07 MSE=7.19251337e-13
+each_expert_summary name overall_exact step_exact overall_MAE overall_MSE step_MAE step_MSE
+each_expert algebra overall_exact=1 step_exact=1 overall_MAE=4.03247889e-07 overall_MSE=4.03247889e-13 step_MAE=6.91047146e-07 step_MSE=6.91047146e-13
+each_expert calculus overall_exact=1 step_exact=1 overall_MAE=4.03247889e-07 overall_MSE=4.03247889e-13 step_MAE=6.91047146e-07 step_MSE=6.91047146e-13
+each_expert linear_algebra overall_exact=1 step_exact=1 overall_MAE=4.03247889e-07 overall_MSE=4.03247889e-13 step_MAE=6.91047146e-07 step_MSE=6.91047146e-13
+each_expert number_theory overall_exact=1 step_exact=1 overall_MAE=4.03247889e-07 overall_MSE=4.03247889e-13 step_MAE=6.91047146e-07 step_MSE=6.91047146e-13
+each_expert_condition_coverage expected_each=348 counts={'algebra': 348, 'calculus': 348, 'linear_algebra': 348, 'number_theory': 348} target_gates_PASS coverage_PASS
+each_expert_condition_matrix label n exact MAE MSE
+each_expert_condition expert/algebra/overall/family/algebra n=7235 exact=1 MAE=4.03178991e-07 MSE=4.03178991e-13
+each_expert_condition expert/algebra/overall/family/algebra/tier/base n=2665 exact=1 MAE=4.06754221e-07 MSE=4.06754221e-13
+each_expert_condition expert/algebra/overall/family/algebra/tier/big n=2595 exact=1 MAE=3.9344894e-07 MSE=3.9344894e-13
+each_expert_condition expert/algebra/overall/family/algebra/tier/neg n=1975 exact=1 MAE=4.11139241e-07 MSE=4.11139241e-13
+each_expert_condition expert/algebra/overall/family/calculus n=6628 exact=1 MAE=4.00573325e-07 MSE=4.00573325e-13
+each_expert_condition expert/algebra/overall/family/calculus/tier/base n=2385 exact=1 MAE=4.04192872e-07 MSE=4.04192872e-13
+each_expert_condition expert/algebra/overall/family/calculus/tier/big n=2338 exact=1 MAE=3.87938409e-07 MSE=3.87938409e-13
+each_expert_condition expert/algebra/overall/family/calculus/tier/neg n=1905 exact=1 MAE=4.11548556e-07 MSE=4.11548556e-13
+each_expert_condition expert/algebra/overall/family/linear_algebra n=6480 exact=1 MAE=3.95679012e-07 MSE=3.95679012e-13
+each_expert_condition expert/algebra/overall/family/linear_algebra/tier/base n=2133 exact=1 MAE=3.91467417e-07 MSE=3.91467417e-13
+each_expert_condition expert/algebra/overall/family/linear_algebra/tier/big n=2118 exact=1 MAE=3.90462701e-07 MSE=3.90462701e-13
+each_expert_condition expert/algebra/overall/family/linear_algebra/tier/neg n=2229 exact=1 MAE=4.04665769e-07 MSE=4.04665769e-13
+each_expert_condition expert/algebra/overall/family/number_theory n=5951 exact=1 MAE=4.14552176e-07 MSE=4.14552176e-13
+each_expert_condition expert/algebra/overall/family/number_theory/tier/base n=2493 exact=1 MAE=4.21981548e-07 MSE=4.21981548e-13
+each_expert_condition expert/algebra/overall/family/number_theory/tier/big n=2102 exact=1 MAE=4.15318744e-07 MSE=4.15318744e-13
+each_expert_condition expert/algebra/overall/family/number_theory/tier/neg n=1356 exact=1 MAE=3.99705015e-07 MSE=3.99705015e-13
+each_expert_condition expert/algebra/overall/level/-1.0 n=5306 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/algebra/overall/level/-0.5 n=5405 exact=1 MAE=0 MSE=0
+each_expert_condition expert/algebra/overall/level/0.0 n=5358 exact=1 MAE=5.93253079e-32 MSE=3.51949216e-63
+each_expert_condition expert/algebra/overall/level/0.5 n=4928 exact=1 MAE=0 MSE=0
+each_expert_condition expert/algebra/overall/level/1.0 n=5297 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/algebra/overall/tier/base n=9676 exact=1 MAE=4.06676313e-07 MSE=4.06676313e-13
+each_expert_condition expert/algebra/overall/tier/big n=9153 exact=1 MAE=3.96372774e-07 MSE=3.96372774e-13
+each_expert_condition expert/algebra/overall/tier/neg n=7465 exact=1 MAE=4.07233758e-07 MSE=4.07233758e-13
+each_expert_condition expert/algebra/overall/algorithm/arithmetic_series n=200 exact=1 MAE=4.05e-07 MSE=4.05e-13
+each_expert_condition expert/algebra/overall/algorithm/binomial_expand n=99 exact=1 MAE=3.53535354e-07 MSE=3.53535354e-13
+each_expert_condition expert/algebra/overall/algorithm/chain_rule n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/algebra/overall/algorithm/definite_integral n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/algebra/overall/algorithm/difference_of_squares n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/algebra/overall/algorithm/dot_product_3d n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/algebra/overall/algorithm/euclid_gcd n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/algebra/overall/algorithm/gauss_2x2 n=200 exact=1 MAE=4e-07 MSE=4e-13
+each_expert_condition expert/algebra/overall/algorithm/geometric_series n=199 exact=1 MAE=4.42211055e-07 MSE=4.42211055e-13
+each_expert_condition expert/algebra/overall/algorithm/linear_solve n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/algebra/overall/algorithm/matrix_det_2x2 n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/algebra/overall/algorithm/mod_pow_fast n=189 exact=1 MAE=4.55026455e-07 MSE=4.55026455e-13
+each_expert_condition expert/algebra/overall/algorithm/perfect_square_trinomial n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/algebra/overall/algorithm/power_rule n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/algebra/overall/algorithm/product_rule n=200 exact=1 MAE=4.45e-07 MSE=4.45e-13
+each_expert_condition expert/algebra/overall/algorithm/quadratic_formula n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/algebra/overall/algorithm/quotient_rule n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/algebra/overall/algorithm/slope_from_points n=200 exact=1 MAE=4.15e-07 MSE=4.15e-13
+each_expert_condition expert/algebra/overall/algorithm/substitution_system n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/algebra/overall/algorithm/sum_of_cubes n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/algebra/overall/algorithm/sum_of_squares n=200 exact=1 MAE=4.6e-07 MSE=4.6e-13
+each_expert_condition expert/algebra/overall/algorithm/difference_of_cubes n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/algebra/overall/algorithm/cube_of_binomial n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/algebra/overall/algorithm/telescoping_series n=119 exact=1 MAE=4.20168067e-07 MSE=4.20168067e-13
+each_expert_condition expert/algebra/overall/algorithm/log_product n=200 exact=1 MAE=4.45e-07 MSE=4.45e-13
+each_expert_condition expert/algebra/overall/algorithm/modular_inverse n=200 exact=1 MAE=3.15e-07 MSE=3.15e-13
+each_expert_condition expert/algebra/overall/algorithm/matrix_trace_product n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/algebra/overall/algorithm/vieta_cubic n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/algebra/overall/algorithm/factorial_recurrence n=94 exact=1 MAE=4.89361702e-07 MSE=4.89361702e-13
+each_expert_condition expert/algebra/overall/algorithm/fibonacci_iter n=77 exact=1 MAE=3.37662338e-07 MSE=3.37662338e-13
+each_expert_condition expert/algebra/overall/algorithm/harmonic_partial n=125 exact=1 MAE=3.84e-07 MSE=3.84e-13
+each_expert_condition expert/algebra/overall/algorithm/horner_eval n=200 exact=1 MAE=4.55e-07 MSE=4.55e-13
+each_expert_condition expert/algebra/overall/algorithm/sum_fourth_powers n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/algebra/overall/algorithm/nested_radical n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/algebra/overall/algorithm/completing_square n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/algebra/overall/algorithm/quartic_horner n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/algebra/overall/algorithm/partial_fractions n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/algebra/overall/algorithm/cauchy_identity n=200 exact=1 MAE=4.55e-07 MSE=4.55e-13
+each_expert_condition expert/algebra/overall/algorithm/pell_check n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/algebra/overall/algorithm/rational_root n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/algebra/overall/algorithm/power_difference n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/algebra/overall/algorithm/binomial_coeff n=200 exact=1 MAE=3.9e-07 MSE=3.9e-13
+each_expert_condition expert/algebra/overall/algorithm/linear_recurrence n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/algebra/overall/algorithm/contfrac_2 n=200 exact=1 MAE=3.4e-07 MSE=3.4e-13
+each_expert_condition expert/algebra/overall/algorithm/sum_odd n=137 exact=1 MAE=4.16058394e-07 MSE=4.16058394e-13
+each_expert_condition expert/algebra/overall/algorithm/triangular_verify n=152 exact=1 MAE=4.47368421e-07 MSE=4.47368421e-13
+each_expert_condition expert/algebra/overall/algorithm/binary_value n=127 exact=1 MAE=4.48818898e-07 MSE=4.48818898e-13
+each_expert_condition expert/algebra/overall/algorithm/gcd_three n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/algebra/overall/algorithm/lcm_pair n=200 exact=1 MAE=4e-07 MSE=4e-13
+each_expert_condition expert/algebra/overall/algorithm/second_derivative n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/algebra/overall/algorithm/implicit_circle n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/algebra/overall/algorithm/lhopital_poly n=200 exact=1 MAE=4.45e-07 MSE=4.45e-13
+each_expert_condition expert/algebra/overall/algorithm/riemann_mid2 n=200 exact=1 MAE=3.6e-07 MSE=3.6e-13
+each_expert_condition expert/algebra/overall/algorithm/trapezoid_linear n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/algebra/overall/algorithm/usub_linear n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/algebra/overall/algorithm/average_linear n=200 exact=1 MAE=3.6e-07 MSE=3.6e-13
+each_expert_condition expert/algebra/overall/algorithm/tangent_point n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/algebra/overall/algorithm/concavity_quad n=200 exact=1 MAE=4.65e-07 MSE=4.65e-13
+each_expert_condition expert/algebra/overall/algorithm/inflection_cubic n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/algebra/overall/algorithm/definite_quad n=200 exact=1 MAE=4.05e-07 MSE=4.05e-13
+each_expert_condition expert/algebra/overall/algorithm/ftc_check n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/algebra/overall/algorithm/monotonic_quad n=200 exact=1 MAE=3.6e-07 MSE=3.6e-13
+each_expert_condition expert/algebra/overall/algorithm/shadow_rates n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/algebra/overall/algorithm/chain_poly n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/algebra/overall/algorithm/taylor_linear n=200 exact=1 MAE=4.6e-07 MSE=4.6e-13
+each_expert_condition expert/algebra/overall/algorithm/inverse_slope n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/algebra/overall/algorithm/mat_add n=200 exact=1 MAE=3.45e-07 MSE=3.45e-13
+each_expert_condition expert/algebra/overall/algorithm/scalar_mult n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/algebra/overall/algorithm/inverse_2x2 n=200 exact=1 MAE=4.4e-07 MSE=4.4e-13
+each_expert_condition expert/algebra/overall/algorithm/eigen_sym n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/algebra/overall/algorithm/cramer_2x2 n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/algebra/overall/algorithm/outer_trace n=200 exact=1 MAE=4.2e-07 MSE=4.2e-13
+each_expert_condition expert/algebra/overall/algorithm/mat_square n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/algebra/overall/algorithm/cross_2d n=156 exact=1 MAE=5.32051282e-07 MSE=5.32051282e-13
+each_expert_condition expert/algebra/overall/algorithm/project_axis n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/algebra/overall/algorithm/rotate_twice n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/algebra/overall/algorithm/gram_det n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/algebra/overall/algorithm/nilpotent_sq n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/algebra/overall/algorithm/idempotent_tr n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/algebra/overall/algorithm/commutator_trace n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/algebra/overall/algorithm/det_product n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/algebra/overall/algorithm/hadamard_trace n=160 exact=1 MAE=5e-07 MSE=5e-13
+each_expert_condition expert/algebra/overall/algorithm/diag_trace n=164 exact=1 MAE=5.42682927e-07 MSE=5.42682927e-13
+each_expert_condition expert/algebra/overall/algorithm/euler_phi n=156 exact=1 MAE=4.67948718e-07 MSE=4.67948718e-13
+each_expert_condition expert/algebra/overall/algorithm/sigma_small n=136 exact=1 MAE=4.77941176e-07 MSE=4.77941176e-13
+each_expert_condition expert/algebra/overall/algorithm/digital_root n=128 exact=1 MAE=4.53125e-07 MSE=4.53125e-13
+each_expert_condition expert/algebra/overall/algorithm/collatz_5 n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/algebra/overall/algorithm/bezout_witness n=191 exact=1 MAE=4.34554974e-07 MSE=4.34554974e-13
+each_expert_condition expert/algebra/overall/algorithm/crt_verify n=200 exact=1 MAE=3.2e-07 MSE=3.2e-13
+each_expert_condition expert/algebra/overall/algorithm/legendre_euler n=153 exact=1 MAE=4.96732026e-07 MSE=4.96732026e-13
+each_expert_condition expert/algebra/overall/algorithm/repunit_mod n=132 exact=1 MAE=4.46969697e-07 MSE=4.46969697e-13
+each_expert_condition expert/algebra/overall/algorithm/triangular_mod n=200 exact=1 MAE=3.9e-07 MSE=3.9e-13
+each_expert_condition expert/algebra/overall/algorithm/prime_divisor n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/algebra/overall/algorithm/square_part n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/algebra/overall/algorithm/multiple_six n=200 exact=1 MAE=4.05e-07 MSE=4.05e-13
+each_expert_condition expert/algebra/overall/algorithm/power_two n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/algebra/overall/algorithm/divisor_count n=167 exact=1 MAE=4.91017964e-07 MSE=4.91017964e-13
+each_expert_condition expert/algebra/overall/algorithm/mult_order n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/algebra/overall/algorithm/fermat_little n=161 exact=1 MAE=5.27950311e-07 MSE=5.27950311e-13
+each_expert_condition expert/algebra/overall/algorithm/wilson_check n=119 exact=1 MAE=4.28571429e-07 MSE=4.28571429e-13
+each_expert_condition expert/algebra/overall/algorithm/am_gm_two n=136 exact=1 MAE=4.04411765e-07 MSE=4.04411765e-13
+each_expert_condition expert/algebra/overall/algorithm/abs_linear n=85 exact=1 MAE=4.23529412e-07 MSE=4.23529412e-13
+each_expert_condition expert/algebra/overall/algorithm/expo_laws n=90 exact=1 MAE=4.66666667e-07 MSE=4.66666667e-13
+each_expert_condition expert/algebra/overall/algorithm/log2_pow2 n=124 exact=1 MAE=4.03225806e-07 MSE=4.03225806e-13
+each_expert_condition expert/algebra/overall/algorithm/geometric_mean_pair n=136 exact=1 MAE=3.52941176e-07 MSE=3.52941176e-13
+each_expert_condition expert/algebra/overall/algorithm/gauss_pairing n=124 exact=1 MAE=4.35483871e-07 MSE=4.35483871e-13
+each_expert_condition expert/algebra/overall/algorithm/ratio_share n=130 exact=1 MAE=4.46153846e-07 MSE=4.46153846e-13
+each_expert_condition expert/algebra/overall/algorithm/percentage_pair n=200 exact=1 MAE=4.2e-07 MSE=4.2e-13
+each_expert_condition expert/algebra/overall/algorithm/composition_affine n=200 exact=1 MAE=3.5e-07 MSE=3.5e-13
+each_expert_condition expert/algebra/overall/algorithm/weighted_average n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/algebra/overall/algorithm/inv_function_eval n=200 exact=1 MAE=4.7e-07 MSE=4.7e-13
+each_expert_condition expert/algebra/overall/algorithm/digit_sum_base n=77 exact=1 MAE=3.8961039e-07 MSE=3.8961039e-13
+each_expert_condition expert/algebra/overall/algorithm/median_five n=172 exact=1 MAE=4.12790698e-07 MSE=4.12790698e-13
+each_expert_condition expert/algebra/overall/algorithm/sum_first_odds n=126 exact=1 MAE=3.96825397e-07 MSE=3.96825397e-13
+each_expert_condition expert/algebra/overall/algorithm/tangent_line_quad n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/algebra/overall/algorithm/secant_poly_slope n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/algebra/overall/algorithm/power_rule_integrate n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/algebra/overall/algorithm/newton_sqrt_step n=129 exact=1 MAE=3.56589147e-07 MSE=3.56589147e-13
+each_expert_condition expert/algebra/overall/algorithm/euler_method_linear n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/algebra/overall/algorithm/simpson_quadratic n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/algebra/overall/algorithm/mvt_quadratic n=140 exact=1 MAE=3.78571429e-07 MSE=3.78571429e-13
+each_expert_condition expert/algebra/overall/algorithm/critical_cubic n=65 exact=1 MAE=4.46153846e-07 MSE=4.46153846e-13
+each_expert_condition expert/algebra/overall/algorithm/asymptote_oblique n=177 exact=1 MAE=3.67231638e-07 MSE=3.67231638e-13
+each_expert_condition expert/algebra/overall/algorithm/area_under_linear n=135 exact=1 MAE=4.14814815e-07 MSE=4.14814815e-13
+each_expert_condition expert/algebra/overall/algorithm/second_diff_central n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/algebra/overall/algorithm/rolle_check n=138 exact=1 MAE=3.76811594e-07 MSE=3.76811594e-13
+each_expert_condition expert/algebra/overall/algorithm/det_3x3_cofactor n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/algebra/overall/algorithm/matvec_3 n=200 exact=1 MAE=4.65e-07 MSE=4.65e-13
+each_expert_condition expert/algebra/overall/algorithm/row_reduce_rank2 n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/algebra/overall/algorithm/trace_frobenius2 n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/algebra/overall/algorithm/inverse_mult_identity2 n=200 exact=1 MAE=3.9e-07 MSE=3.9e-13
+each_expert_condition expert/algebra/overall/algorithm/dep_pair_cross n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/algebra/overall/algorithm/diagonal_eigencheck n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/algebra/overall/algorithm/proj_pyth n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/algebra/overall/algorithm/area_parallelogram2 n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/algebra/overall/algorithm/affine_point n=200 exact=1 MAE=3.5e-07 MSE=3.5e-13
+each_expert_condition expert/algebra/overall/algorithm/matrix_sym_part n=200 exact=1 MAE=3.4e-07 MSE=3.4e-13
+each_expert_condition expert/algebra/overall/algorithm/vector_angle_cossq n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/algebra/overall/algorithm/prime_factor_small n=101 exact=1 MAE=4.55445545e-07 MSE=4.55445545e-13
+each_expert_condition expert/algebra/overall/algorithm/perfect_square_check n=139 exact=1 MAE=3.81294964e-07 MSE=3.81294964e-13
+each_expert_condition expert/algebra/overall/algorithm/tribonacci_general n=142 exact=1 MAE=3.87323944e-07 MSE=3.87323944e-13
+each_expert_condition expert/algebra/overall/algorithm/digit_flipper n=92 exact=1 MAE=4.34782609e-07 MSE=4.34782609e-13
+each_expert_condition expert/algebra/overall/algorithm/divisor_sq_two_primes n=39 exact=1 MAE=3.84615385e-07 MSE=3.84615385e-13
+each_expert_condition expert/algebra/overall/algorithm/twin_prime_screen n=22 exact=1 MAE=4.09090909e-07 MSE=4.09090909e-13
+each_expert_condition expert/algebra/overall/algorithm/popcount_halve n=114 exact=1 MAE=3.59649123e-07 MSE=3.59649123e-13
+each_expert_condition expert/algebra/overall/algorithm/prob_urn n=123 exact=1 MAE=3.65853659e-07 MSE=3.65853659e-13
+each_expert_condition expert/algebra/overall/algorithm/bayes_two_events n=127 exact=1 MAE=3.46456693e-07 MSE=3.46456693e-13
+each_expert_condition expert/algebra/overall/algorithm/pyth_triple_verify n=126 exact=1 MAE=4.36507937e-07 MSE=4.36507937e-13
+each_expert_condition expert/algebra/overall/algorithm/catalan_small n=67 exact=1 MAE=4.7761194e-07 MSE=4.7761194e-13
+each_expert_condition expert/algebra/overall/algorithm/pascal_row_mult n=77 exact=1 MAE=4.15584416e-07 MSE=4.15584416e-13
+each_expert_condition expert/algebra/local-step/family/algebra n=30278 exact=1 MAE=7.0803884e-07 MSE=7.0803884e-13
+each_expert_condition expert/algebra/local-step/family/algebra/tier/base n=11114 exact=1 MAE=7.0757603e-07 MSE=7.0757603e-13
+each_expert_condition expert/algebra/local-step/family/algebra/tier/big n=11502 exact=1 MAE=7.11441488e-07 MSE=7.11441488e-13
+each_expert_condition expert/algebra/local-step/family/algebra/tier/neg n=7662 exact=1 MAE=7.03602193e-07 MSE=7.03602193e-13
+each_expert_condition expert/algebra/local-step/family/calculus n=23193 exact=1 MAE=6.83697667e-07 MSE=6.83697667e-13
+each_expert_condition expert/algebra/local-step/family/calculus/tier/base n=8437 exact=1 MAE=6.8732962e-07 MSE=6.8732962e-13
+each_expert_condition expert/algebra/local-step/family/calculus/tier/big n=8613 exact=1 MAE=6.81179612e-07 MSE=6.81179612e-13
+each_expert_condition expert/algebra/local-step/family/calculus/tier/neg n=6143 exact=1 MAE=6.82239948e-07 MSE=6.82239948e-13
+each_expert_condition expert/algebra/local-step/family/linear_algebra n=21880 exact=1 MAE=6.74771481e-07 MSE=6.74771481e-13
+each_expert_condition expert/algebra/local-step/family/linear_algebra/tier/base n=7201 exact=1 MAE=6.73656437e-07 MSE=6.73656437e-13
+each_expert_condition expert/algebra/local-step/family/linear_algebra/tier/big n=7136 exact=1 MAE=6.70964126e-07 MSE=6.70964126e-13
+each_expert_condition expert/algebra/local-step/family/linear_algebra/tier/neg n=7543 exact=1 MAE=6.79437889e-07 MSE=6.79437889e-13
+each_expert_condition expert/algebra/local-step/family/number_theory n=20395 exact=1 MAE=6.91640108e-07 MSE=6.91640108e-13
+each_expert_condition expert/algebra/local-step/family/number_theory/tier/base n=9263 exact=1 MAE=7.06142718e-07 MSE=7.06142718e-13
+each_expert_condition expert/algebra/local-step/family/number_theory/tier/big n=8116 exact=1 MAE=7.00221784e-07 MSE=7.00221784e-13
+each_expert_condition expert/algebra/local-step/family/number_theory/tier/neg n=3016 exact=1 MAE=6.24005305e-07 MSE=6.24005305e-13
+each_expert_condition expert/algebra/local-step/level/-1.0 n=19254 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/algebra/local-step/level/-0.5 n=5405 exact=1 MAE=0 MSE=0
+each_expert_condition expert/algebra/local-step/level/0.0 n=19248 exact=1 MAE=2.09348508e-25 MSE=1.20663283e-49
+each_expert_condition expert/algebra/local-step/level/0.5 n=4928 exact=1 MAE=0 MSE=0
+each_expert_condition expert/algebra/local-step/level/1.0 n=46911 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/algebra/local-step/tier/base n=36015 exact=1 MAE=6.95682355e-07 MSE=6.95682355e-13
+each_expert_condition expert/algebra/local-step/tier/big n=35367 exact=1 MAE=6.9332994e-07 MSE=6.9332994e-13
+each_expert_condition expert/algebra/local-step/tier/neg n=24364 exact=1 MAE=6.80881629e-07 MSE=6.80881629e-13
+each_expert_condition expert/algebra/local-step/algorithm/arithmetic_series n=1000 exact=1 MAE=7.09e-07 MSE=7.09e-13
+each_expert_condition expert/algebra/local-step/algorithm/binomial_expand n=657 exact=1 MAE=6.84931507e-07 MSE=6.84931507e-13
+each_expert_condition expert/algebra/local-step/algorithm/chain_rule n=600 exact=1 MAE=6.68333333e-07 MSE=6.68333333e-13
+each_expert_condition expert/algebra/local-step/algorithm/definite_integral n=1000 exact=1 MAE=7.27e-07 MSE=7.27e-13
+each_expert_condition expert/algebra/local-step/algorithm/difference_of_squares n=600 exact=1 MAE=7.33333333e-07 MSE=7.33333333e-13
+each_expert_condition expert/algebra/local-step/algorithm/dot_product_3d n=800 exact=1 MAE=6.625e-07 MSE=6.625e-13
+each_expert_condition expert/algebra/local-step/algorithm/euclid_gcd n=1188 exact=1 MAE=7.62626263e-07 MSE=7.62626263e-13
+each_expert_condition expert/algebra/local-step/algorithm/gauss_2x2 n=1000 exact=1 MAE=7.12e-07 MSE=7.12e-13
+each_expert_condition expert/algebra/local-step/algorithm/geometric_series n=995 exact=1 MAE=7.71859297e-07 MSE=7.71859297e-13
+each_expert_condition expert/algebra/local-step/algorithm/linear_solve n=600 exact=1 MAE=6.31666667e-07 MSE=6.31666667e-13
+each_expert_condition expert/algebra/local-step/algorithm/matrix_det_2x2 n=600 exact=1 MAE=6.36666667e-07 MSE=6.36666667e-13
+each_expert_condition expert/algebra/local-step/algorithm/mod_pow_fast n=1123 exact=1 MAE=7.40872663e-07 MSE=7.40872663e-13
+each_expert_condition expert/algebra/local-step/algorithm/perfect_square_trinomial n=600 exact=1 MAE=6.51666667e-07 MSE=6.51666667e-13
+each_expert_condition expert/algebra/local-step/algorithm/power_rule n=600 exact=1 MAE=6.75e-07 MSE=6.75e-13
+each_expert_condition expert/algebra/local-step/algorithm/product_rule n=1000 exact=1 MAE=7.53e-07 MSE=7.53e-13
+each_expert_condition expert/algebra/local-step/algorithm/quadratic_formula n=800 exact=1 MAE=6.9875e-07 MSE=6.9875e-13
+each_expert_condition expert/algebra/local-step/algorithm/quotient_rule n=1000 exact=1 MAE=6.66e-07 MSE=6.66e-13
+each_expert_condition expert/algebra/local-step/algorithm/slope_from_points n=800 exact=1 MAE=6.8125e-07 MSE=6.8125e-13
+each_expert_condition expert/algebra/local-step/algorithm/substitution_system n=800 exact=1 MAE=6.9125e-07 MSE=6.9125e-13
+each_expert_condition expert/algebra/local-step/algorithm/sum_of_cubes n=600 exact=1 MAE=6.41666667e-07 MSE=6.41666667e-13
+each_expert_condition expert/algebra/local-step/algorithm/sum_of_squares n=800 exact=1 MAE=7.075e-07 MSE=7.075e-13
+each_expert_condition expert/algebra/local-step/algorithm/difference_of_cubes n=600 exact=1 MAE=6.71666667e-07 MSE=6.71666667e-13
+each_expert_condition expert/algebra/local-step/algorithm/cube_of_binomial n=1000 exact=1 MAE=6.93e-07 MSE=6.93e-13
+each_expert_condition expert/algebra/local-step/algorithm/telescoping_series n=775 exact=1 MAE=7.58709677e-07 MSE=7.58709677e-13
+each_expert_condition expert/algebra/local-step/algorithm/log_product n=800 exact=1 MAE=7.3375e-07 MSE=7.3375e-13
+each_expert_condition expert/algebra/local-step/algorithm/modular_inverse n=400 exact=1 MAE=5.525e-07 MSE=5.525e-13
+each_expert_condition expert/algebra/local-step/algorithm/matrix_trace_product n=600 exact=1 MAE=6.81666667e-07 MSE=6.81666667e-13
+each_expert_condition expert/algebra/local-step/algorithm/vieta_cubic n=600 exact=1 MAE=6.36666667e-07 MSE=6.36666667e-13
+each_expert_condition expert/algebra/local-step/algorithm/factorial_recurrence n=511 exact=1 MAE=7.43639922e-07 MSE=7.43639922e-13
+each_expert_condition expert/algebra/local-step/algorithm/fibonacci_iter n=499 exact=1 MAE=7.35470942e-07 MSE=7.35470942e-13
+each_expert_condition expert/algebra/local-step/algorithm/harmonic_partial n=804 exact=1 MAE=7.37562189e-07 MSE=7.37562189e-13
+each_expert_condition expert/algebra/local-step/algorithm/horner_eval n=600 exact=1 MAE=7.01666667e-07 MSE=7.01666667e-13
+each_expert_condition expert/algebra/local-step/algorithm/sum_fourth_powers n=1000 exact=1 MAE=7.06e-07 MSE=7.06e-13
+each_expert_condition expert/algebra/local-step/algorithm/nested_radical n=600 exact=1 MAE=6.85e-07 MSE=6.85e-13
+each_expert_condition expert/algebra/local-step/algorithm/completing_square n=600 exact=1 MAE=6.88333333e-07 MSE=6.88333333e-13
+each_expert_condition expert/algebra/local-step/algorithm/quartic_horner n=600 exact=1 MAE=6.63333333e-07 MSE=6.63333333e-13
+each_expert_condition expert/algebra/local-step/algorithm/partial_fractions n=800 exact=1 MAE=6.6125e-07 MSE=6.6125e-13
+each_expert_condition expert/algebra/local-step/algorithm/cauchy_identity n=800 exact=1 MAE=7.1e-07 MSE=7.1e-13
+each_expert_condition expert/algebra/local-step/algorithm/pell_check n=600 exact=1 MAE=6.46666667e-07 MSE=6.46666667e-13
+each_expert_condition expert/algebra/local-step/algorithm/rational_root n=400 exact=1 MAE=5.9e-07 MSE=5.9e-13
+each_expert_condition expert/algebra/local-step/algorithm/power_difference n=1000 exact=1 MAE=7.16e-07 MSE=7.16e-13
+each_expert_condition expert/algebra/local-step/algorithm/binomial_coeff n=400 exact=1 MAE=5.825e-07 MSE=5.825e-13
+each_expert_condition expert/algebra/local-step/algorithm/linear_recurrence n=600 exact=1 MAE=6.45e-07 MSE=6.45e-13
+each_expert_condition expert/algebra/local-step/algorithm/contfrac_2 n=400 exact=1 MAE=5.5e-07 MSE=5.5e-13
+each_expert_condition expert/algebra/local-step/algorithm/sum_odd n=903 exact=1 MAE=7.99557032e-07 MSE=7.99557032e-13
+each_expert_condition expert/algebra/local-step/algorithm/triangular_verify n=738 exact=1 MAE=7.75067751e-07 MSE=7.75067751e-13
+each_expert_condition expert/algebra/local-step/algorithm/binary_value n=793 exact=1 MAE=7.44010088e-07 MSE=7.44010088e-13
+each_expert_condition expert/algebra/local-step/algorithm/gcd_three n=400 exact=1 MAE=6.275e-07 MSE=6.275e-13
+each_expert_condition expert/algebra/local-step/algorithm/lcm_pair n=600 exact=1 MAE=6.56666667e-07 MSE=6.56666667e-13
+each_expert_condition expert/algebra/local-step/algorithm/second_derivative n=400 exact=1 MAE=5.975e-07 MSE=5.975e-13
+each_expert_condition expert/algebra/local-step/algorithm/implicit_circle n=600 exact=1 MAE=6.58333333e-07 MSE=6.58333333e-13
+each_expert_condition expert/algebra/local-step/algorithm/lhopital_poly n=400 exact=1 MAE=6.275e-07 MSE=6.275e-13
+each_expert_condition expert/algebra/local-step/algorithm/riemann_mid2 n=600 exact=1 MAE=6.4e-07 MSE=6.4e-13
+each_expert_condition expert/algebra/local-step/algorithm/trapezoid_linear n=600 exact=1 MAE=6.6e-07 MSE=6.6e-13
+each_expert_condition expert/algebra/local-step/algorithm/usub_linear n=400 exact=1 MAE=5.75e-07 MSE=5.75e-13
+each_expert_condition expert/algebra/local-step/algorithm/average_linear n=400 exact=1 MAE=5.825e-07 MSE=5.825e-13
+each_expert_condition expert/algebra/local-step/algorithm/tangent_point n=600 exact=1 MAE=6.78333333e-07 MSE=6.78333333e-13
+each_expert_condition expert/algebra/local-step/algorithm/concavity_quad n=400 exact=1 MAE=6.225e-07 MSE=6.225e-13
+each_expert_condition expert/algebra/local-step/algorithm/inflection_cubic n=400 exact=1 MAE=6.325e-07 MSE=6.325e-13
+each_expert_condition expert/algebra/local-step/algorithm/definite_quad n=800 exact=1 MAE=6.825e-07 MSE=6.825e-13
+each_expert_condition expert/algebra/local-step/algorithm/ftc_check n=600 exact=1 MAE=6.93333333e-07 MSE=6.93333333e-13
+each_expert_condition expert/algebra/local-step/algorithm/monotonic_quad n=400 exact=1 MAE=5.65e-07 MSE=5.65e-13
+each_expert_condition expert/algebra/local-step/algorithm/shadow_rates n=400 exact=1 MAE=5.775e-07 MSE=5.775e-13
+each_expert_condition expert/algebra/local-step/algorithm/chain_poly n=400 exact=1 MAE=6.1e-07 MSE=6.1e-13
+each_expert_condition expert/algebra/local-step/algorithm/taylor_linear n=400 exact=1 MAE=6.3e-07 MSE=6.3e-13
+each_expert_condition expert/algebra/local-step/algorithm/inverse_slope n=400 exact=1 MAE=6.3e-07 MSE=6.3e-13
+each_expert_condition expert/algebra/local-step/algorithm/mat_add n=400 exact=1 MAE=5.825e-07 MSE=5.825e-13
+each_expert_condition expert/algebra/local-step/algorithm/scalar_mult n=400 exact=1 MAE=5.725e-07 MSE=5.725e-13
+each_expert_condition expert/algebra/local-step/algorithm/inverse_2x2 n=600 exact=1 MAE=6.86666667e-07 MSE=6.86666667e-13
+each_expert_condition expert/algebra/local-step/algorithm/eigen_sym n=600 exact=1 MAE=6.75e-07 MSE=6.75e-13
+each_expert_condition expert/algebra/local-step/algorithm/cramer_2x2 n=600 exact=1 MAE=6.6e-07 MSE=6.6e-13
+each_expert_condition expert/algebra/local-step/algorithm/outer_trace n=400 exact=1 MAE=6.125e-07 MSE=6.125e-13
+each_expert_condition expert/algebra/local-step/algorithm/mat_square n=400 exact=1 MAE=5.95e-07 MSE=5.95e-13
+each_expert_condition expert/algebra/local-step/algorithm/cross_2d n=156 exact=1 MAE=5.32051282e-07 MSE=5.32051282e-13
+each_expert_condition expert/algebra/local-step/algorithm/project_axis n=400 exact=1 MAE=5.975e-07 MSE=5.975e-13
+each_expert_condition expert/algebra/local-step/algorithm/rotate_twice n=800 exact=1 MAE=6.8e-07 MSE=6.8e-13
+each_expert_condition expert/algebra/local-step/algorithm/gram_det n=600 exact=1 MAE=6.53333333e-07 MSE=6.53333333e-13
+each_expert_condition expert/algebra/local-step/algorithm/nilpotent_sq n=400 exact=1 MAE=5.9e-07 MSE=5.9e-13
+each_expert_condition expert/algebra/local-step/algorithm/idempotent_tr n=400 exact=1 MAE=6e-07 MSE=6e-13
+each_expert_condition expert/algebra/local-step/algorithm/commutator_trace n=600 exact=1 MAE=6.51666667e-07 MSE=6.51666667e-13
+each_expert_condition expert/algebra/local-step/algorithm/det_product n=600 exact=1 MAE=6.38333333e-07 MSE=6.38333333e-13
+each_expert_condition expert/algebra/local-step/algorithm/hadamard_trace n=160 exact=1 MAE=5e-07 MSE=5e-13
+each_expert_condition expert/algebra/local-step/algorithm/diag_trace n=164 exact=1 MAE=5.42682927e-07 MSE=5.42682927e-13
+each_expert_condition expert/algebra/local-step/algorithm/euler_phi n=156 exact=1 MAE=4.67948718e-07 MSE=4.67948718e-13
+each_expert_condition expert/algebra/local-step/algorithm/sigma_small n=988 exact=1 MAE=7.70242915e-07 MSE=7.70242915e-13
+each_expert_condition expert/algebra/local-step/algorithm/digital_root n=256 exact=1 MAE=6.2109375e-07 MSE=6.2109375e-13
+each_expert_condition expert/algebra/local-step/algorithm/collatz_5 n=1000 exact=1 MAE=7.58e-07 MSE=7.58e-13
+each_expert_condition expert/algebra/local-step/algorithm/bezout_witness n=350 exact=1 MAE=6.2e-07 MSE=6.2e-13
+each_expert_condition expert/algebra/local-step/algorithm/crt_verify n=400 exact=1 MAE=5.225e-07 MSE=5.225e-13
+each_expert_condition expert/algebra/local-step/algorithm/legendre_euler n=153 exact=1 MAE=4.96732026e-07 MSE=4.96732026e-13
+each_expert_condition expert/algebra/local-step/algorithm/repunit_mod n=264 exact=1 MAE=6.06060606e-07 MSE=6.06060606e-13
+each_expert_condition expert/algebra/local-step/algorithm/triangular_mod n=400 exact=1 MAE=5.65e-07 MSE=5.65e-13
+each_expert_condition expert/algebra/local-step/algorithm/prime_divisor n=400 exact=1 MAE=6.15e-07 MSE=6.15e-13
+each_expert_condition expert/algebra/local-step/algorithm/square_part n=400 exact=1 MAE=6.125e-07 MSE=6.125e-13
+each_expert_condition expert/algebra/local-step/algorithm/multiple_six n=400 exact=1 MAE=6.125e-07 MSE=6.125e-13
+each_expert_condition expert/algebra/local-step/algorithm/power_two n=400 exact=1 MAE=5.775e-07 MSE=5.775e-13
+each_expert_condition expert/algebra/local-step/algorithm/divisor_count n=167 exact=1 MAE=4.91017964e-07 MSE=4.91017964e-13
+each_expert_condition expert/algebra/local-step/algorithm/mult_order n=400 exact=1 MAE=5.75e-07 MSE=5.75e-13
+each_expert_condition expert/algebra/local-step/algorithm/fermat_little n=161 exact=1 MAE=5.27950311e-07 MSE=5.27950311e-13
+each_expert_condition expert/algebra/local-step/algorithm/wilson_check n=119 exact=1 MAE=4.28571429e-07 MSE=4.28571429e-13
+each_expert_condition expert/algebra/local-step/algorithm/am_gm_two n=680 exact=1 MAE=7.45588235e-07 MSE=7.45588235e-13
+each_expert_condition expert/algebra/local-step/algorithm/abs_linear n=340 exact=1 MAE=7.32352941e-07 MSE=7.32352941e-13
+each_expert_condition expert/algebra/local-step/algorithm/expo_laws n=360 exact=1 MAE=7.58333333e-07 MSE=7.58333333e-13
+each_expert_condition expert/algebra/local-step/algorithm/log2_pow2 n=911 exact=1 MAE=7.22283205e-07 MSE=7.22283205e-13
+each_expert_condition expert/algebra/local-step/algorithm/geometric_mean_pair n=680 exact=1 MAE=7.05882353e-07 MSE=7.05882353e-13
+each_expert_condition expert/algebra/local-step/algorithm/gauss_pairing n=620 exact=1 MAE=7.58064516e-07 MSE=7.58064516e-13
+each_expert_condition expert/algebra/local-step/algorithm/ratio_share n=650 exact=1 MAE=7.47692308e-07 MSE=7.47692308e-13
+each_expert_condition expert/algebra/local-step/algorithm/percentage_pair n=600 exact=1 MAE=6.66666667e-07 MSE=6.66666667e-13
+each_expert_condition expert/algebra/local-step/algorithm/composition_affine n=1000 exact=1 MAE=7.5e-07 MSE=7.5e-13
+each_expert_condition expert/algebra/local-step/algorithm/weighted_average n=800 exact=1 MAE=6.65e-07 MSE=6.65e-13
+each_expert_condition expert/algebra/local-step/algorithm/inv_function_eval n=800 exact=1 MAE=7.475e-07 MSE=7.475e-13
+each_expert_condition expert/algebra/local-step/algorithm/digit_sum_base n=462 exact=1 MAE=6.92640693e-07 MSE=6.92640693e-13
+each_expert_condition expert/algebra/local-step/algorithm/median_five n=2064 exact=1 MAE=7.75193798e-07 MSE=7.75193798e-13
+each_expert_condition expert/algebra/local-step/algorithm/sum_first_odds n=756 exact=1 MAE=7.47354497e-07 MSE=7.47354497e-13
+each_expert_condition expert/algebra/local-step/algorithm/tangent_line_quad n=800 exact=1 MAE=7.4e-07 MSE=7.4e-13
+each_expert_condition expert/algebra/local-step/algorithm/secant_poly_slope n=800 exact=1 MAE=7.025e-07 MSE=7.025e-13
+each_expert_condition expert/algebra/local-step/algorithm/power_rule_integrate n=800 exact=1 MAE=6.95e-07 MSE=6.95e-13
+each_expert_condition expert/algebra/local-step/algorithm/newton_sqrt_step n=516 exact=1 MAE=6.87984496e-07 MSE=6.87984496e-13
+each_expert_condition expert/algebra/local-step/algorithm/euler_method_linear n=800 exact=1 MAE=6.95e-07 MSE=6.95e-13
+each_expert_condition expert/algebra/local-step/algorithm/simpson_quadratic n=1400 exact=1 MAE=7.55714286e-07 MSE=7.55714286e-13
+each_expert_condition expert/algebra/local-step/algorithm/mvt_quadratic n=840 exact=1 MAE=6.82142857e-07 MSE=6.82142857e-13
+each_expert_condition expert/algebra/local-step/algorithm/critical_cubic n=455 exact=1 MAE=7.49450549e-07 MSE=7.49450549e-13
+each_expert_condition expert/algebra/local-step/algorithm/asymptote_oblique n=708 exact=1 MAE=6.34180791e-07 MSE=6.34180791e-13
+each_expert_condition expert/algebra/local-step/algorithm/area_under_linear n=405 exact=1 MAE=6.66666667e-07 MSE=6.66666667e-13
+each_expert_condition expert/algebra/local-step/algorithm/second_diff_central n=1000 exact=1 MAE=7.24e-07 MSE=7.24e-13
+each_expert_condition expert/algebra/local-step/algorithm/rolle_check n=690 exact=1 MAE=7.01449275e-07 MSE=7.01449275e-13
+each_expert_condition expert/algebra/local-step/algorithm/det_3x3_cofactor n=1400 exact=1 MAE=7.65e-07 MSE=7.65e-13
+each_expert_condition expert/algebra/local-step/algorithm/matvec_3 n=600 exact=1 MAE=7.15e-07 MSE=7.15e-13
+each_expert_condition expert/algebra/local-step/algorithm/row_reduce_rank2 n=1000 exact=1 MAE=7.13e-07 MSE=7.13e-13
+each_expert_condition expert/algebra/local-step/algorithm/trace_frobenius2 n=1000 exact=1 MAE=7.49e-07 MSE=7.49e-13
+each_expert_condition expert/algebra/local-step/algorithm/inverse_mult_identity2 n=1000 exact=1 MAE=7.1e-07 MSE=7.1e-13
+each_expert_condition expert/algebra/local-step/algorithm/dep_pair_cross n=800 exact=1 MAE=6.6625e-07 MSE=6.6625e-13
+each_expert_condition expert/algebra/local-step/algorithm/diagonal_eigencheck n=800 exact=1 MAE=6.4375e-07 MSE=6.4375e-13
+each_expert_condition expert/algebra/local-step/algorithm/proj_pyth n=1000 exact=1 MAE=6.95e-07 MSE=6.95e-13
+each_expert_condition expert/algebra/local-step/algorithm/area_parallelogram2 n=600 exact=1 MAE=6.55e-07 MSE=6.55e-13
+each_expert_condition expert/algebra/local-step/algorithm/affine_point n=1200 exact=1 MAE=7.125e-07 MSE=7.125e-13
+each_expert_condition expert/algebra/local-step/algorithm/matrix_sym_part n=1000 exact=1 MAE=6.72e-07 MSE=6.72e-13
+each_expert_condition expert/algebra/local-step/algorithm/vector_angle_cossq n=800 exact=1 MAE=7.0125e-07 MSE=7.0125e-13
+each_expert_condition expert/algebra/local-step/algorithm/prime_factor_small n=847 exact=1 MAE=7.8866588e-07 MSE=7.8866588e-13
+each_expert_condition expert/algebra/local-step/algorithm/perfect_square_check n=417 exact=1 MAE=6.73860911e-07 MSE=6.73860911e-13
+each_expert_condition expert/algebra/local-step/algorithm/tribonacci_general n=852 exact=1 MAE=7.3943662e-07 MSE=7.3943662e-13
+each_expert_condition expert/algebra/local-step/algorithm/digit_flipper n=552 exact=1 MAE=7.51811594e-07 MSE=7.51811594e-13
+each_expert_condition expert/algebra/local-step/algorithm/divisor_sq_two_primes n=273 exact=1 MAE=7.8021978e-07 MSE=7.8021978e-13
+each_expert_condition expert/algebra/local-step/algorithm/twin_prime_screen n=110 exact=1 MAE=7e-07 MSE=7e-13
+each_expert_condition expert/algebra/local-step/algorithm/popcount_halve n=1254 exact=1 MAE=7.42424242e-07 MSE=7.42424242e-13
+each_expert_condition expert/algebra/local-step/algorithm/prob_urn n=492 exact=1 MAE=6.70731707e-07 MSE=6.70731707e-13
+each_expert_condition expert/algebra/local-step/algorithm/bayes_two_events n=508 exact=1 MAE=6.18110236e-07 MSE=6.18110236e-13
+each_expert_condition expert/algebra/local-step/algorithm/pyth_triple_verify n=756 exact=1 MAE=7.87037037e-07 MSE=7.87037037e-13
+each_expert_condition expert/algebra/local-step/algorithm/catalan_small n=294 exact=1 MAE=7.07482993e-07 MSE=7.07482993e-13
+each_expert_condition expert/algebra/local-step/algorithm/pascal_row_mult n=374 exact=1 MAE=7.19251337e-07 MSE=7.19251337e-13
+each_expert_condition expert/calculus/overall/family/algebra n=7235 exact=1 MAE=4.03178991e-07 MSE=4.03178991e-13
+each_expert_condition expert/calculus/overall/family/algebra/tier/base n=2665 exact=1 MAE=4.06754221e-07 MSE=4.06754221e-13
+each_expert_condition expert/calculus/overall/family/algebra/tier/big n=2595 exact=1 MAE=3.9344894e-07 MSE=3.9344894e-13
+each_expert_condition expert/calculus/overall/family/algebra/tier/neg n=1975 exact=1 MAE=4.11139241e-07 MSE=4.11139241e-13
+each_expert_condition expert/calculus/overall/family/calculus n=6628 exact=1 MAE=4.00573325e-07 MSE=4.00573325e-13
+each_expert_condition expert/calculus/overall/family/calculus/tier/base n=2385 exact=1 MAE=4.04192872e-07 MSE=4.04192872e-13
+each_expert_condition expert/calculus/overall/family/calculus/tier/big n=2338 exact=1 MAE=3.87938409e-07 MSE=3.87938409e-13
+each_expert_condition expert/calculus/overall/family/calculus/tier/neg n=1905 exact=1 MAE=4.11548556e-07 MSE=4.11548556e-13
+each_expert_condition expert/calculus/overall/family/linear_algebra n=6480 exact=1 MAE=3.95679012e-07 MSE=3.95679012e-13
+each_expert_condition expert/calculus/overall/family/linear_algebra/tier/base n=2133 exact=1 MAE=3.91467417e-07 MSE=3.91467417e-13
+each_expert_condition expert/calculus/overall/family/linear_algebra/tier/big n=2118 exact=1 MAE=3.90462701e-07 MSE=3.90462701e-13
+each_expert_condition expert/calculus/overall/family/linear_algebra/tier/neg n=2229 exact=1 MAE=4.04665769e-07 MSE=4.04665769e-13
+each_expert_condition expert/calculus/overall/family/number_theory n=5951 exact=1 MAE=4.14552176e-07 MSE=4.14552176e-13
+each_expert_condition expert/calculus/overall/family/number_theory/tier/base n=2493 exact=1 MAE=4.21981548e-07 MSE=4.21981548e-13
+each_expert_condition expert/calculus/overall/family/number_theory/tier/big n=2102 exact=1 MAE=4.15318744e-07 MSE=4.15318744e-13
+each_expert_condition expert/calculus/overall/family/number_theory/tier/neg n=1356 exact=1 MAE=3.99705015e-07 MSE=3.99705015e-13
+each_expert_condition expert/calculus/overall/level/-1.0 n=5306 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/calculus/overall/level/-0.5 n=5405 exact=1 MAE=0 MSE=0
+each_expert_condition expert/calculus/overall/level/0.0 n=5358 exact=1 MAE=6.48164556e-29 MSE=4.20117292e-57
+each_expert_condition expert/calculus/overall/level/0.5 n=4928 exact=1 MAE=0 MSE=0
+each_expert_condition expert/calculus/overall/level/1.0 n=5297 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/calculus/overall/tier/base n=9676 exact=1 MAE=4.06676313e-07 MSE=4.06676313e-13
+each_expert_condition expert/calculus/overall/tier/big n=9153 exact=1 MAE=3.96372774e-07 MSE=3.96372774e-13
+each_expert_condition expert/calculus/overall/tier/neg n=7465 exact=1 MAE=4.07233758e-07 MSE=4.07233758e-13
+each_expert_condition expert/calculus/overall/algorithm/arithmetic_series n=200 exact=1 MAE=4.05e-07 MSE=4.05e-13
+each_expert_condition expert/calculus/overall/algorithm/binomial_expand n=99 exact=1 MAE=3.53535354e-07 MSE=3.53535354e-13
+each_expert_condition expert/calculus/overall/algorithm/chain_rule n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/calculus/overall/algorithm/definite_integral n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/calculus/overall/algorithm/difference_of_squares n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/calculus/overall/algorithm/dot_product_3d n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/calculus/overall/algorithm/euclid_gcd n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/calculus/overall/algorithm/gauss_2x2 n=200 exact=1 MAE=4e-07 MSE=4e-13
+each_expert_condition expert/calculus/overall/algorithm/geometric_series n=199 exact=1 MAE=4.42211055e-07 MSE=4.42211055e-13
+each_expert_condition expert/calculus/overall/algorithm/linear_solve n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/calculus/overall/algorithm/matrix_det_2x2 n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/calculus/overall/algorithm/mod_pow_fast n=189 exact=1 MAE=4.55026455e-07 MSE=4.55026455e-13
+each_expert_condition expert/calculus/overall/algorithm/perfect_square_trinomial n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/calculus/overall/algorithm/power_rule n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/calculus/overall/algorithm/product_rule n=200 exact=1 MAE=4.45e-07 MSE=4.45e-13
+each_expert_condition expert/calculus/overall/algorithm/quadratic_formula n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/calculus/overall/algorithm/quotient_rule n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/calculus/overall/algorithm/slope_from_points n=200 exact=1 MAE=4.15e-07 MSE=4.15e-13
+each_expert_condition expert/calculus/overall/algorithm/substitution_system n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/calculus/overall/algorithm/sum_of_cubes n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/calculus/overall/algorithm/sum_of_squares n=200 exact=1 MAE=4.6e-07 MSE=4.6e-13
+each_expert_condition expert/calculus/overall/algorithm/difference_of_cubes n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/calculus/overall/algorithm/cube_of_binomial n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/calculus/overall/algorithm/telescoping_series n=119 exact=1 MAE=4.20168067e-07 MSE=4.20168067e-13
+each_expert_condition expert/calculus/overall/algorithm/log_product n=200 exact=1 MAE=4.45e-07 MSE=4.45e-13
+each_expert_condition expert/calculus/overall/algorithm/modular_inverse n=200 exact=1 MAE=3.15e-07 MSE=3.15e-13
+each_expert_condition expert/calculus/overall/algorithm/matrix_trace_product n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/calculus/overall/algorithm/vieta_cubic n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/calculus/overall/algorithm/factorial_recurrence n=94 exact=1 MAE=4.89361702e-07 MSE=4.89361702e-13
+each_expert_condition expert/calculus/overall/algorithm/fibonacci_iter n=77 exact=1 MAE=3.37662338e-07 MSE=3.37662338e-13
+each_expert_condition expert/calculus/overall/algorithm/harmonic_partial n=125 exact=1 MAE=3.84e-07 MSE=3.84e-13
+each_expert_condition expert/calculus/overall/algorithm/horner_eval n=200 exact=1 MAE=4.55e-07 MSE=4.55e-13
+each_expert_condition expert/calculus/overall/algorithm/sum_fourth_powers n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/calculus/overall/algorithm/nested_radical n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/calculus/overall/algorithm/completing_square n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/calculus/overall/algorithm/quartic_horner n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/calculus/overall/algorithm/partial_fractions n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/calculus/overall/algorithm/cauchy_identity n=200 exact=1 MAE=4.55e-07 MSE=4.55e-13
+each_expert_condition expert/calculus/overall/algorithm/pell_check n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/calculus/overall/algorithm/rational_root n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/calculus/overall/algorithm/power_difference n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/calculus/overall/algorithm/binomial_coeff n=200 exact=1 MAE=3.9e-07 MSE=3.9e-13
+each_expert_condition expert/calculus/overall/algorithm/linear_recurrence n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/calculus/overall/algorithm/contfrac_2 n=200 exact=1 MAE=3.4e-07 MSE=3.4e-13
+each_expert_condition expert/calculus/overall/algorithm/sum_odd n=137 exact=1 MAE=4.16058394e-07 MSE=4.16058394e-13
+each_expert_condition expert/calculus/overall/algorithm/triangular_verify n=152 exact=1 MAE=4.47368421e-07 MSE=4.47368421e-13
+each_expert_condition expert/calculus/overall/algorithm/binary_value n=127 exact=1 MAE=4.48818898e-07 MSE=4.48818898e-13
+each_expert_condition expert/calculus/overall/algorithm/gcd_three n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/calculus/overall/algorithm/lcm_pair n=200 exact=1 MAE=4e-07 MSE=4e-13
+each_expert_condition expert/calculus/overall/algorithm/second_derivative n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/calculus/overall/algorithm/implicit_circle n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/calculus/overall/algorithm/lhopital_poly n=200 exact=1 MAE=4.45e-07 MSE=4.45e-13
+each_expert_condition expert/calculus/overall/algorithm/riemann_mid2 n=200 exact=1 MAE=3.6e-07 MSE=3.6e-13
+each_expert_condition expert/calculus/overall/algorithm/trapezoid_linear n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/calculus/overall/algorithm/usub_linear n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/calculus/overall/algorithm/average_linear n=200 exact=1 MAE=3.6e-07 MSE=3.6e-13
+each_expert_condition expert/calculus/overall/algorithm/tangent_point n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/calculus/overall/algorithm/concavity_quad n=200 exact=1 MAE=4.65e-07 MSE=4.65e-13
+each_expert_condition expert/calculus/overall/algorithm/inflection_cubic n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/calculus/overall/algorithm/definite_quad n=200 exact=1 MAE=4.05e-07 MSE=4.05e-13
+each_expert_condition expert/calculus/overall/algorithm/ftc_check n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/calculus/overall/algorithm/monotonic_quad n=200 exact=1 MAE=3.6e-07 MSE=3.6e-13
+each_expert_condition expert/calculus/overall/algorithm/shadow_rates n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/calculus/overall/algorithm/chain_poly n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/calculus/overall/algorithm/taylor_linear n=200 exact=1 MAE=4.6e-07 MSE=4.6e-13
+each_expert_condition expert/calculus/overall/algorithm/inverse_slope n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/calculus/overall/algorithm/mat_add n=200 exact=1 MAE=3.45e-07 MSE=3.45e-13
+each_expert_condition expert/calculus/overall/algorithm/scalar_mult n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/calculus/overall/algorithm/inverse_2x2 n=200 exact=1 MAE=4.4e-07 MSE=4.4e-13
+each_expert_condition expert/calculus/overall/algorithm/eigen_sym n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/calculus/overall/algorithm/cramer_2x2 n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/calculus/overall/algorithm/outer_trace n=200 exact=1 MAE=4.2e-07 MSE=4.2e-13
+each_expert_condition expert/calculus/overall/algorithm/mat_square n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/calculus/overall/algorithm/cross_2d n=156 exact=1 MAE=5.32051282e-07 MSE=5.32051282e-13
+each_expert_condition expert/calculus/overall/algorithm/project_axis n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/calculus/overall/algorithm/rotate_twice n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/calculus/overall/algorithm/gram_det n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/calculus/overall/algorithm/nilpotent_sq n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/calculus/overall/algorithm/idempotent_tr n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/calculus/overall/algorithm/commutator_trace n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/calculus/overall/algorithm/det_product n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/calculus/overall/algorithm/hadamard_trace n=160 exact=1 MAE=5e-07 MSE=5e-13
+each_expert_condition expert/calculus/overall/algorithm/diag_trace n=164 exact=1 MAE=5.42682927e-07 MSE=5.42682927e-13
+each_expert_condition expert/calculus/overall/algorithm/euler_phi n=156 exact=1 MAE=4.67948718e-07 MSE=4.67948718e-13
+each_expert_condition expert/calculus/overall/algorithm/sigma_small n=136 exact=1 MAE=4.77941176e-07 MSE=4.77941176e-13
+each_expert_condition expert/calculus/overall/algorithm/digital_root n=128 exact=1 MAE=4.53125e-07 MSE=4.53125e-13
+each_expert_condition expert/calculus/overall/algorithm/collatz_5 n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/calculus/overall/algorithm/bezout_witness n=191 exact=1 MAE=4.34554974e-07 MSE=4.34554974e-13
+each_expert_condition expert/calculus/overall/algorithm/crt_verify n=200 exact=1 MAE=3.2e-07 MSE=3.2e-13
+each_expert_condition expert/calculus/overall/algorithm/legendre_euler n=153 exact=1 MAE=4.96732026e-07 MSE=4.96732026e-13
+each_expert_condition expert/calculus/overall/algorithm/repunit_mod n=132 exact=1 MAE=4.46969697e-07 MSE=4.46969697e-13
+each_expert_condition expert/calculus/overall/algorithm/triangular_mod n=200 exact=1 MAE=3.9e-07 MSE=3.9e-13
+each_expert_condition expert/calculus/overall/algorithm/prime_divisor n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/calculus/overall/algorithm/square_part n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/calculus/overall/algorithm/multiple_six n=200 exact=1 MAE=4.05e-07 MSE=4.05e-13
+each_expert_condition expert/calculus/overall/algorithm/power_two n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/calculus/overall/algorithm/divisor_count n=167 exact=1 MAE=4.91017964e-07 MSE=4.91017964e-13
+each_expert_condition expert/calculus/overall/algorithm/mult_order n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/calculus/overall/algorithm/fermat_little n=161 exact=1 MAE=5.27950311e-07 MSE=5.27950311e-13
+each_expert_condition expert/calculus/overall/algorithm/wilson_check n=119 exact=1 MAE=4.28571429e-07 MSE=4.28571429e-13
+each_expert_condition expert/calculus/overall/algorithm/am_gm_two n=136 exact=1 MAE=4.04411765e-07 MSE=4.04411765e-13
+each_expert_condition expert/calculus/overall/algorithm/abs_linear n=85 exact=1 MAE=4.23529412e-07 MSE=4.23529412e-13
+each_expert_condition expert/calculus/overall/algorithm/expo_laws n=90 exact=1 MAE=4.66666667e-07 MSE=4.66666667e-13
+each_expert_condition expert/calculus/overall/algorithm/log2_pow2 n=124 exact=1 MAE=4.03225806e-07 MSE=4.03225806e-13
+each_expert_condition expert/calculus/overall/algorithm/geometric_mean_pair n=136 exact=1 MAE=3.52941176e-07 MSE=3.52941176e-13
+each_expert_condition expert/calculus/overall/algorithm/gauss_pairing n=124 exact=1 MAE=4.35483871e-07 MSE=4.35483871e-13
+each_expert_condition expert/calculus/overall/algorithm/ratio_share n=130 exact=1 MAE=4.46153846e-07 MSE=4.46153846e-13
+each_expert_condition expert/calculus/overall/algorithm/percentage_pair n=200 exact=1 MAE=4.2e-07 MSE=4.2e-13
+each_expert_condition expert/calculus/overall/algorithm/composition_affine n=200 exact=1 MAE=3.5e-07 MSE=3.5e-13
+each_expert_condition expert/calculus/overall/algorithm/weighted_average n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/calculus/overall/algorithm/inv_function_eval n=200 exact=1 MAE=4.7e-07 MSE=4.7e-13
+each_expert_condition expert/calculus/overall/algorithm/digit_sum_base n=77 exact=1 MAE=3.8961039e-07 MSE=3.8961039e-13
+each_expert_condition expert/calculus/overall/algorithm/median_five n=172 exact=1 MAE=4.12790698e-07 MSE=4.12790698e-13
+each_expert_condition expert/calculus/overall/algorithm/sum_first_odds n=126 exact=1 MAE=3.96825397e-07 MSE=3.96825397e-13
+each_expert_condition expert/calculus/overall/algorithm/tangent_line_quad n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/calculus/overall/algorithm/secant_poly_slope n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/calculus/overall/algorithm/power_rule_integrate n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/calculus/overall/algorithm/newton_sqrt_step n=129 exact=1 MAE=3.56589147e-07 MSE=3.56589147e-13
+each_expert_condition expert/calculus/overall/algorithm/euler_method_linear n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/calculus/overall/algorithm/simpson_quadratic n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/calculus/overall/algorithm/mvt_quadratic n=140 exact=1 MAE=3.78571429e-07 MSE=3.78571429e-13
+each_expert_condition expert/calculus/overall/algorithm/critical_cubic n=65 exact=1 MAE=4.46153846e-07 MSE=4.46153846e-13
+each_expert_condition expert/calculus/overall/algorithm/asymptote_oblique n=177 exact=1 MAE=3.67231638e-07 MSE=3.67231638e-13
+each_expert_condition expert/calculus/overall/algorithm/area_under_linear n=135 exact=1 MAE=4.14814815e-07 MSE=4.14814815e-13
+each_expert_condition expert/calculus/overall/algorithm/second_diff_central n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/calculus/overall/algorithm/rolle_check n=138 exact=1 MAE=3.76811594e-07 MSE=3.76811594e-13
+each_expert_condition expert/calculus/overall/algorithm/det_3x3_cofactor n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/calculus/overall/algorithm/matvec_3 n=200 exact=1 MAE=4.65e-07 MSE=4.65e-13
+each_expert_condition expert/calculus/overall/algorithm/row_reduce_rank2 n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/calculus/overall/algorithm/trace_frobenius2 n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/calculus/overall/algorithm/inverse_mult_identity2 n=200 exact=1 MAE=3.9e-07 MSE=3.9e-13
+each_expert_condition expert/calculus/overall/algorithm/dep_pair_cross n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/calculus/overall/algorithm/diagonal_eigencheck n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/calculus/overall/algorithm/proj_pyth n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/calculus/overall/algorithm/area_parallelogram2 n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/calculus/overall/algorithm/affine_point n=200 exact=1 MAE=3.5e-07 MSE=3.5e-13
+each_expert_condition expert/calculus/overall/algorithm/matrix_sym_part n=200 exact=1 MAE=3.4e-07 MSE=3.4e-13
+each_expert_condition expert/calculus/overall/algorithm/vector_angle_cossq n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/calculus/overall/algorithm/prime_factor_small n=101 exact=1 MAE=4.55445545e-07 MSE=4.55445545e-13
+each_expert_condition expert/calculus/overall/algorithm/perfect_square_check n=139 exact=1 MAE=3.81294964e-07 MSE=3.81294964e-13
+each_expert_condition expert/calculus/overall/algorithm/tribonacci_general n=142 exact=1 MAE=3.87323944e-07 MSE=3.87323944e-13
+each_expert_condition expert/calculus/overall/algorithm/digit_flipper n=92 exact=1 MAE=4.34782609e-07 MSE=4.34782609e-13
+each_expert_condition expert/calculus/overall/algorithm/divisor_sq_two_primes n=39 exact=1 MAE=3.84615385e-07 MSE=3.84615385e-13
+each_expert_condition expert/calculus/overall/algorithm/twin_prime_screen n=22 exact=1 MAE=4.09090909e-07 MSE=4.09090909e-13
+each_expert_condition expert/calculus/overall/algorithm/popcount_halve n=114 exact=1 MAE=3.59649123e-07 MSE=3.59649123e-13
+each_expert_condition expert/calculus/overall/algorithm/prob_urn n=123 exact=1 MAE=3.65853659e-07 MSE=3.65853659e-13
+each_expert_condition expert/calculus/overall/algorithm/bayes_two_events n=127 exact=1 MAE=3.46456693e-07 MSE=3.46456693e-13
+each_expert_condition expert/calculus/overall/algorithm/pyth_triple_verify n=126 exact=1 MAE=4.36507937e-07 MSE=4.36507937e-13
+each_expert_condition expert/calculus/overall/algorithm/catalan_small n=67 exact=1 MAE=4.7761194e-07 MSE=4.7761194e-13
+each_expert_condition expert/calculus/overall/algorithm/pascal_row_mult n=77 exact=1 MAE=4.15584416e-07 MSE=4.15584416e-13
+each_expert_condition expert/calculus/local-step/family/algebra n=30278 exact=1 MAE=7.0803884e-07 MSE=7.0803884e-13
+each_expert_condition expert/calculus/local-step/family/algebra/tier/base n=11114 exact=1 MAE=7.0757603e-07 MSE=7.0757603e-13
+each_expert_condition expert/calculus/local-step/family/algebra/tier/big n=11502 exact=1 MAE=7.11441488e-07 MSE=7.11441488e-13
+each_expert_condition expert/calculus/local-step/family/algebra/tier/neg n=7662 exact=1 MAE=7.03602193e-07 MSE=7.03602193e-13
+each_expert_condition expert/calculus/local-step/family/calculus n=23193 exact=1 MAE=6.83697667e-07 MSE=6.83697667e-13
+each_expert_condition expert/calculus/local-step/family/calculus/tier/base n=8437 exact=1 MAE=6.8732962e-07 MSE=6.8732962e-13
+each_expert_condition expert/calculus/local-step/family/calculus/tier/big n=8613 exact=1 MAE=6.81179612e-07 MSE=6.81179612e-13
+each_expert_condition expert/calculus/local-step/family/calculus/tier/neg n=6143 exact=1 MAE=6.82239948e-07 MSE=6.82239948e-13
+each_expert_condition expert/calculus/local-step/family/linear_algebra n=21880 exact=1 MAE=6.74771481e-07 MSE=6.74771481e-13
+each_expert_condition expert/calculus/local-step/family/linear_algebra/tier/base n=7201 exact=1 MAE=6.73656437e-07 MSE=6.73656437e-13
+each_expert_condition expert/calculus/local-step/family/linear_algebra/tier/big n=7136 exact=1 MAE=6.70964126e-07 MSE=6.70964126e-13
+each_expert_condition expert/calculus/local-step/family/linear_algebra/tier/neg n=7543 exact=1 MAE=6.79437889e-07 MSE=6.79437889e-13
+each_expert_condition expert/calculus/local-step/family/number_theory n=20395 exact=1 MAE=6.91640108e-07 MSE=6.91640108e-13
+each_expert_condition expert/calculus/local-step/family/number_theory/tier/base n=9263 exact=1 MAE=7.06142718e-07 MSE=7.06142718e-13
+each_expert_condition expert/calculus/local-step/family/number_theory/tier/big n=8116 exact=1 MAE=7.00221784e-07 MSE=7.00221784e-13
+each_expert_condition expert/calculus/local-step/family/number_theory/tier/neg n=3016 exact=1 MAE=6.24005305e-07 MSE=6.24005305e-13
+each_expert_condition expert/calculus/local-step/level/-1.0 n=19254 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/calculus/local-step/level/-0.5 n=5405 exact=1 MAE=0 MSE=0
+each_expert_condition expert/calculus/local-step/level/0.0 n=19248 exact=1 MAE=2.53328721e-24 MSE=1.73982828e-47
+each_expert_condition expert/calculus/local-step/level/0.5 n=4928 exact=1 MAE=0 MSE=0
+each_expert_condition expert/calculus/local-step/level/1.0 n=46911 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/calculus/local-step/tier/base n=36015 exact=1 MAE=6.95682355e-07 MSE=6.95682355e-13
+each_expert_condition expert/calculus/local-step/tier/big n=35367 exact=1 MAE=6.9332994e-07 MSE=6.9332994e-13
+each_expert_condition expert/calculus/local-step/tier/neg n=24364 exact=1 MAE=6.80881629e-07 MSE=6.80881629e-13
+each_expert_condition expert/calculus/local-step/algorithm/arithmetic_series n=1000 exact=1 MAE=7.09e-07 MSE=7.09e-13
+each_expert_condition expert/calculus/local-step/algorithm/binomial_expand n=657 exact=1 MAE=6.84931507e-07 MSE=6.84931507e-13
+each_expert_condition expert/calculus/local-step/algorithm/chain_rule n=600 exact=1 MAE=6.68333333e-07 MSE=6.68333333e-13
+each_expert_condition expert/calculus/local-step/algorithm/definite_integral n=1000 exact=1 MAE=7.27e-07 MSE=7.27e-13
+each_expert_condition expert/calculus/local-step/algorithm/difference_of_squares n=600 exact=1 MAE=7.33333333e-07 MSE=7.33333333e-13
+each_expert_condition expert/calculus/local-step/algorithm/dot_product_3d n=800 exact=1 MAE=6.625e-07 MSE=6.625e-13
+each_expert_condition expert/calculus/local-step/algorithm/euclid_gcd n=1188 exact=1 MAE=7.62626263e-07 MSE=7.62626263e-13
+each_expert_condition expert/calculus/local-step/algorithm/gauss_2x2 n=1000 exact=1 MAE=7.12e-07 MSE=7.12e-13
+each_expert_condition expert/calculus/local-step/algorithm/geometric_series n=995 exact=1 MAE=7.71859297e-07 MSE=7.71859297e-13
+each_expert_condition expert/calculus/local-step/algorithm/linear_solve n=600 exact=1 MAE=6.31666667e-07 MSE=6.31666667e-13
+each_expert_condition expert/calculus/local-step/algorithm/matrix_det_2x2 n=600 exact=1 MAE=6.36666667e-07 MSE=6.36666667e-13
+each_expert_condition expert/calculus/local-step/algorithm/mod_pow_fast n=1123 exact=1 MAE=7.40872663e-07 MSE=7.40872663e-13
+each_expert_condition expert/calculus/local-step/algorithm/perfect_square_trinomial n=600 exact=1 MAE=6.51666667e-07 MSE=6.51666667e-13
+each_expert_condition expert/calculus/local-step/algorithm/power_rule n=600 exact=1 MAE=6.75e-07 MSE=6.75e-13
+each_expert_condition expert/calculus/local-step/algorithm/product_rule n=1000 exact=1 MAE=7.53e-07 MSE=7.53e-13
+each_expert_condition expert/calculus/local-step/algorithm/quadratic_formula n=800 exact=1 MAE=6.9875e-07 MSE=6.9875e-13
+each_expert_condition expert/calculus/local-step/algorithm/quotient_rule n=1000 exact=1 MAE=6.66e-07 MSE=6.66e-13
+each_expert_condition expert/calculus/local-step/algorithm/slope_from_points n=800 exact=1 MAE=6.8125e-07 MSE=6.8125e-13
+each_expert_condition expert/calculus/local-step/algorithm/substitution_system n=800 exact=1 MAE=6.9125e-07 MSE=6.9125e-13
+each_expert_condition expert/calculus/local-step/algorithm/sum_of_cubes n=600 exact=1 MAE=6.41666667e-07 MSE=6.41666667e-13
+each_expert_condition expert/calculus/local-step/algorithm/sum_of_squares n=800 exact=1 MAE=7.075e-07 MSE=7.075e-13
+each_expert_condition expert/calculus/local-step/algorithm/difference_of_cubes n=600 exact=1 MAE=6.71666667e-07 MSE=6.71666667e-13
+each_expert_condition expert/calculus/local-step/algorithm/cube_of_binomial n=1000 exact=1 MAE=6.93e-07 MSE=6.93e-13
+each_expert_condition expert/calculus/local-step/algorithm/telescoping_series n=775 exact=1 MAE=7.58709677e-07 MSE=7.58709677e-13
+each_expert_condition expert/calculus/local-step/algorithm/log_product n=800 exact=1 MAE=7.3375e-07 MSE=7.3375e-13
+each_expert_condition expert/calculus/local-step/algorithm/modular_inverse n=400 exact=1 MAE=5.525e-07 MSE=5.525e-13
+each_expert_condition expert/calculus/local-step/algorithm/matrix_trace_product n=600 exact=1 MAE=6.81666667e-07 MSE=6.81666667e-13
+each_expert_condition expert/calculus/local-step/algorithm/vieta_cubic n=600 exact=1 MAE=6.36666667e-07 MSE=6.36666667e-13
+each_expert_condition expert/calculus/local-step/algorithm/factorial_recurrence n=511 exact=1 MAE=7.43639922e-07 MSE=7.43639922e-13
+each_expert_condition expert/calculus/local-step/algorithm/fibonacci_iter n=499 exact=1 MAE=7.35470942e-07 MSE=7.35470942e-13
+each_expert_condition expert/calculus/local-step/algorithm/harmonic_partial n=804 exact=1 MAE=7.37562189e-07 MSE=7.37562189e-13
+each_expert_condition expert/calculus/local-step/algorithm/horner_eval n=600 exact=1 MAE=7.01666667e-07 MSE=7.01666667e-13
+each_expert_condition expert/calculus/local-step/algorithm/sum_fourth_powers n=1000 exact=1 MAE=7.06e-07 MSE=7.06e-13
+each_expert_condition expert/calculus/local-step/algorithm/nested_radical n=600 exact=1 MAE=6.85e-07 MSE=6.85e-13
+each_expert_condition expert/calculus/local-step/algorithm/completing_square n=600 exact=1 MAE=6.88333333e-07 MSE=6.88333333e-13
+each_expert_condition expert/calculus/local-step/algorithm/quartic_horner n=600 exact=1 MAE=6.63333333e-07 MSE=6.63333333e-13
+each_expert_condition expert/calculus/local-step/algorithm/partial_fractions n=800 exact=1 MAE=6.6125e-07 MSE=6.6125e-13
+each_expert_condition expert/calculus/local-step/algorithm/cauchy_identity n=800 exact=1 MAE=7.1e-07 MSE=7.1e-13
+each_expert_condition expert/calculus/local-step/algorithm/pell_check n=600 exact=1 MAE=6.46666667e-07 MSE=6.46666667e-13
+each_expert_condition expert/calculus/local-step/algorithm/rational_root n=400 exact=1 MAE=5.9e-07 MSE=5.9e-13
+each_expert_condition expert/calculus/local-step/algorithm/power_difference n=1000 exact=1 MAE=7.16e-07 MSE=7.16e-13
+each_expert_condition expert/calculus/local-step/algorithm/binomial_coeff n=400 exact=1 MAE=5.825e-07 MSE=5.825e-13
+each_expert_condition expert/calculus/local-step/algorithm/linear_recurrence n=600 exact=1 MAE=6.45e-07 MSE=6.45e-13
+each_expert_condition expert/calculus/local-step/algorithm/contfrac_2 n=400 exact=1 MAE=5.5e-07 MSE=5.5e-13
+each_expert_condition expert/calculus/local-step/algorithm/sum_odd n=903 exact=1 MAE=7.99557032e-07 MSE=7.99557032e-13
+each_expert_condition expert/calculus/local-step/algorithm/triangular_verify n=738 exact=1 MAE=7.75067751e-07 MSE=7.75067751e-13
+each_expert_condition expert/calculus/local-step/algorithm/binary_value n=793 exact=1 MAE=7.44010088e-07 MSE=7.44010088e-13
+each_expert_condition expert/calculus/local-step/algorithm/gcd_three n=400 exact=1 MAE=6.275e-07 MSE=6.275e-13
+each_expert_condition expert/calculus/local-step/algorithm/lcm_pair n=600 exact=1 MAE=6.56666667e-07 MSE=6.56666667e-13
+each_expert_condition expert/calculus/local-step/algorithm/second_derivative n=400 exact=1 MAE=5.975e-07 MSE=5.975e-13
+each_expert_condition expert/calculus/local-step/algorithm/implicit_circle n=600 exact=1 MAE=6.58333333e-07 MSE=6.58333333e-13
+each_expert_condition expert/calculus/local-step/algorithm/lhopital_poly n=400 exact=1 MAE=6.275e-07 MSE=6.275e-13
+each_expert_condition expert/calculus/local-step/algorithm/riemann_mid2 n=600 exact=1 MAE=6.4e-07 MSE=6.4e-13
+each_expert_condition expert/calculus/local-step/algorithm/trapezoid_linear n=600 exact=1 MAE=6.6e-07 MSE=6.6e-13
+each_expert_condition expert/calculus/local-step/algorithm/usub_linear n=400 exact=1 MAE=5.75e-07 MSE=5.75e-13
+each_expert_condition expert/calculus/local-step/algorithm/average_linear n=400 exact=1 MAE=5.825e-07 MSE=5.825e-13
+each_expert_condition expert/calculus/local-step/algorithm/tangent_point n=600 exact=1 MAE=6.78333333e-07 MSE=6.78333333e-13
+each_expert_condition expert/calculus/local-step/algorithm/concavity_quad n=400 exact=1 MAE=6.225e-07 MSE=6.225e-13
+each_expert_condition expert/calculus/local-step/algorithm/inflection_cubic n=400 exact=1 MAE=6.325e-07 MSE=6.325e-13
+each_expert_condition expert/calculus/local-step/algorithm/definite_quad n=800 exact=1 MAE=6.825e-07 MSE=6.825e-13
+each_expert_condition expert/calculus/local-step/algorithm/ftc_check n=600 exact=1 MAE=6.93333333e-07 MSE=6.93333333e-13
+each_expert_condition expert/calculus/local-step/algorithm/monotonic_quad n=400 exact=1 MAE=5.65e-07 MSE=5.65e-13
+each_expert_condition expert/calculus/local-step/algorithm/shadow_rates n=400 exact=1 MAE=5.775e-07 MSE=5.775e-13
+each_expert_condition expert/calculus/local-step/algorithm/chain_poly n=400 exact=1 MAE=6.1e-07 MSE=6.1e-13
+each_expert_condition expert/calculus/local-step/algorithm/taylor_linear n=400 exact=1 MAE=6.3e-07 MSE=6.3e-13
+each_expert_condition expert/calculus/local-step/algorithm/inverse_slope n=400 exact=1 MAE=6.3e-07 MSE=6.3e-13
+each_expert_condition expert/calculus/local-step/algorithm/mat_add n=400 exact=1 MAE=5.825e-07 MSE=5.825e-13
+each_expert_condition expert/calculus/local-step/algorithm/scalar_mult n=400 exact=1 MAE=5.725e-07 MSE=5.725e-13
+each_expert_condition expert/calculus/local-step/algorithm/inverse_2x2 n=600 exact=1 MAE=6.86666667e-07 MSE=6.86666667e-13
+each_expert_condition expert/calculus/local-step/algorithm/eigen_sym n=600 exact=1 MAE=6.75e-07 MSE=6.75e-13
+each_expert_condition expert/calculus/local-step/algorithm/cramer_2x2 n=600 exact=1 MAE=6.6e-07 MSE=6.6e-13
+each_expert_condition expert/calculus/local-step/algorithm/outer_trace n=400 exact=1 MAE=6.125e-07 MSE=6.125e-13
+each_expert_condition expert/calculus/local-step/algorithm/mat_square n=400 exact=1 MAE=5.95e-07 MSE=5.95e-13
+each_expert_condition expert/calculus/local-step/algorithm/cross_2d n=156 exact=1 MAE=5.32051282e-07 MSE=5.32051282e-13
+each_expert_condition expert/calculus/local-step/algorithm/project_axis n=400 exact=1 MAE=5.975e-07 MSE=5.975e-13
+each_expert_condition expert/calculus/local-step/algorithm/rotate_twice n=800 exact=1 MAE=6.8e-07 MSE=6.8e-13
+each_expert_condition expert/calculus/local-step/algorithm/gram_det n=600 exact=1 MAE=6.53333333e-07 MSE=6.53333333e-13
+each_expert_condition expert/calculus/local-step/algorithm/nilpotent_sq n=400 exact=1 MAE=5.9e-07 MSE=5.9e-13
+each_expert_condition expert/calculus/local-step/algorithm/idempotent_tr n=400 exact=1 MAE=6e-07 MSE=6e-13
+each_expert_condition expert/calculus/local-step/algorithm/commutator_trace n=600 exact=1 MAE=6.51666667e-07 MSE=6.51666667e-13
+each_expert_condition expert/calculus/local-step/algorithm/det_product n=600 exact=1 MAE=6.38333333e-07 MSE=6.38333333e-13
+each_expert_condition expert/calculus/local-step/algorithm/hadamard_trace n=160 exact=1 MAE=5e-07 MSE=5e-13
+each_expert_condition expert/calculus/local-step/algorithm/diag_trace n=164 exact=1 MAE=5.42682927e-07 MSE=5.42682927e-13
+each_expert_condition expert/calculus/local-step/algorithm/euler_phi n=156 exact=1 MAE=4.67948718e-07 MSE=4.67948718e-13
+each_expert_condition expert/calculus/local-step/algorithm/sigma_small n=988 exact=1 MAE=7.70242915e-07 MSE=7.70242915e-13
+each_expert_condition expert/calculus/local-step/algorithm/digital_root n=256 exact=1 MAE=6.2109375e-07 MSE=6.2109375e-13
+each_expert_condition expert/calculus/local-step/algorithm/collatz_5 n=1000 exact=1 MAE=7.58e-07 MSE=7.58e-13
+each_expert_condition expert/calculus/local-step/algorithm/bezout_witness n=350 exact=1 MAE=6.2e-07 MSE=6.2e-13
+each_expert_condition expert/calculus/local-step/algorithm/crt_verify n=400 exact=1 MAE=5.225e-07 MSE=5.225e-13
+each_expert_condition expert/calculus/local-step/algorithm/legendre_euler n=153 exact=1 MAE=4.96732026e-07 MSE=4.96732026e-13
+each_expert_condition expert/calculus/local-step/algorithm/repunit_mod n=264 exact=1 MAE=6.06060606e-07 MSE=6.06060606e-13
+each_expert_condition expert/calculus/local-step/algorithm/triangular_mod n=400 exact=1 MAE=5.65e-07 MSE=5.65e-13
+each_expert_condition expert/calculus/local-step/algorithm/prime_divisor n=400 exact=1 MAE=6.15e-07 MSE=6.15e-13
+each_expert_condition expert/calculus/local-step/algorithm/square_part n=400 exact=1 MAE=6.125e-07 MSE=6.125e-13
+each_expert_condition expert/calculus/local-step/algorithm/multiple_six n=400 exact=1 MAE=6.125e-07 MSE=6.125e-13
+each_expert_condition expert/calculus/local-step/algorithm/power_two n=400 exact=1 MAE=5.775e-07 MSE=5.775e-13
+each_expert_condition expert/calculus/local-step/algorithm/divisor_count n=167 exact=1 MAE=4.91017964e-07 MSE=4.91017964e-13
+each_expert_condition expert/calculus/local-step/algorithm/mult_order n=400 exact=1 MAE=5.75e-07 MSE=5.75e-13
+each_expert_condition expert/calculus/local-step/algorithm/fermat_little n=161 exact=1 MAE=5.27950311e-07 MSE=5.27950311e-13
+each_expert_condition expert/calculus/local-step/algorithm/wilson_check n=119 exact=1 MAE=4.28571429e-07 MSE=4.28571429e-13
+each_expert_condition expert/calculus/local-step/algorithm/am_gm_two n=680 exact=1 MAE=7.45588235e-07 MSE=7.45588235e-13
+each_expert_condition expert/calculus/local-step/algorithm/abs_linear n=340 exact=1 MAE=7.32352941e-07 MSE=7.32352941e-13
+each_expert_condition expert/calculus/local-step/algorithm/expo_laws n=360 exact=1 MAE=7.58333333e-07 MSE=7.58333333e-13
+each_expert_condition expert/calculus/local-step/algorithm/log2_pow2 n=911 exact=1 MAE=7.22283205e-07 MSE=7.22283205e-13
+each_expert_condition expert/calculus/local-step/algorithm/geometric_mean_pair n=680 exact=1 MAE=7.05882353e-07 MSE=7.05882353e-13
+each_expert_condition expert/calculus/local-step/algorithm/gauss_pairing n=620 exact=1 MAE=7.58064516e-07 MSE=7.58064516e-13
+each_expert_condition expert/calculus/local-step/algorithm/ratio_share n=650 exact=1 MAE=7.47692308e-07 MSE=7.47692308e-13
+each_expert_condition expert/calculus/local-step/algorithm/percentage_pair n=600 exact=1 MAE=6.66666667e-07 MSE=6.66666667e-13
+each_expert_condition expert/calculus/local-step/algorithm/composition_affine n=1000 exact=1 MAE=7.5e-07 MSE=7.5e-13
+each_expert_condition expert/calculus/local-step/algorithm/weighted_average n=800 exact=1 MAE=6.65e-07 MSE=6.65e-13
+each_expert_condition expert/calculus/local-step/algorithm/inv_function_eval n=800 exact=1 MAE=7.475e-07 MSE=7.475e-13
+each_expert_condition expert/calculus/local-step/algorithm/digit_sum_base n=462 exact=1 MAE=6.92640693e-07 MSE=6.92640693e-13
+each_expert_condition expert/calculus/local-step/algorithm/median_five n=2064 exact=1 MAE=7.75193798e-07 MSE=7.75193798e-13
+each_expert_condition expert/calculus/local-step/algorithm/sum_first_odds n=756 exact=1 MAE=7.47354497e-07 MSE=7.47354497e-13
+each_expert_condition expert/calculus/local-step/algorithm/tangent_line_quad n=800 exact=1 MAE=7.4e-07 MSE=7.4e-13
+each_expert_condition expert/calculus/local-step/algorithm/secant_poly_slope n=800 exact=1 MAE=7.025e-07 MSE=7.025e-13
+each_expert_condition expert/calculus/local-step/algorithm/power_rule_integrate n=800 exact=1 MAE=6.95e-07 MSE=6.95e-13
+each_expert_condition expert/calculus/local-step/algorithm/newton_sqrt_step n=516 exact=1 MAE=6.87984496e-07 MSE=6.87984496e-13
+each_expert_condition expert/calculus/local-step/algorithm/euler_method_linear n=800 exact=1 MAE=6.95e-07 MSE=6.95e-13
+each_expert_condition expert/calculus/local-step/algorithm/simpson_quadratic n=1400 exact=1 MAE=7.55714286e-07 MSE=7.55714286e-13
+each_expert_condition expert/calculus/local-step/algorithm/mvt_quadratic n=840 exact=1 MAE=6.82142857e-07 MSE=6.82142857e-13
+each_expert_condition expert/calculus/local-step/algorithm/critical_cubic n=455 exact=1 MAE=7.49450549e-07 MSE=7.49450549e-13
+each_expert_condition expert/calculus/local-step/algorithm/asymptote_oblique n=708 exact=1 MAE=6.34180791e-07 MSE=6.34180791e-13
+each_expert_condition expert/calculus/local-step/algorithm/area_under_linear n=405 exact=1 MAE=6.66666667e-07 MSE=6.66666667e-13
+each_expert_condition expert/calculus/local-step/algorithm/second_diff_central n=1000 exact=1 MAE=7.24e-07 MSE=7.24e-13
+each_expert_condition expert/calculus/local-step/algorithm/rolle_check n=690 exact=1 MAE=7.01449275e-07 MSE=7.01449275e-13
+each_expert_condition expert/calculus/local-step/algorithm/det_3x3_cofactor n=1400 exact=1 MAE=7.65e-07 MSE=7.65e-13
+each_expert_condition expert/calculus/local-step/algorithm/matvec_3 n=600 exact=1 MAE=7.15e-07 MSE=7.15e-13
+each_expert_condition expert/calculus/local-step/algorithm/row_reduce_rank2 n=1000 exact=1 MAE=7.13e-07 MSE=7.13e-13
+each_expert_condition expert/calculus/local-step/algorithm/trace_frobenius2 n=1000 exact=1 MAE=7.49e-07 MSE=7.49e-13
+each_expert_condition expert/calculus/local-step/algorithm/inverse_mult_identity2 n=1000 exact=1 MAE=7.1e-07 MSE=7.1e-13
+each_expert_condition expert/calculus/local-step/algorithm/dep_pair_cross n=800 exact=1 MAE=6.6625e-07 MSE=6.6625e-13
+each_expert_condition expert/calculus/local-step/algorithm/diagonal_eigencheck n=800 exact=1 MAE=6.4375e-07 MSE=6.4375e-13
+each_expert_condition expert/calculus/local-step/algorithm/proj_pyth n=1000 exact=1 MAE=6.95e-07 MSE=6.95e-13
+each_expert_condition expert/calculus/local-step/algorithm/area_parallelogram2 n=600 exact=1 MAE=6.55e-07 MSE=6.55e-13
+each_expert_condition expert/calculus/local-step/algorithm/affine_point n=1200 exact=1 MAE=7.125e-07 MSE=7.125e-13
+each_expert_condition expert/calculus/local-step/algorithm/matrix_sym_part n=1000 exact=1 MAE=6.72e-07 MSE=6.72e-13
+each_expert_condition expert/calculus/local-step/algorithm/vector_angle_cossq n=800 exact=1 MAE=7.0125e-07 MSE=7.0125e-13
+each_expert_condition expert/calculus/local-step/algorithm/prime_factor_small n=847 exact=1 MAE=7.8866588e-07 MSE=7.8866588e-13
+each_expert_condition expert/calculus/local-step/algorithm/perfect_square_check n=417 exact=1 MAE=6.73860911e-07 MSE=6.73860911e-13
+each_expert_condition expert/calculus/local-step/algorithm/tribonacci_general n=852 exact=1 MAE=7.3943662e-07 MSE=7.3943662e-13
+each_expert_condition expert/calculus/local-step/algorithm/digit_flipper n=552 exact=1 MAE=7.51811594e-07 MSE=7.51811594e-13
+each_expert_condition expert/calculus/local-step/algorithm/divisor_sq_two_primes n=273 exact=1 MAE=7.8021978e-07 MSE=7.8021978e-13
+each_expert_condition expert/calculus/local-step/algorithm/twin_prime_screen n=110 exact=1 MAE=7e-07 MSE=7e-13
+each_expert_condition expert/calculus/local-step/algorithm/popcount_halve n=1254 exact=1 MAE=7.42424242e-07 MSE=7.42424242e-13
+each_expert_condition expert/calculus/local-step/algorithm/prob_urn n=492 exact=1 MAE=6.70731707e-07 MSE=6.70731707e-13
+each_expert_condition expert/calculus/local-step/algorithm/bayes_two_events n=508 exact=1 MAE=6.18110236e-07 MSE=6.18110236e-13
+each_expert_condition expert/calculus/local-step/algorithm/pyth_triple_verify n=756 exact=1 MAE=7.87037037e-07 MSE=7.87037037e-13
+each_expert_condition expert/calculus/local-step/algorithm/catalan_small n=294 exact=1 MAE=7.07482993e-07 MSE=7.07482993e-13
+each_expert_condition expert/calculus/local-step/algorithm/pascal_row_mult n=374 exact=1 MAE=7.19251337e-07 MSE=7.19251337e-13
+each_expert_condition expert/linear_algebra/overall/family/algebra n=7235 exact=1 MAE=4.03178991e-07 MSE=4.03178991e-13
+each_expert_condition expert/linear_algebra/overall/family/algebra/tier/base n=2665 exact=1 MAE=4.06754221e-07 MSE=4.06754221e-13
+each_expert_condition expert/linear_algebra/overall/family/algebra/tier/big n=2595 exact=1 MAE=3.9344894e-07 MSE=3.9344894e-13
+each_expert_condition expert/linear_algebra/overall/family/algebra/tier/neg n=1975 exact=1 MAE=4.11139241e-07 MSE=4.11139241e-13
+each_expert_condition expert/linear_algebra/overall/family/calculus n=6628 exact=1 MAE=4.00573325e-07 MSE=4.00573325e-13
+each_expert_condition expert/linear_algebra/overall/family/calculus/tier/base n=2385 exact=1 MAE=4.04192872e-07 MSE=4.04192872e-13
+each_expert_condition expert/linear_algebra/overall/family/calculus/tier/big n=2338 exact=1 MAE=3.87938409e-07 MSE=3.87938409e-13
+each_expert_condition expert/linear_algebra/overall/family/calculus/tier/neg n=1905 exact=1 MAE=4.11548556e-07 MSE=4.11548556e-13
+each_expert_condition expert/linear_algebra/overall/family/linear_algebra n=6480 exact=1 MAE=3.95679012e-07 MSE=3.95679012e-13
+each_expert_condition expert/linear_algebra/overall/family/linear_algebra/tier/base n=2133 exact=1 MAE=3.91467417e-07 MSE=3.91467417e-13
+each_expert_condition expert/linear_algebra/overall/family/linear_algebra/tier/big n=2118 exact=1 MAE=3.90462701e-07 MSE=3.90462701e-13
+each_expert_condition expert/linear_algebra/overall/family/linear_algebra/tier/neg n=2229 exact=1 MAE=4.04665769e-07 MSE=4.04665769e-13
+each_expert_condition expert/linear_algebra/overall/family/number_theory n=5951 exact=1 MAE=4.14552176e-07 MSE=4.14552176e-13
+each_expert_condition expert/linear_algebra/overall/family/number_theory/tier/base n=2493 exact=1 MAE=4.21981548e-07 MSE=4.21981548e-13
+each_expert_condition expert/linear_algebra/overall/family/number_theory/tier/big n=2102 exact=1 MAE=4.15318744e-07 MSE=4.15318744e-13
+each_expert_condition expert/linear_algebra/overall/family/number_theory/tier/neg n=1356 exact=1 MAE=3.99705015e-07 MSE=3.99705015e-13
+each_expert_condition expert/linear_algebra/overall/level/-1.0 n=5306 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/linear_algebra/overall/level/-0.5 n=5405 exact=1 MAE=0 MSE=0
+each_expert_condition expert/linear_algebra/overall/level/0.0 n=5358 exact=1 MAE=5.94339055e-27 MSE=3.53238913e-53
+each_expert_condition expert/linear_algebra/overall/level/0.5 n=4928 exact=1 MAE=0 MSE=0
+each_expert_condition expert/linear_algebra/overall/level/1.0 n=5297 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/linear_algebra/overall/tier/base n=9676 exact=1 MAE=4.06676313e-07 MSE=4.06676313e-13
+each_expert_condition expert/linear_algebra/overall/tier/big n=9153 exact=1 MAE=3.96372774e-07 MSE=3.96372774e-13
+each_expert_condition expert/linear_algebra/overall/tier/neg n=7465 exact=1 MAE=4.07233758e-07 MSE=4.07233758e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/arithmetic_series n=200 exact=1 MAE=4.05e-07 MSE=4.05e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/binomial_expand n=99 exact=1 MAE=3.53535354e-07 MSE=3.53535354e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/chain_rule n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/definite_integral n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/difference_of_squares n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/dot_product_3d n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/euclid_gcd n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/gauss_2x2 n=200 exact=1 MAE=4e-07 MSE=4e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/geometric_series n=199 exact=1 MAE=4.42211055e-07 MSE=4.42211055e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/linear_solve n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/matrix_det_2x2 n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/mod_pow_fast n=189 exact=1 MAE=4.55026455e-07 MSE=4.55026455e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/perfect_square_trinomial n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/power_rule n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/product_rule n=200 exact=1 MAE=4.45e-07 MSE=4.45e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/quadratic_formula n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/quotient_rule n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/slope_from_points n=200 exact=1 MAE=4.15e-07 MSE=4.15e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/substitution_system n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/sum_of_cubes n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/sum_of_squares n=200 exact=1 MAE=4.6e-07 MSE=4.6e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/difference_of_cubes n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/cube_of_binomial n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/telescoping_series n=119 exact=1 MAE=4.20168067e-07 MSE=4.20168067e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/log_product n=200 exact=1 MAE=4.45e-07 MSE=4.45e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/modular_inverse n=200 exact=1 MAE=3.15e-07 MSE=3.15e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/matrix_trace_product n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/vieta_cubic n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/factorial_recurrence n=94 exact=1 MAE=4.89361702e-07 MSE=4.89361702e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/fibonacci_iter n=77 exact=1 MAE=3.37662338e-07 MSE=3.37662338e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/harmonic_partial n=125 exact=1 MAE=3.84e-07 MSE=3.84e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/horner_eval n=200 exact=1 MAE=4.55e-07 MSE=4.55e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/sum_fourth_powers n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/nested_radical n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/completing_square n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/quartic_horner n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/partial_fractions n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/cauchy_identity n=200 exact=1 MAE=4.55e-07 MSE=4.55e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/pell_check n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/rational_root n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/power_difference n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/binomial_coeff n=200 exact=1 MAE=3.9e-07 MSE=3.9e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/linear_recurrence n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/contfrac_2 n=200 exact=1 MAE=3.4e-07 MSE=3.4e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/sum_odd n=137 exact=1 MAE=4.16058394e-07 MSE=4.16058394e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/triangular_verify n=152 exact=1 MAE=4.47368421e-07 MSE=4.47368421e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/binary_value n=127 exact=1 MAE=4.48818898e-07 MSE=4.48818898e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/gcd_three n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/lcm_pair n=200 exact=1 MAE=4e-07 MSE=4e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/second_derivative n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/implicit_circle n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/lhopital_poly n=200 exact=1 MAE=4.45e-07 MSE=4.45e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/riemann_mid2 n=200 exact=1 MAE=3.6e-07 MSE=3.6e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/trapezoid_linear n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/usub_linear n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/average_linear n=200 exact=1 MAE=3.6e-07 MSE=3.6e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/tangent_point n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/concavity_quad n=200 exact=1 MAE=4.65e-07 MSE=4.65e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/inflection_cubic n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/definite_quad n=200 exact=1 MAE=4.05e-07 MSE=4.05e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/ftc_check n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/monotonic_quad n=200 exact=1 MAE=3.6e-07 MSE=3.6e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/shadow_rates n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/chain_poly n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/taylor_linear n=200 exact=1 MAE=4.6e-07 MSE=4.6e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/inverse_slope n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/mat_add n=200 exact=1 MAE=3.45e-07 MSE=3.45e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/scalar_mult n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/inverse_2x2 n=200 exact=1 MAE=4.4e-07 MSE=4.4e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/eigen_sym n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/cramer_2x2 n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/outer_trace n=200 exact=1 MAE=4.2e-07 MSE=4.2e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/mat_square n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/cross_2d n=156 exact=1 MAE=5.32051282e-07 MSE=5.32051282e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/project_axis n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/rotate_twice n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/gram_det n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/nilpotent_sq n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/idempotent_tr n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/commutator_trace n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/det_product n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/hadamard_trace n=160 exact=1 MAE=5e-07 MSE=5e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/diag_trace n=164 exact=1 MAE=5.42682927e-07 MSE=5.42682927e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/euler_phi n=156 exact=1 MAE=4.67948718e-07 MSE=4.67948718e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/sigma_small n=136 exact=1 MAE=4.77941176e-07 MSE=4.77941176e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/digital_root n=128 exact=1 MAE=4.53125e-07 MSE=4.53125e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/collatz_5 n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/bezout_witness n=191 exact=1 MAE=4.34554974e-07 MSE=4.34554974e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/crt_verify n=200 exact=1 MAE=3.2e-07 MSE=3.2e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/legendre_euler n=153 exact=1 MAE=4.96732026e-07 MSE=4.96732026e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/repunit_mod n=132 exact=1 MAE=4.46969697e-07 MSE=4.46969697e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/triangular_mod n=200 exact=1 MAE=3.9e-07 MSE=3.9e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/prime_divisor n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/square_part n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/multiple_six n=200 exact=1 MAE=4.05e-07 MSE=4.05e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/power_two n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/divisor_count n=167 exact=1 MAE=4.91017964e-07 MSE=4.91017964e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/mult_order n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/fermat_little n=161 exact=1 MAE=5.27950311e-07 MSE=5.27950311e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/wilson_check n=119 exact=1 MAE=4.28571429e-07 MSE=4.28571429e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/am_gm_two n=136 exact=1 MAE=4.04411765e-07 MSE=4.04411765e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/abs_linear n=85 exact=1 MAE=4.23529412e-07 MSE=4.23529412e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/expo_laws n=90 exact=1 MAE=4.66666667e-07 MSE=4.66666667e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/log2_pow2 n=124 exact=1 MAE=4.03225806e-07 MSE=4.03225806e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/geometric_mean_pair n=136 exact=1 MAE=3.52941176e-07 MSE=3.52941176e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/gauss_pairing n=124 exact=1 MAE=4.35483871e-07 MSE=4.35483871e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/ratio_share n=130 exact=1 MAE=4.46153846e-07 MSE=4.46153846e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/percentage_pair n=200 exact=1 MAE=4.2e-07 MSE=4.2e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/composition_affine n=200 exact=1 MAE=3.5e-07 MSE=3.5e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/weighted_average n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/inv_function_eval n=200 exact=1 MAE=4.7e-07 MSE=4.7e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/digit_sum_base n=77 exact=1 MAE=3.8961039e-07 MSE=3.8961039e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/median_five n=172 exact=1 MAE=4.12790698e-07 MSE=4.12790698e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/sum_first_odds n=126 exact=1 MAE=3.96825397e-07 MSE=3.96825397e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/tangent_line_quad n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/secant_poly_slope n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/power_rule_integrate n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/newton_sqrt_step n=129 exact=1 MAE=3.56589147e-07 MSE=3.56589147e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/euler_method_linear n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/simpson_quadratic n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/mvt_quadratic n=140 exact=1 MAE=3.78571429e-07 MSE=3.78571429e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/critical_cubic n=65 exact=1 MAE=4.46153846e-07 MSE=4.46153846e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/asymptote_oblique n=177 exact=1 MAE=3.67231638e-07 MSE=3.67231638e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/area_under_linear n=135 exact=1 MAE=4.14814815e-07 MSE=4.14814815e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/second_diff_central n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/rolle_check n=138 exact=1 MAE=3.76811594e-07 MSE=3.76811594e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/det_3x3_cofactor n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/matvec_3 n=200 exact=1 MAE=4.65e-07 MSE=4.65e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/row_reduce_rank2 n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/trace_frobenius2 n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/inverse_mult_identity2 n=200 exact=1 MAE=3.9e-07 MSE=3.9e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/dep_pair_cross n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/diagonal_eigencheck n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/proj_pyth n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/area_parallelogram2 n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/affine_point n=200 exact=1 MAE=3.5e-07 MSE=3.5e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/matrix_sym_part n=200 exact=1 MAE=3.4e-07 MSE=3.4e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/vector_angle_cossq n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/prime_factor_small n=101 exact=1 MAE=4.55445545e-07 MSE=4.55445545e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/perfect_square_check n=139 exact=1 MAE=3.81294964e-07 MSE=3.81294964e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/tribonacci_general n=142 exact=1 MAE=3.87323944e-07 MSE=3.87323944e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/digit_flipper n=92 exact=1 MAE=4.34782609e-07 MSE=4.34782609e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/divisor_sq_two_primes n=39 exact=1 MAE=3.84615385e-07 MSE=3.84615385e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/twin_prime_screen n=22 exact=1 MAE=4.09090909e-07 MSE=4.09090909e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/popcount_halve n=114 exact=1 MAE=3.59649123e-07 MSE=3.59649123e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/prob_urn n=123 exact=1 MAE=3.65853659e-07 MSE=3.65853659e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/bayes_two_events n=127 exact=1 MAE=3.46456693e-07 MSE=3.46456693e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/pyth_triple_verify n=126 exact=1 MAE=4.36507937e-07 MSE=4.36507937e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/catalan_small n=67 exact=1 MAE=4.7761194e-07 MSE=4.7761194e-13
+each_expert_condition expert/linear_algebra/overall/algorithm/pascal_row_mult n=77 exact=1 MAE=4.15584416e-07 MSE=4.15584416e-13
+each_expert_condition expert/linear_algebra/local-step/family/algebra n=30278 exact=1 MAE=7.0803884e-07 MSE=7.0803884e-13
+each_expert_condition expert/linear_algebra/local-step/family/algebra/tier/base n=11114 exact=1 MAE=7.0757603e-07 MSE=7.0757603e-13
+each_expert_condition expert/linear_algebra/local-step/family/algebra/tier/big n=11502 exact=1 MAE=7.11441488e-07 MSE=7.11441488e-13
+each_expert_condition expert/linear_algebra/local-step/family/algebra/tier/neg n=7662 exact=1 MAE=7.03602193e-07 MSE=7.03602193e-13
+each_expert_condition expert/linear_algebra/local-step/family/calculus n=23193 exact=1 MAE=6.83697667e-07 MSE=6.83697667e-13
+each_expert_condition expert/linear_algebra/local-step/family/calculus/tier/base n=8437 exact=1 MAE=6.8732962e-07 MSE=6.8732962e-13
+each_expert_condition expert/linear_algebra/local-step/family/calculus/tier/big n=8613 exact=1 MAE=6.81179612e-07 MSE=6.81179612e-13
+each_expert_condition expert/linear_algebra/local-step/family/calculus/tier/neg n=6143 exact=1 MAE=6.82239948e-07 MSE=6.82239948e-13
+each_expert_condition expert/linear_algebra/local-step/family/linear_algebra n=21880 exact=1 MAE=6.74771481e-07 MSE=6.74771481e-13
+each_expert_condition expert/linear_algebra/local-step/family/linear_algebra/tier/base n=7201 exact=1 MAE=6.73656437e-07 MSE=6.73656437e-13
+each_expert_condition expert/linear_algebra/local-step/family/linear_algebra/tier/big n=7136 exact=1 MAE=6.70964126e-07 MSE=6.70964126e-13
+each_expert_condition expert/linear_algebra/local-step/family/linear_algebra/tier/neg n=7543 exact=1 MAE=6.79437889e-07 MSE=6.79437889e-13
+each_expert_condition expert/linear_algebra/local-step/family/number_theory n=20395 exact=1 MAE=6.91640108e-07 MSE=6.91640108e-13
+each_expert_condition expert/linear_algebra/local-step/family/number_theory/tier/base n=9263 exact=1 MAE=7.06142718e-07 MSE=7.06142718e-13
+each_expert_condition expert/linear_algebra/local-step/family/number_theory/tier/big n=8116 exact=1 MAE=7.00221784e-07 MSE=7.00221784e-13
+each_expert_condition expert/linear_algebra/local-step/family/number_theory/tier/neg n=3016 exact=1 MAE=6.24005305e-07 MSE=6.24005305e-13
+each_expert_condition expert/linear_algebra/local-step/level/-1.0 n=19254 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/linear_algebra/local-step/level/-0.5 n=5405 exact=1 MAE=0 MSE=0
+each_expert_condition expert/linear_algebra/local-step/level/0.0 n=19248 exact=1 MAE=9.82808668e-22 MSE=2.65271123e-42
+each_expert_condition expert/linear_algebra/local-step/level/0.5 n=4928 exact=1 MAE=0 MSE=0
+each_expert_condition expert/linear_algebra/local-step/level/1.0 n=46911 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/linear_algebra/local-step/tier/base n=36015 exact=1 MAE=6.95682355e-07 MSE=6.95682355e-13
+each_expert_condition expert/linear_algebra/local-step/tier/big n=35367 exact=1 MAE=6.9332994e-07 MSE=6.9332994e-13
+each_expert_condition expert/linear_algebra/local-step/tier/neg n=24364 exact=1 MAE=6.80881629e-07 MSE=6.80881629e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/arithmetic_series n=1000 exact=1 MAE=7.09e-07 MSE=7.09e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/binomial_expand n=657 exact=1 MAE=6.84931507e-07 MSE=6.84931507e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/chain_rule n=600 exact=1 MAE=6.68333333e-07 MSE=6.68333333e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/definite_integral n=1000 exact=1 MAE=7.27e-07 MSE=7.27e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/difference_of_squares n=600 exact=1 MAE=7.33333333e-07 MSE=7.33333333e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/dot_product_3d n=800 exact=1 MAE=6.625e-07 MSE=6.625e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/euclid_gcd n=1188 exact=1 MAE=7.62626263e-07 MSE=7.62626263e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/gauss_2x2 n=1000 exact=1 MAE=7.12e-07 MSE=7.12e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/geometric_series n=995 exact=1 MAE=7.71859297e-07 MSE=7.71859297e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/linear_solve n=600 exact=1 MAE=6.31666667e-07 MSE=6.31666667e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/matrix_det_2x2 n=600 exact=1 MAE=6.36666667e-07 MSE=6.36666667e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/mod_pow_fast n=1123 exact=1 MAE=7.40872663e-07 MSE=7.40872663e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/perfect_square_trinomial n=600 exact=1 MAE=6.51666667e-07 MSE=6.51666667e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/power_rule n=600 exact=1 MAE=6.75e-07 MSE=6.75e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/product_rule n=1000 exact=1 MAE=7.53e-07 MSE=7.53e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/quadratic_formula n=800 exact=1 MAE=6.9875e-07 MSE=6.9875e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/quotient_rule n=1000 exact=1 MAE=6.66e-07 MSE=6.66e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/slope_from_points n=800 exact=1 MAE=6.8125e-07 MSE=6.8125e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/substitution_system n=800 exact=1 MAE=6.9125e-07 MSE=6.9125e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/sum_of_cubes n=600 exact=1 MAE=6.41666667e-07 MSE=6.41666667e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/sum_of_squares n=800 exact=1 MAE=7.075e-07 MSE=7.075e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/difference_of_cubes n=600 exact=1 MAE=6.71666667e-07 MSE=6.71666667e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/cube_of_binomial n=1000 exact=1 MAE=6.93e-07 MSE=6.93e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/telescoping_series n=775 exact=1 MAE=7.58709677e-07 MSE=7.58709677e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/log_product n=800 exact=1 MAE=7.3375e-07 MSE=7.3375e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/modular_inverse n=400 exact=1 MAE=5.525e-07 MSE=5.525e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/matrix_trace_product n=600 exact=1 MAE=6.81666667e-07 MSE=6.81666667e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/vieta_cubic n=600 exact=1 MAE=6.36666667e-07 MSE=6.36666667e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/factorial_recurrence n=511 exact=1 MAE=7.43639922e-07 MSE=7.43639922e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/fibonacci_iter n=499 exact=1 MAE=7.35470942e-07 MSE=7.35470942e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/harmonic_partial n=804 exact=1 MAE=7.37562189e-07 MSE=7.37562189e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/horner_eval n=600 exact=1 MAE=7.01666667e-07 MSE=7.01666667e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/sum_fourth_powers n=1000 exact=1 MAE=7.06e-07 MSE=7.06e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/nested_radical n=600 exact=1 MAE=6.85e-07 MSE=6.85e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/completing_square n=600 exact=1 MAE=6.88333333e-07 MSE=6.88333333e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/quartic_horner n=600 exact=1 MAE=6.63333333e-07 MSE=6.63333333e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/partial_fractions n=800 exact=1 MAE=6.6125e-07 MSE=6.6125e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/cauchy_identity n=800 exact=1 MAE=7.1e-07 MSE=7.1e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/pell_check n=600 exact=1 MAE=6.46666667e-07 MSE=6.46666667e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/rational_root n=400 exact=1 MAE=5.9e-07 MSE=5.9e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/power_difference n=1000 exact=1 MAE=7.16e-07 MSE=7.16e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/binomial_coeff n=400 exact=1 MAE=5.825e-07 MSE=5.825e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/linear_recurrence n=600 exact=1 MAE=6.45e-07 MSE=6.45e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/contfrac_2 n=400 exact=1 MAE=5.5e-07 MSE=5.5e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/sum_odd n=903 exact=1 MAE=7.99557032e-07 MSE=7.99557032e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/triangular_verify n=738 exact=1 MAE=7.75067751e-07 MSE=7.75067751e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/binary_value n=793 exact=1 MAE=7.44010088e-07 MSE=7.44010088e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/gcd_three n=400 exact=1 MAE=6.275e-07 MSE=6.275e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/lcm_pair n=600 exact=1 MAE=6.56666667e-07 MSE=6.56666667e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/second_derivative n=400 exact=1 MAE=5.975e-07 MSE=5.975e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/implicit_circle n=600 exact=1 MAE=6.58333333e-07 MSE=6.58333333e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/lhopital_poly n=400 exact=1 MAE=6.275e-07 MSE=6.275e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/riemann_mid2 n=600 exact=1 MAE=6.4e-07 MSE=6.4e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/trapezoid_linear n=600 exact=1 MAE=6.6e-07 MSE=6.6e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/usub_linear n=400 exact=1 MAE=5.75e-07 MSE=5.75e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/average_linear n=400 exact=1 MAE=5.825e-07 MSE=5.825e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/tangent_point n=600 exact=1 MAE=6.78333333e-07 MSE=6.78333333e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/concavity_quad n=400 exact=1 MAE=6.225e-07 MSE=6.225e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/inflection_cubic n=400 exact=1 MAE=6.325e-07 MSE=6.325e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/definite_quad n=800 exact=1 MAE=6.825e-07 MSE=6.825e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/ftc_check n=600 exact=1 MAE=6.93333333e-07 MSE=6.93333333e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/monotonic_quad n=400 exact=1 MAE=5.65e-07 MSE=5.65e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/shadow_rates n=400 exact=1 MAE=5.775e-07 MSE=5.775e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/chain_poly n=400 exact=1 MAE=6.1e-07 MSE=6.1e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/taylor_linear n=400 exact=1 MAE=6.3e-07 MSE=6.3e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/inverse_slope n=400 exact=1 MAE=6.3e-07 MSE=6.3e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/mat_add n=400 exact=1 MAE=5.825e-07 MSE=5.825e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/scalar_mult n=400 exact=1 MAE=5.725e-07 MSE=5.725e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/inverse_2x2 n=600 exact=1 MAE=6.86666667e-07 MSE=6.86666667e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/eigen_sym n=600 exact=1 MAE=6.75e-07 MSE=6.75e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/cramer_2x2 n=600 exact=1 MAE=6.6e-07 MSE=6.6e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/outer_trace n=400 exact=1 MAE=6.125e-07 MSE=6.125e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/mat_square n=400 exact=1 MAE=5.95e-07 MSE=5.95e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/cross_2d n=156 exact=1 MAE=5.32051282e-07 MSE=5.32051282e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/project_axis n=400 exact=1 MAE=5.975e-07 MSE=5.975e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/rotate_twice n=800 exact=1 MAE=6.8e-07 MSE=6.8e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/gram_det n=600 exact=1 MAE=6.53333333e-07 MSE=6.53333333e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/nilpotent_sq n=400 exact=1 MAE=5.9e-07 MSE=5.9e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/idempotent_tr n=400 exact=1 MAE=6e-07 MSE=6e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/commutator_trace n=600 exact=1 MAE=6.51666667e-07 MSE=6.51666667e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/det_product n=600 exact=1 MAE=6.38333333e-07 MSE=6.38333333e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/hadamard_trace n=160 exact=1 MAE=5e-07 MSE=5e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/diag_trace n=164 exact=1 MAE=5.42682927e-07 MSE=5.42682927e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/euler_phi n=156 exact=1 MAE=4.67948718e-07 MSE=4.67948718e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/sigma_small n=988 exact=1 MAE=7.70242915e-07 MSE=7.70242915e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/digital_root n=256 exact=1 MAE=6.2109375e-07 MSE=6.2109375e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/collatz_5 n=1000 exact=1 MAE=7.58e-07 MSE=7.58e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/bezout_witness n=350 exact=1 MAE=6.2e-07 MSE=6.2e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/crt_verify n=400 exact=1 MAE=5.225e-07 MSE=5.225e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/legendre_euler n=153 exact=1 MAE=4.96732026e-07 MSE=4.96732026e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/repunit_mod n=264 exact=1 MAE=6.06060606e-07 MSE=6.06060606e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/triangular_mod n=400 exact=1 MAE=5.65e-07 MSE=5.65e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/prime_divisor n=400 exact=1 MAE=6.15e-07 MSE=6.15e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/square_part n=400 exact=1 MAE=6.125e-07 MSE=6.125e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/multiple_six n=400 exact=1 MAE=6.125e-07 MSE=6.125e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/power_two n=400 exact=1 MAE=5.775e-07 MSE=5.775e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/divisor_count n=167 exact=1 MAE=4.91017964e-07 MSE=4.91017964e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/mult_order n=400 exact=1 MAE=5.75e-07 MSE=5.75e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/fermat_little n=161 exact=1 MAE=5.27950311e-07 MSE=5.27950311e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/wilson_check n=119 exact=1 MAE=4.28571429e-07 MSE=4.28571429e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/am_gm_two n=680 exact=1 MAE=7.45588235e-07 MSE=7.45588235e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/abs_linear n=340 exact=1 MAE=7.32352941e-07 MSE=7.32352941e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/expo_laws n=360 exact=1 MAE=7.58333333e-07 MSE=7.58333333e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/log2_pow2 n=911 exact=1 MAE=7.22283205e-07 MSE=7.22283205e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/geometric_mean_pair n=680 exact=1 MAE=7.05882353e-07 MSE=7.05882353e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/gauss_pairing n=620 exact=1 MAE=7.58064516e-07 MSE=7.58064516e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/ratio_share n=650 exact=1 MAE=7.47692308e-07 MSE=7.47692308e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/percentage_pair n=600 exact=1 MAE=6.66666667e-07 MSE=6.66666667e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/composition_affine n=1000 exact=1 MAE=7.5e-07 MSE=7.5e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/weighted_average n=800 exact=1 MAE=6.65e-07 MSE=6.65e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/inv_function_eval n=800 exact=1 MAE=7.475e-07 MSE=7.475e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/digit_sum_base n=462 exact=1 MAE=6.92640693e-07 MSE=6.92640693e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/median_five n=2064 exact=1 MAE=7.75193798e-07 MSE=7.75193798e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/sum_first_odds n=756 exact=1 MAE=7.47354497e-07 MSE=7.47354497e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/tangent_line_quad n=800 exact=1 MAE=7.4e-07 MSE=7.4e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/secant_poly_slope n=800 exact=1 MAE=7.025e-07 MSE=7.025e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/power_rule_integrate n=800 exact=1 MAE=6.95e-07 MSE=6.95e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/newton_sqrt_step n=516 exact=1 MAE=6.87984496e-07 MSE=6.87984496e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/euler_method_linear n=800 exact=1 MAE=6.95e-07 MSE=6.95e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/simpson_quadratic n=1400 exact=1 MAE=7.55714286e-07 MSE=7.55714286e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/mvt_quadratic n=840 exact=1 MAE=6.82142857e-07 MSE=6.82142857e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/critical_cubic n=455 exact=1 MAE=7.49450549e-07 MSE=7.49450549e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/asymptote_oblique n=708 exact=1 MAE=6.34180791e-07 MSE=6.34180791e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/area_under_linear n=405 exact=1 MAE=6.66666667e-07 MSE=6.66666667e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/second_diff_central n=1000 exact=1 MAE=7.24e-07 MSE=7.24e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/rolle_check n=690 exact=1 MAE=7.01449275e-07 MSE=7.01449275e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/det_3x3_cofactor n=1400 exact=1 MAE=7.65e-07 MSE=7.65e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/matvec_3 n=600 exact=1 MAE=7.15e-07 MSE=7.15e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/row_reduce_rank2 n=1000 exact=1 MAE=7.13e-07 MSE=7.13e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/trace_frobenius2 n=1000 exact=1 MAE=7.49e-07 MSE=7.49e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/inverse_mult_identity2 n=1000 exact=1 MAE=7.1e-07 MSE=7.1e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/dep_pair_cross n=800 exact=1 MAE=6.6625e-07 MSE=6.6625e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/diagonal_eigencheck n=800 exact=1 MAE=6.4375e-07 MSE=6.4375e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/proj_pyth n=1000 exact=1 MAE=6.95e-07 MSE=6.95e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/area_parallelogram2 n=600 exact=1 MAE=6.55e-07 MSE=6.55e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/affine_point n=1200 exact=1 MAE=7.125e-07 MSE=7.125e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/matrix_sym_part n=1000 exact=1 MAE=6.72e-07 MSE=6.72e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/vector_angle_cossq n=800 exact=1 MAE=7.0125e-07 MSE=7.0125e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/prime_factor_small n=847 exact=1 MAE=7.8866588e-07 MSE=7.8866588e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/perfect_square_check n=417 exact=1 MAE=6.73860911e-07 MSE=6.73860911e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/tribonacci_general n=852 exact=1 MAE=7.3943662e-07 MSE=7.3943662e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/digit_flipper n=552 exact=1 MAE=7.51811594e-07 MSE=7.51811594e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/divisor_sq_two_primes n=273 exact=1 MAE=7.8021978e-07 MSE=7.8021978e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/twin_prime_screen n=110 exact=1 MAE=7e-07 MSE=7e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/popcount_halve n=1254 exact=1 MAE=7.42424242e-07 MSE=7.42424242e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/prob_urn n=492 exact=1 MAE=6.70731707e-07 MSE=6.70731707e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/bayes_two_events n=508 exact=1 MAE=6.18110236e-07 MSE=6.18110236e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/pyth_triple_verify n=756 exact=1 MAE=7.87037037e-07 MSE=7.87037037e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/catalan_small n=294 exact=1 MAE=7.07482993e-07 MSE=7.07482993e-13
+each_expert_condition expert/linear_algebra/local-step/algorithm/pascal_row_mult n=374 exact=1 MAE=7.19251337e-07 MSE=7.19251337e-13
+each_expert_condition expert/number_theory/overall/family/algebra n=7235 exact=1 MAE=4.03178991e-07 MSE=4.03178991e-13
+each_expert_condition expert/number_theory/overall/family/algebra/tier/base n=2665 exact=1 MAE=4.06754221e-07 MSE=4.06754221e-13
+each_expert_condition expert/number_theory/overall/family/algebra/tier/big n=2595 exact=1 MAE=3.9344894e-07 MSE=3.9344894e-13
+each_expert_condition expert/number_theory/overall/family/algebra/tier/neg n=1975 exact=1 MAE=4.11139241e-07 MSE=4.11139241e-13
+each_expert_condition expert/number_theory/overall/family/calculus n=6628 exact=1 MAE=4.00573325e-07 MSE=4.00573325e-13
+each_expert_condition expert/number_theory/overall/family/calculus/tier/base n=2385 exact=1 MAE=4.04192872e-07 MSE=4.04192872e-13
+each_expert_condition expert/number_theory/overall/family/calculus/tier/big n=2338 exact=1 MAE=3.87938409e-07 MSE=3.87938409e-13
+each_expert_condition expert/number_theory/overall/family/calculus/tier/neg n=1905 exact=1 MAE=4.11548556e-07 MSE=4.11548556e-13
+each_expert_condition expert/number_theory/overall/family/linear_algebra n=6480 exact=1 MAE=3.95679012e-07 MSE=3.95679012e-13
+each_expert_condition expert/number_theory/overall/family/linear_algebra/tier/base n=2133 exact=1 MAE=3.91467417e-07 MSE=3.91467417e-13
+each_expert_condition expert/number_theory/overall/family/linear_algebra/tier/big n=2118 exact=1 MAE=3.90462701e-07 MSE=3.90462701e-13
+each_expert_condition expert/number_theory/overall/family/linear_algebra/tier/neg n=2229 exact=1 MAE=4.04665769e-07 MSE=4.04665769e-13
+each_expert_condition expert/number_theory/overall/family/number_theory n=5951 exact=1 MAE=4.14552176e-07 MSE=4.14552176e-13
+each_expert_condition expert/number_theory/overall/family/number_theory/tier/base n=2493 exact=1 MAE=4.21981548e-07 MSE=4.21981548e-13
+each_expert_condition expert/number_theory/overall/family/number_theory/tier/big n=2102 exact=1 MAE=4.15318744e-07 MSE=4.15318744e-13
+each_expert_condition expert/number_theory/overall/family/number_theory/tier/neg n=1356 exact=1 MAE=3.99705015e-07 MSE=3.99705015e-13
+each_expert_condition expert/number_theory/overall/level/-1.0 n=5306 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/number_theory/overall/level/-0.5 n=5405 exact=1 MAE=0 MSE=0
+each_expert_condition expert/number_theory/overall/level/0.0 n=5358 exact=1 MAE=2.32877654e-29 MSE=5.42320017e-58
+each_expert_condition expert/number_theory/overall/level/0.5 n=4928 exact=1 MAE=0 MSE=0
+each_expert_condition expert/number_theory/overall/level/1.0 n=5297 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/number_theory/overall/tier/base n=9676 exact=1 MAE=4.06676313e-07 MSE=4.06676313e-13
+each_expert_condition expert/number_theory/overall/tier/big n=9153 exact=1 MAE=3.96372774e-07 MSE=3.96372774e-13
+each_expert_condition expert/number_theory/overall/tier/neg n=7465 exact=1 MAE=4.07233758e-07 MSE=4.07233758e-13
+each_expert_condition expert/number_theory/overall/algorithm/arithmetic_series n=200 exact=1 MAE=4.05e-07 MSE=4.05e-13
+each_expert_condition expert/number_theory/overall/algorithm/binomial_expand n=99 exact=1 MAE=3.53535354e-07 MSE=3.53535354e-13
+each_expert_condition expert/number_theory/overall/algorithm/chain_rule n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/number_theory/overall/algorithm/definite_integral n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/number_theory/overall/algorithm/difference_of_squares n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/number_theory/overall/algorithm/dot_product_3d n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/number_theory/overall/algorithm/euclid_gcd n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/number_theory/overall/algorithm/gauss_2x2 n=200 exact=1 MAE=4e-07 MSE=4e-13
+each_expert_condition expert/number_theory/overall/algorithm/geometric_series n=199 exact=1 MAE=4.42211055e-07 MSE=4.42211055e-13
+each_expert_condition expert/number_theory/overall/algorithm/linear_solve n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/number_theory/overall/algorithm/matrix_det_2x2 n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/number_theory/overall/algorithm/mod_pow_fast n=189 exact=1 MAE=4.55026455e-07 MSE=4.55026455e-13
+each_expert_condition expert/number_theory/overall/algorithm/perfect_square_trinomial n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/number_theory/overall/algorithm/power_rule n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/number_theory/overall/algorithm/product_rule n=200 exact=1 MAE=4.45e-07 MSE=4.45e-13
+each_expert_condition expert/number_theory/overall/algorithm/quadratic_formula n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/number_theory/overall/algorithm/quotient_rule n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/number_theory/overall/algorithm/slope_from_points n=200 exact=1 MAE=4.15e-07 MSE=4.15e-13
+each_expert_condition expert/number_theory/overall/algorithm/substitution_system n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/number_theory/overall/algorithm/sum_of_cubes n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/number_theory/overall/algorithm/sum_of_squares n=200 exact=1 MAE=4.6e-07 MSE=4.6e-13
+each_expert_condition expert/number_theory/overall/algorithm/difference_of_cubes n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/number_theory/overall/algorithm/cube_of_binomial n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/number_theory/overall/algorithm/telescoping_series n=119 exact=1 MAE=4.20168067e-07 MSE=4.20168067e-13
+each_expert_condition expert/number_theory/overall/algorithm/log_product n=200 exact=1 MAE=4.45e-07 MSE=4.45e-13
+each_expert_condition expert/number_theory/overall/algorithm/modular_inverse n=200 exact=1 MAE=3.15e-07 MSE=3.15e-13
+each_expert_condition expert/number_theory/overall/algorithm/matrix_trace_product n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/number_theory/overall/algorithm/vieta_cubic n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/number_theory/overall/algorithm/factorial_recurrence n=94 exact=1 MAE=4.89361702e-07 MSE=4.89361702e-13
+each_expert_condition expert/number_theory/overall/algorithm/fibonacci_iter n=77 exact=1 MAE=3.37662338e-07 MSE=3.37662338e-13
+each_expert_condition expert/number_theory/overall/algorithm/harmonic_partial n=125 exact=1 MAE=3.84e-07 MSE=3.84e-13
+each_expert_condition expert/number_theory/overall/algorithm/horner_eval n=200 exact=1 MAE=4.55e-07 MSE=4.55e-13
+each_expert_condition expert/number_theory/overall/algorithm/sum_fourth_powers n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/number_theory/overall/algorithm/nested_radical n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/number_theory/overall/algorithm/completing_square n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/number_theory/overall/algorithm/quartic_horner n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/number_theory/overall/algorithm/partial_fractions n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/number_theory/overall/algorithm/cauchy_identity n=200 exact=1 MAE=4.55e-07 MSE=4.55e-13
+each_expert_condition expert/number_theory/overall/algorithm/pell_check n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/number_theory/overall/algorithm/rational_root n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/number_theory/overall/algorithm/power_difference n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/number_theory/overall/algorithm/binomial_coeff n=200 exact=1 MAE=3.9e-07 MSE=3.9e-13
+each_expert_condition expert/number_theory/overall/algorithm/linear_recurrence n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/number_theory/overall/algorithm/contfrac_2 n=200 exact=1 MAE=3.4e-07 MSE=3.4e-13
+each_expert_condition expert/number_theory/overall/algorithm/sum_odd n=137 exact=1 MAE=4.16058394e-07 MSE=4.16058394e-13
+each_expert_condition expert/number_theory/overall/algorithm/triangular_verify n=152 exact=1 MAE=4.47368421e-07 MSE=4.47368421e-13
+each_expert_condition expert/number_theory/overall/algorithm/binary_value n=127 exact=1 MAE=4.48818898e-07 MSE=4.48818898e-13
+each_expert_condition expert/number_theory/overall/algorithm/gcd_three n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/number_theory/overall/algorithm/lcm_pair n=200 exact=1 MAE=4e-07 MSE=4e-13
+each_expert_condition expert/number_theory/overall/algorithm/second_derivative n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/number_theory/overall/algorithm/implicit_circle n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/number_theory/overall/algorithm/lhopital_poly n=200 exact=1 MAE=4.45e-07 MSE=4.45e-13
+each_expert_condition expert/number_theory/overall/algorithm/riemann_mid2 n=200 exact=1 MAE=3.6e-07 MSE=3.6e-13
+each_expert_condition expert/number_theory/overall/algorithm/trapezoid_linear n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/number_theory/overall/algorithm/usub_linear n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/number_theory/overall/algorithm/average_linear n=200 exact=1 MAE=3.6e-07 MSE=3.6e-13
+each_expert_condition expert/number_theory/overall/algorithm/tangent_point n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/number_theory/overall/algorithm/concavity_quad n=200 exact=1 MAE=4.65e-07 MSE=4.65e-13
+each_expert_condition expert/number_theory/overall/algorithm/inflection_cubic n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/number_theory/overall/algorithm/definite_quad n=200 exact=1 MAE=4.05e-07 MSE=4.05e-13
+each_expert_condition expert/number_theory/overall/algorithm/ftc_check n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/number_theory/overall/algorithm/monotonic_quad n=200 exact=1 MAE=3.6e-07 MSE=3.6e-13
+each_expert_condition expert/number_theory/overall/algorithm/shadow_rates n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/number_theory/overall/algorithm/chain_poly n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/number_theory/overall/algorithm/taylor_linear n=200 exact=1 MAE=4.6e-07 MSE=4.6e-13
+each_expert_condition expert/number_theory/overall/algorithm/inverse_slope n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/number_theory/overall/algorithm/mat_add n=200 exact=1 MAE=3.45e-07 MSE=3.45e-13
+each_expert_condition expert/number_theory/overall/algorithm/scalar_mult n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/number_theory/overall/algorithm/inverse_2x2 n=200 exact=1 MAE=4.4e-07 MSE=4.4e-13
+each_expert_condition expert/number_theory/overall/algorithm/eigen_sym n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/number_theory/overall/algorithm/cramer_2x2 n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/number_theory/overall/algorithm/outer_trace n=200 exact=1 MAE=4.2e-07 MSE=4.2e-13
+each_expert_condition expert/number_theory/overall/algorithm/mat_square n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/number_theory/overall/algorithm/cross_2d n=156 exact=1 MAE=5.32051282e-07 MSE=5.32051282e-13
+each_expert_condition expert/number_theory/overall/algorithm/project_axis n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/number_theory/overall/algorithm/rotate_twice n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/number_theory/overall/algorithm/gram_det n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/number_theory/overall/algorithm/nilpotent_sq n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/number_theory/overall/algorithm/idempotent_tr n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/number_theory/overall/algorithm/commutator_trace n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/number_theory/overall/algorithm/det_product n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/number_theory/overall/algorithm/hadamard_trace n=160 exact=1 MAE=5e-07 MSE=5e-13
+each_expert_condition expert/number_theory/overall/algorithm/diag_trace n=164 exact=1 MAE=5.42682927e-07 MSE=5.42682927e-13
+each_expert_condition expert/number_theory/overall/algorithm/euler_phi n=156 exact=1 MAE=4.67948718e-07 MSE=4.67948718e-13
+each_expert_condition expert/number_theory/overall/algorithm/sigma_small n=136 exact=1 MAE=4.77941176e-07 MSE=4.77941176e-13
+each_expert_condition expert/number_theory/overall/algorithm/digital_root n=128 exact=1 MAE=4.53125e-07 MSE=4.53125e-13
+each_expert_condition expert/number_theory/overall/algorithm/collatz_5 n=200 exact=1 MAE=4.3e-07 MSE=4.3e-13
+each_expert_condition expert/number_theory/overall/algorithm/bezout_witness n=191 exact=1 MAE=4.34554974e-07 MSE=4.34554974e-13
+each_expert_condition expert/number_theory/overall/algorithm/crt_verify n=200 exact=1 MAE=3.2e-07 MSE=3.2e-13
+each_expert_condition expert/number_theory/overall/algorithm/legendre_euler n=153 exact=1 MAE=4.96732026e-07 MSE=4.96732026e-13
+each_expert_condition expert/number_theory/overall/algorithm/repunit_mod n=132 exact=1 MAE=4.46969697e-07 MSE=4.46969697e-13
+each_expert_condition expert/number_theory/overall/algorithm/triangular_mod n=200 exact=1 MAE=3.9e-07 MSE=3.9e-13
+each_expert_condition expert/number_theory/overall/algorithm/prime_divisor n=200 exact=1 MAE=4.1e-07 MSE=4.1e-13
+each_expert_condition expert/number_theory/overall/algorithm/square_part n=200 exact=1 MAE=4.25e-07 MSE=4.25e-13
+each_expert_condition expert/number_theory/overall/algorithm/multiple_six n=200 exact=1 MAE=4.05e-07 MSE=4.05e-13
+each_expert_condition expert/number_theory/overall/algorithm/power_two n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/number_theory/overall/algorithm/divisor_count n=167 exact=1 MAE=4.91017964e-07 MSE=4.91017964e-13
+each_expert_condition expert/number_theory/overall/algorithm/mult_order n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/number_theory/overall/algorithm/fermat_little n=161 exact=1 MAE=5.27950311e-07 MSE=5.27950311e-13
+each_expert_condition expert/number_theory/overall/algorithm/wilson_check n=119 exact=1 MAE=4.28571429e-07 MSE=4.28571429e-13
+each_expert_condition expert/number_theory/overall/algorithm/am_gm_two n=136 exact=1 MAE=4.04411765e-07 MSE=4.04411765e-13
+each_expert_condition expert/number_theory/overall/algorithm/abs_linear n=85 exact=1 MAE=4.23529412e-07 MSE=4.23529412e-13
+each_expert_condition expert/number_theory/overall/algorithm/expo_laws n=90 exact=1 MAE=4.66666667e-07 MSE=4.66666667e-13
+each_expert_condition expert/number_theory/overall/algorithm/log2_pow2 n=124 exact=1 MAE=4.03225806e-07 MSE=4.03225806e-13
+each_expert_condition expert/number_theory/overall/algorithm/geometric_mean_pair n=136 exact=1 MAE=3.52941176e-07 MSE=3.52941176e-13
+each_expert_condition expert/number_theory/overall/algorithm/gauss_pairing n=124 exact=1 MAE=4.35483871e-07 MSE=4.35483871e-13
+each_expert_condition expert/number_theory/overall/algorithm/ratio_share n=130 exact=1 MAE=4.46153846e-07 MSE=4.46153846e-13
+each_expert_condition expert/number_theory/overall/algorithm/percentage_pair n=200 exact=1 MAE=4.2e-07 MSE=4.2e-13
+each_expert_condition expert/number_theory/overall/algorithm/composition_affine n=200 exact=1 MAE=3.5e-07 MSE=3.5e-13
+each_expert_condition expert/number_theory/overall/algorithm/weighted_average n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/number_theory/overall/algorithm/inv_function_eval n=200 exact=1 MAE=4.7e-07 MSE=4.7e-13
+each_expert_condition expert/number_theory/overall/algorithm/digit_sum_base n=77 exact=1 MAE=3.8961039e-07 MSE=3.8961039e-13
+each_expert_condition expert/number_theory/overall/algorithm/median_five n=172 exact=1 MAE=4.12790698e-07 MSE=4.12790698e-13
+each_expert_condition expert/number_theory/overall/algorithm/sum_first_odds n=126 exact=1 MAE=3.96825397e-07 MSE=3.96825397e-13
+each_expert_condition expert/number_theory/overall/algorithm/tangent_line_quad n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/number_theory/overall/algorithm/secant_poly_slope n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/number_theory/overall/algorithm/power_rule_integrate n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/number_theory/overall/algorithm/newton_sqrt_step n=129 exact=1 MAE=3.56589147e-07 MSE=3.56589147e-13
+each_expert_condition expert/number_theory/overall/algorithm/euler_method_linear n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/number_theory/overall/algorithm/simpson_quadratic n=200 exact=1 MAE=3.7e-07 MSE=3.7e-13
+each_expert_condition expert/number_theory/overall/algorithm/mvt_quadratic n=140 exact=1 MAE=3.78571429e-07 MSE=3.78571429e-13
+each_expert_condition expert/number_theory/overall/algorithm/critical_cubic n=65 exact=1 MAE=4.46153846e-07 MSE=4.46153846e-13
+each_expert_condition expert/number_theory/overall/algorithm/asymptote_oblique n=177 exact=1 MAE=3.67231638e-07 MSE=3.67231638e-13
+each_expert_condition expert/number_theory/overall/algorithm/area_under_linear n=135 exact=1 MAE=4.14814815e-07 MSE=4.14814815e-13
+each_expert_condition expert/number_theory/overall/algorithm/second_diff_central n=200 exact=1 MAE=3.8e-07 MSE=3.8e-13
+each_expert_condition expert/number_theory/overall/algorithm/rolle_check n=138 exact=1 MAE=3.76811594e-07 MSE=3.76811594e-13
+each_expert_condition expert/number_theory/overall/algorithm/det_3x3_cofactor n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/number_theory/overall/algorithm/matvec_3 n=200 exact=1 MAE=4.65e-07 MSE=4.65e-13
+each_expert_condition expert/number_theory/overall/algorithm/row_reduce_rank2 n=200 exact=1 MAE=3.65e-07 MSE=3.65e-13
+each_expert_condition expert/number_theory/overall/algorithm/trace_frobenius2 n=200 exact=1 MAE=3.85e-07 MSE=3.85e-13
+each_expert_condition expert/number_theory/overall/algorithm/inverse_mult_identity2 n=200 exact=1 MAE=3.9e-07 MSE=3.9e-13
+each_expert_condition expert/number_theory/overall/algorithm/dep_pair_cross n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/number_theory/overall/algorithm/diagonal_eigencheck n=200 exact=1 MAE=3.55e-07 MSE=3.55e-13
+each_expert_condition expert/number_theory/overall/algorithm/proj_pyth n=200 exact=1 MAE=3.95e-07 MSE=3.95e-13
+each_expert_condition expert/number_theory/overall/algorithm/area_parallelogram2 n=200 exact=1 MAE=3.75e-07 MSE=3.75e-13
+each_expert_condition expert/number_theory/overall/algorithm/affine_point n=200 exact=1 MAE=3.5e-07 MSE=3.5e-13
+each_expert_condition expert/number_theory/overall/algorithm/matrix_sym_part n=200 exact=1 MAE=3.4e-07 MSE=3.4e-13
+each_expert_condition expert/number_theory/overall/algorithm/vector_angle_cossq n=200 exact=1 MAE=4.35e-07 MSE=4.35e-13
+each_expert_condition expert/number_theory/overall/algorithm/prime_factor_small n=101 exact=1 MAE=4.55445545e-07 MSE=4.55445545e-13
+each_expert_condition expert/number_theory/overall/algorithm/perfect_square_check n=139 exact=1 MAE=3.81294964e-07 MSE=3.81294964e-13
+each_expert_condition expert/number_theory/overall/algorithm/tribonacci_general n=142 exact=1 MAE=3.87323944e-07 MSE=3.87323944e-13
+each_expert_condition expert/number_theory/overall/algorithm/digit_flipper n=92 exact=1 MAE=4.34782609e-07 MSE=4.34782609e-13
+each_expert_condition expert/number_theory/overall/algorithm/divisor_sq_two_primes n=39 exact=1 MAE=3.84615385e-07 MSE=3.84615385e-13
+each_expert_condition expert/number_theory/overall/algorithm/twin_prime_screen n=22 exact=1 MAE=4.09090909e-07 MSE=4.09090909e-13
+each_expert_condition expert/number_theory/overall/algorithm/popcount_halve n=114 exact=1 MAE=3.59649123e-07 MSE=3.59649123e-13
+each_expert_condition expert/number_theory/overall/algorithm/prob_urn n=123 exact=1 MAE=3.65853659e-07 MSE=3.65853659e-13
+each_expert_condition expert/number_theory/overall/algorithm/bayes_two_events n=127 exact=1 MAE=3.46456693e-07 MSE=3.46456693e-13
+each_expert_condition expert/number_theory/overall/algorithm/pyth_triple_verify n=126 exact=1 MAE=4.36507937e-07 MSE=4.36507937e-13
+each_expert_condition expert/number_theory/overall/algorithm/catalan_small n=67 exact=1 MAE=4.7761194e-07 MSE=4.7761194e-13
+each_expert_condition expert/number_theory/overall/algorithm/pascal_row_mult n=77 exact=1 MAE=4.15584416e-07 MSE=4.15584416e-13
+each_expert_condition expert/number_theory/local-step/family/algebra n=30278 exact=1 MAE=7.0803884e-07 MSE=7.0803884e-13
+each_expert_condition expert/number_theory/local-step/family/algebra/tier/base n=11114 exact=1 MAE=7.0757603e-07 MSE=7.0757603e-13
+each_expert_condition expert/number_theory/local-step/family/algebra/tier/big n=11502 exact=1 MAE=7.11441488e-07 MSE=7.11441488e-13
+each_expert_condition expert/number_theory/local-step/family/algebra/tier/neg n=7662 exact=1 MAE=7.03602193e-07 MSE=7.03602193e-13
+each_expert_condition expert/number_theory/local-step/family/calculus n=23193 exact=1 MAE=6.83697667e-07 MSE=6.83697667e-13
+each_expert_condition expert/number_theory/local-step/family/calculus/tier/base n=8437 exact=1 MAE=6.8732962e-07 MSE=6.8732962e-13
+each_expert_condition expert/number_theory/local-step/family/calculus/tier/big n=8613 exact=1 MAE=6.81179612e-07 MSE=6.81179612e-13
+each_expert_condition expert/number_theory/local-step/family/calculus/tier/neg n=6143 exact=1 MAE=6.82239948e-07 MSE=6.82239948e-13
+each_expert_condition expert/number_theory/local-step/family/linear_algebra n=21880 exact=1 MAE=6.74771481e-07 MSE=6.74771481e-13
+each_expert_condition expert/number_theory/local-step/family/linear_algebra/tier/base n=7201 exact=1 MAE=6.73656437e-07 MSE=6.73656437e-13
+each_expert_condition expert/number_theory/local-step/family/linear_algebra/tier/big n=7136 exact=1 MAE=6.70964126e-07 MSE=6.70964126e-13
+each_expert_condition expert/number_theory/local-step/family/linear_algebra/tier/neg n=7543 exact=1 MAE=6.79437889e-07 MSE=6.79437889e-13
+each_expert_condition expert/number_theory/local-step/family/number_theory n=20395 exact=1 MAE=6.91640108e-07 MSE=6.91640108e-13
+each_expert_condition expert/number_theory/local-step/family/number_theory/tier/base n=9263 exact=1 MAE=7.06142718e-07 MSE=7.06142718e-13
+each_expert_condition expert/number_theory/local-step/family/number_theory/tier/big n=8116 exact=1 MAE=7.00221784e-07 MSE=7.00221784e-13
+each_expert_condition expert/number_theory/local-step/family/number_theory/tier/neg n=3016 exact=1 MAE=6.24005305e-07 MSE=6.24005305e-13
+each_expert_condition expert/number_theory/local-step/level/-1.0 n=19254 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/number_theory/local-step/level/-0.5 n=5405 exact=1 MAE=0 MSE=0
+each_expert_condition expert/number_theory/local-step/level/0.0 n=19248 exact=1 MAE=9.07699868e-25 MSE=2.23006117e-48
+each_expert_condition expert/number_theory/local-step/level/0.5 n=4928 exact=1 MAE=0 MSE=0
+each_expert_condition expert/number_theory/local-step/level/1.0 n=46911 exact=1 MAE=1e-06 MSE=1e-12
+each_expert_condition expert/number_theory/local-step/tier/base n=36015 exact=1 MAE=6.95682355e-07 MSE=6.95682355e-13
+each_expert_condition expert/number_theory/local-step/tier/big n=35367 exact=1 MAE=6.9332994e-07 MSE=6.9332994e-13
+each_expert_condition expert/number_theory/local-step/tier/neg n=24364 exact=1 MAE=6.80881629e-07 MSE=6.80881629e-13
+each_expert_condition expert/number_theory/local-step/algorithm/arithmetic_series n=1000 exact=1 MAE=7.09e-07 MSE=7.09e-13
+each_expert_condition expert/number_theory/local-step/algorithm/binomial_expand n=657 exact=1 MAE=6.84931507e-07 MSE=6.84931507e-13
+each_expert_condition expert/number_theory/local-step/algorithm/chain_rule n=600 exact=1 MAE=6.68333333e-07 MSE=6.68333333e-13
+each_expert_condition expert/number_theory/local-step/algorithm/definite_integral n=1000 exact=1 MAE=7.27e-07 MSE=7.27e-13
+each_expert_condition expert/number_theory/local-step/algorithm/difference_of_squares n=600 exact=1 MAE=7.33333333e-07 MSE=7.33333333e-13
+each_expert_condition expert/number_theory/local-step/algorithm/dot_product_3d n=800 exact=1 MAE=6.625e-07 MSE=6.625e-13
+each_expert_condition expert/number_theory/local-step/algorithm/euclid_gcd n=1188 exact=1 MAE=7.62626263e-07 MSE=7.62626263e-13
+each_expert_condition expert/number_theory/local-step/algorithm/gauss_2x2 n=1000 exact=1 MAE=7.12e-07 MSE=7.12e-13
+each_expert_condition expert/number_theory/local-step/algorithm/geometric_series n=995 exact=1 MAE=7.71859297e-07 MSE=7.71859297e-13
+each_expert_condition expert/number_theory/local-step/algorithm/linear_solve n=600 exact=1 MAE=6.31666667e-07 MSE=6.31666667e-13
+each_expert_condition expert/number_theory/local-step/algorithm/matrix_det_2x2 n=600 exact=1 MAE=6.36666667e-07 MSE=6.36666667e-13
+each_expert_condition expert/number_theory/local-step/algorithm/mod_pow_fast n=1123 exact=1 MAE=7.40872663e-07 MSE=7.40872663e-13
+each_expert_condition expert/number_theory/local-step/algorithm/perfect_square_trinomial n=600 exact=1 MAE=6.51666667e-07 MSE=6.51666667e-13
+each_expert_condition expert/number_theory/local-step/algorithm/power_rule n=600 exact=1 MAE=6.75e-07 MSE=6.75e-13
+each_expert_condition expert/number_theory/local-step/algorithm/product_rule n=1000 exact=1 MAE=7.53e-07 MSE=7.53e-13
+each_expert_condition expert/number_theory/local-step/algorithm/quadratic_formula n=800 exact=1 MAE=6.9875e-07 MSE=6.9875e-13
+each_expert_condition expert/number_theory/local-step/algorithm/quotient_rule n=1000 exact=1 MAE=6.66e-07 MSE=6.66e-13
+each_expert_condition expert/number_theory/local-step/algorithm/slope_from_points n=800 exact=1 MAE=6.8125e-07 MSE=6.8125e-13
+each_expert_condition expert/number_theory/local-step/algorithm/substitution_system n=800 exact=1 MAE=6.9125e-07 MSE=6.9125e-13
+each_expert_condition expert/number_theory/local-step/algorithm/sum_of_cubes n=600 exact=1 MAE=6.41666667e-07 MSE=6.41666667e-13
+each_expert_condition expert/number_theory/local-step/algorithm/sum_of_squares n=800 exact=1 MAE=7.075e-07 MSE=7.075e-13
+each_expert_condition expert/number_theory/local-step/algorithm/difference_of_cubes n=600 exact=1 MAE=6.71666667e-07 MSE=6.71666667e-13
+each_expert_condition expert/number_theory/local-step/algorithm/cube_of_binomial n=1000 exact=1 MAE=6.93e-07 MSE=6.93e-13
+each_expert_condition expert/number_theory/local-step/algorithm/telescoping_series n=775 exact=1 MAE=7.58709677e-07 MSE=7.58709677e-13
+each_expert_condition expert/number_theory/local-step/algorithm/log_product n=800 exact=1 MAE=7.3375e-07 MSE=7.3375e-13
+each_expert_condition expert/number_theory/local-step/algorithm/modular_inverse n=400 exact=1 MAE=5.525e-07 MSE=5.525e-13
+each_expert_condition expert/number_theory/local-step/algorithm/matrix_trace_product n=600 exact=1 MAE=6.81666667e-07 MSE=6.81666667e-13
+each_expert_condition expert/number_theory/local-step/algorithm/vieta_cubic n=600 exact=1 MAE=6.36666667e-07 MSE=6.36666667e-13
+each_expert_condition expert/number_theory/local-step/algorithm/factorial_recurrence n=511 exact=1 MAE=7.43639922e-07 MSE=7.43639922e-13
+each_expert_condition expert/number_theory/local-step/algorithm/fibonacci_iter n=499 exact=1 MAE=7.35470942e-07 MSE=7.35470942e-13
+each_expert_condition expert/number_theory/local-step/algorithm/harmonic_partial n=804 exact=1 MAE=7.37562189e-07 MSE=7.37562189e-13
+each_expert_condition expert/number_theory/local-step/algorithm/horner_eval n=600 exact=1 MAE=7.01666667e-07 MSE=7.01666667e-13
+each_expert_condition expert/number_theory/local-step/algorithm/sum_fourth_powers n=1000 exact=1 MAE=7.06e-07 MSE=7.06e-13
+each_expert_condition expert/number_theory/local-step/algorithm/nested_radical n=600 exact=1 MAE=6.85e-07 MSE=6.85e-13
+each_expert_condition expert/number_theory/local-step/algorithm/completing_square n=600 exact=1 MAE=6.88333333e-07 MSE=6.88333333e-13
+each_expert_condition expert/number_theory/local-step/algorithm/quartic_horner n=600 exact=1 MAE=6.63333333e-07 MSE=6.63333333e-13
+each_expert_condition expert/number_theory/local-step/algorithm/partial_fractions n=800 exact=1 MAE=6.6125e-07 MSE=6.6125e-13
+each_expert_condition expert/number_theory/local-step/algorithm/cauchy_identity n=800 exact=1 MAE=7.1e-07 MSE=7.1e-13
+each_expert_condition expert/number_theory/local-step/algorithm/pell_check n=600 exact=1 MAE=6.46666667e-07 MSE=6.46666667e-13
+each_expert_condition expert/number_theory/local-step/algorithm/rational_root n=400 exact=1 MAE=5.9e-07 MSE=5.9e-13
+each_expert_condition expert/number_theory/local-step/algorithm/power_difference n=1000 exact=1 MAE=7.16e-07 MSE=7.16e-13
+each_expert_condition expert/number_theory/local-step/algorithm/binomial_coeff n=400 exact=1 MAE=5.825e-07 MSE=5.825e-13
+each_expert_condition expert/number_theory/local-step/algorithm/linear_recurrence n=600 exact=1 MAE=6.45e-07 MSE=6.45e-13
+each_expert_condition expert/number_theory/local-step/algorithm/contfrac_2 n=400 exact=1 MAE=5.5e-07 MSE=5.5e-13
+each_expert_condition expert/number_theory/local-step/algorithm/sum_odd n=903 exact=1 MAE=7.99557032e-07 MSE=7.99557032e-13
+each_expert_condition expert/number_theory/local-step/algorithm/triangular_verify n=738 exact=1 MAE=7.75067751e-07 MSE=7.75067751e-13
+each_expert_condition expert/number_theory/local-step/algorithm/binary_value n=793 exact=1 MAE=7.44010088e-07 MSE=7.44010088e-13
+each_expert_condition expert/number_theory/local-step/algorithm/gcd_three n=400 exact=1 MAE=6.275e-07 MSE=6.275e-13
+each_expert_condition expert/number_theory/local-step/algorithm/lcm_pair n=600 exact=1 MAE=6.56666667e-07 MSE=6.56666667e-13
+each_expert_condition expert/number_theory/local-step/algorithm/second_derivative n=400 exact=1 MAE=5.975e-07 MSE=5.975e-13
+each_expert_condition expert/number_theory/local-step/algorithm/implicit_circle n=600 exact=1 MAE=6.58333333e-07 MSE=6.58333333e-13
+each_expert_condition expert/number_theory/local-step/algorithm/lhopital_poly n=400 exact=1 MAE=6.275e-07 MSE=6.275e-13
+each_expert_condition expert/number_theory/local-step/algorithm/riemann_mid2 n=600 exact=1 MAE=6.4e-07 MSE=6.4e-13
+each_expert_condition expert/number_theory/local-step/algorithm/trapezoid_linear n=600 exact=1 MAE=6.6e-07 MSE=6.6e-13
+each_expert_condition expert/number_theory/local-step/algorithm/usub_linear n=400 exact=1 MAE=5.75e-07 MSE=5.75e-13
+each_expert_condition expert/number_theory/local-step/algorithm/average_linear n=400 exact=1 MAE=5.825e-07 MSE=5.825e-13
+each_expert_condition expert/number_theory/local-step/algorithm/tangent_point n=600 exact=1 MAE=6.78333333e-07 MSE=6.78333333e-13
+each_expert_condition expert/number_theory/local-step/algorithm/concavity_quad n=400 exact=1 MAE=6.225e-07 MSE=6.225e-13
+each_expert_condition expert/number_theory/local-step/algorithm/inflection_cubic n=400 exact=1 MAE=6.325e-07 MSE=6.325e-13
+each_expert_condition expert/number_theory/local-step/algorithm/definite_quad n=800 exact=1 MAE=6.825e-07 MSE=6.825e-13
+each_expert_condition expert/number_theory/local-step/algorithm/ftc_check n=600 exact=1 MAE=6.93333333e-07 MSE=6.93333333e-13
+each_expert_condition expert/number_theory/local-step/algorithm/monotonic_quad n=400 exact=1 MAE=5.65e-07 MSE=5.65e-13
+each_expert_condition expert/number_theory/local-step/algorithm/shadow_rates n=400 exact=1 MAE=5.775e-07 MSE=5.775e-13
+each_expert_condition expert/number_theory/local-step/algorithm/chain_poly n=400 exact=1 MAE=6.1e-07 MSE=6.1e-13
+each_expert_condition expert/number_theory/local-step/algorithm/taylor_linear n=400 exact=1 MAE=6.3e-07 MSE=6.3e-13
+each_expert_condition expert/number_theory/local-step/algorithm/inverse_slope n=400 exact=1 MAE=6.3e-07 MSE=6.3e-13
+each_expert_condition expert/number_theory/local-step/algorithm/mat_add n=400 exact=1 MAE=5.825e-07 MSE=5.825e-13
+each_expert_condition expert/number_theory/local-step/algorithm/scalar_mult n=400 exact=1 MAE=5.725e-07 MSE=5.725e-13
+each_expert_condition expert/number_theory/local-step/algorithm/inverse_2x2 n=600 exact=1 MAE=6.86666667e-07 MSE=6.86666667e-13
+each_expert_condition expert/number_theory/local-step/algorithm/eigen_sym n=600 exact=1 MAE=6.75e-07 MSE=6.75e-13
+each_expert_condition expert/number_theory/local-step/algorithm/cramer_2x2 n=600 exact=1 MAE=6.6e-07 MSE=6.6e-13
+each_expert_condition expert/number_theory/local-step/algorithm/outer_trace n=400 exact=1 MAE=6.125e-07 MSE=6.125e-13
+each_expert_condition expert/number_theory/local-step/algorithm/mat_square n=400 exact=1 MAE=5.95e-07 MSE=5.95e-13
+each_expert_condition expert/number_theory/local-step/algorithm/cross_2d n=156 exact=1 MAE=5.32051282e-07 MSE=5.32051282e-13
+each_expert_condition expert/number_theory/local-step/algorithm/project_axis n=400 exact=1 MAE=5.975e-07 MSE=5.975e-13
+each_expert_condition expert/number_theory/local-step/algorithm/rotate_twice n=800 exact=1 MAE=6.8e-07 MSE=6.8e-13
+each_expert_condition expert/number_theory/local-step/algorithm/gram_det n=600 exact=1 MAE=6.53333333e-07 MSE=6.53333333e-13
+each_expert_condition expert/number_theory/local-step/algorithm/nilpotent_sq n=400 exact=1 MAE=5.9e-07 MSE=5.9e-13
+each_expert_condition expert/number_theory/local-step/algorithm/idempotent_tr n=400 exact=1 MAE=6e-07 MSE=6e-13
+each_expert_condition expert/number_theory/local-step/algorithm/commutator_trace n=600 exact=1 MAE=6.51666667e-07 MSE=6.51666667e-13
+each_expert_condition expert/number_theory/local-step/algorithm/det_product n=600 exact=1 MAE=6.38333333e-07 MSE=6.38333333e-13
+each_expert_condition expert/number_theory/local-step/algorithm/hadamard_trace n=160 exact=1 MAE=5e-07 MSE=5e-13
+each_expert_condition expert/number_theory/local-step/algorithm/diag_trace n=164 exact=1 MAE=5.42682927e-07 MSE=5.42682927e-13
+each_expert_condition expert/number_theory/local-step/algorithm/euler_phi n=156 exact=1 MAE=4.67948718e-07 MSE=4.67948718e-13
+each_expert_condition expert/number_theory/local-step/algorithm/sigma_small n=988 exact=1 MAE=7.70242915e-07 MSE=7.70242915e-13
+each_expert_condition expert/number_theory/local-step/algorithm/digital_root n=256 exact=1 MAE=6.2109375e-07 MSE=6.2109375e-13
+each_expert_condition expert/number_theory/local-step/algorithm/collatz_5 n=1000 exact=1 MAE=7.58e-07 MSE=7.58e-13
+each_expert_condition expert/number_theory/local-step/algorithm/bezout_witness n=350 exact=1 MAE=6.2e-07 MSE=6.2e-13
+each_expert_condition expert/number_theory/local-step/algorithm/crt_verify n=400 exact=1 MAE=5.225e-07 MSE=5.225e-13
+each_expert_condition expert/number_theory/local-step/algorithm/legendre_euler n=153 exact=1 MAE=4.96732026e-07 MSE=4.96732026e-13
+each_expert_condition expert/number_theory/local-step/algorithm/repunit_mod n=264 exact=1 MAE=6.06060606e-07 MSE=6.06060606e-13
+each_expert_condition expert/number_theory/local-step/algorithm/triangular_mod n=400 exact=1 MAE=5.65e-07 MSE=5.65e-13
+each_expert_condition expert/number_theory/local-step/algorithm/prime_divisor n=400 exact=1 MAE=6.15e-07 MSE=6.15e-13
+each_expert_condition expert/number_theory/local-step/algorithm/square_part n=400 exact=1 MAE=6.125e-07 MSE=6.125e-13
+each_expert_condition expert/number_theory/local-step/algorithm/multiple_six n=400 exact=1 MAE=6.125e-07 MSE=6.125e-13
+each_expert_condition expert/number_theory/local-step/algorithm/power_two n=400 exact=1 MAE=5.775e-07 MSE=5.775e-13
+each_expert_condition expert/number_theory/local-step/algorithm/divisor_count n=167 exact=1 MAE=4.91017964e-07 MSE=4.91017964e-13
+each_expert_condition expert/number_theory/local-step/algorithm/mult_order n=400 exact=1 MAE=5.75e-07 MSE=5.75e-13
+each_expert_condition expert/number_theory/local-step/algorithm/fermat_little n=161 exact=1 MAE=5.27950311e-07 MSE=5.27950311e-13
+each_expert_condition expert/number_theory/local-step/algorithm/wilson_check n=119 exact=1 MAE=4.28571429e-07 MSE=4.28571429e-13
+each_expert_condition expert/number_theory/local-step/algorithm/am_gm_two n=680 exact=1 MAE=7.45588235e-07 MSE=7.45588235e-13
+each_expert_condition expert/number_theory/local-step/algorithm/abs_linear n=340 exact=1 MAE=7.32352941e-07 MSE=7.32352941e-13
+each_expert_condition expert/number_theory/local-step/algorithm/expo_laws n=360 exact=1 MAE=7.58333333e-07 MSE=7.58333333e-13
+each_expert_condition expert/number_theory/local-step/algorithm/log2_pow2 n=911 exact=1 MAE=7.22283205e-07 MSE=7.22283205e-13
+each_expert_condition expert/number_theory/local-step/algorithm/geometric_mean_pair n=680 exact=1 MAE=7.05882353e-07 MSE=7.05882353e-13
+each_expert_condition expert/number_theory/local-step/algorithm/gauss_pairing n=620 exact=1 MAE=7.58064516e-07 MSE=7.58064516e-13
+each_expert_condition expert/number_theory/local-step/algorithm/ratio_share n=650 exact=1 MAE=7.47692308e-07 MSE=7.47692308e-13
+each_expert_condition expert/number_theory/local-step/algorithm/percentage_pair n=600 exact=1 MAE=6.66666667e-07 MSE=6.66666667e-13
+each_expert_condition expert/number_theory/local-step/algorithm/composition_affine n=1000 exact=1 MAE=7.5e-07 MSE=7.5e-13
+each_expert_condition expert/number_theory/local-step/algorithm/weighted_average n=800 exact=1 MAE=6.65e-07 MSE=6.65e-13
+each_expert_condition expert/number_theory/local-step/algorithm/inv_function_eval n=800 exact=1 MAE=7.475e-07 MSE=7.475e-13
+each_expert_condition expert/number_theory/local-step/algorithm/digit_sum_base n=462 exact=1 MAE=6.92640693e-07 MSE=6.92640693e-13
+each_expert_condition expert/number_theory/local-step/algorithm/median_five n=2064 exact=1 MAE=7.75193798e-07 MSE=7.75193798e-13
+each_expert_condition expert/number_theory/local-step/algorithm/sum_first_odds n=756 exact=1 MAE=7.47354497e-07 MSE=7.47354497e-13
+each_expert_condition expert/number_theory/local-step/algorithm/tangent_line_quad n=800 exact=1 MAE=7.4e-07 MSE=7.4e-13
+each_expert_condition expert/number_theory/local-step/algorithm/secant_poly_slope n=800 exact=1 MAE=7.025e-07 MSE=7.025e-13
+each_expert_condition expert/number_theory/local-step/algorithm/power_rule_integrate n=800 exact=1 MAE=6.95e-07 MSE=6.95e-13
+each_expert_condition expert/number_theory/local-step/algorithm/newton_sqrt_step n=516 exact=1 MAE=6.87984496e-07 MSE=6.87984496e-13
+each_expert_condition expert/number_theory/local-step/algorithm/euler_method_linear n=800 exact=1 MAE=6.95e-07 MSE=6.95e-13
+each_expert_condition expert/number_theory/local-step/algorithm/simpson_quadratic n=1400 exact=1 MAE=7.55714286e-07 MSE=7.55714286e-13
+each_expert_condition expert/number_theory/local-step/algorithm/mvt_quadratic n=840 exact=1 MAE=6.82142857e-07 MSE=6.82142857e-13
+each_expert_condition expert/number_theory/local-step/algorithm/critical_cubic n=455 exact=1 MAE=7.49450549e-07 MSE=7.49450549e-13
+each_expert_condition expert/number_theory/local-step/algorithm/asymptote_oblique n=708 exact=1 MAE=6.34180791e-07 MSE=6.34180791e-13
+each_expert_condition expert/number_theory/local-step/algorithm/area_under_linear n=405 exact=1 MAE=6.66666667e-07 MSE=6.66666667e-13
+each_expert_condition expert/number_theory/local-step/algorithm/second_diff_central n=1000 exact=1 MAE=7.24e-07 MSE=7.24e-13
+each_expert_condition expert/number_theory/local-step/algorithm/rolle_check n=690 exact=1 MAE=7.01449275e-07 MSE=7.01449275e-13
+each_expert_condition expert/number_theory/local-step/algorithm/det_3x3_cofactor n=1400 exact=1 MAE=7.65e-07 MSE=7.65e-13
+each_expert_condition expert/number_theory/local-step/algorithm/matvec_3 n=600 exact=1 MAE=7.15e-07 MSE=7.15e-13
+each_expert_condition expert/number_theory/local-step/algorithm/row_reduce_rank2 n=1000 exact=1 MAE=7.13e-07 MSE=7.13e-13
+each_expert_condition expert/number_theory/local-step/algorithm/trace_frobenius2 n=1000 exact=1 MAE=7.49e-07 MSE=7.49e-13
+each_expert_condition expert/number_theory/local-step/algorithm/inverse_mult_identity2 n=1000 exact=1 MAE=7.1e-07 MSE=7.1e-13
+each_expert_condition expert/number_theory/local-step/algorithm/dep_pair_cross n=800 exact=1 MAE=6.6625e-07 MSE=6.6625e-13
+each_expert_condition expert/number_theory/local-step/algorithm/diagonal_eigencheck n=800 exact=1 MAE=6.4375e-07 MSE=6.4375e-13
+each_expert_condition expert/number_theory/local-step/algorithm/proj_pyth n=1000 exact=1 MAE=6.95e-07 MSE=6.95e-13
+each_expert_condition expert/number_theory/local-step/algorithm/area_parallelogram2 n=600 exact=1 MAE=6.55e-07 MSE=6.55e-13
+each_expert_condition expert/number_theory/local-step/algorithm/affine_point n=1200 exact=1 MAE=7.125e-07 MSE=7.125e-13
+each_expert_condition expert/number_theory/local-step/algorithm/matrix_sym_part n=1000 exact=1 MAE=6.72e-07 MSE=6.72e-13
+each_expert_condition expert/number_theory/local-step/algorithm/vector_angle_cossq n=800 exact=1 MAE=7.0125e-07 MSE=7.0125e-13
+each_expert_condition expert/number_theory/local-step/algorithm/prime_factor_small n=847 exact=1 MAE=7.8866588e-07 MSE=7.8866588e-13
+each_expert_condition expert/number_theory/local-step/algorithm/perfect_square_check n=417 exact=1 MAE=6.73860911e-07 MSE=6.73860911e-13
+each_expert_condition expert/number_theory/local-step/algorithm/tribonacci_general n=852 exact=1 MAE=7.3943662e-07 MSE=7.3943662e-13
+each_expert_condition expert/number_theory/local-step/algorithm/digit_flipper n=552 exact=1 MAE=7.51811594e-07 MSE=7.51811594e-13
+each_expert_condition expert/number_theory/local-step/algorithm/divisor_sq_two_primes n=273 exact=1 MAE=7.8021978e-07 MSE=7.8021978e-13
+each_expert_condition expert/number_theory/local-step/algorithm/twin_prime_screen n=110 exact=1 MAE=7e-07 MSE=7e-13
+each_expert_condition expert/number_theory/local-step/algorithm/popcount_halve n=1254 exact=1 MAE=7.42424242e-07 MSE=7.42424242e-13
+each_expert_condition expert/number_theory/local-step/algorithm/prob_urn n=492 exact=1 MAE=6.70731707e-07 MSE=6.70731707e-13
+each_expert_condition expert/number_theory/local-step/algorithm/bayes_two_events n=508 exact=1 MAE=6.18110236e-07 MSE=6.18110236e-13
+each_expert_condition expert/number_theory/local-step/algorithm/pyth_triple_verify n=756 exact=1 MAE=7.87037037e-07 MSE=7.87037037e-13
+each_expert_condition expert/number_theory/local-step/algorithm/catalan_small n=294 exact=1 MAE=7.07482993e-07 MSE=7.07482993e-13
+each_expert_condition expert/number_theory/local-step/algorithm/pascal_row_mult n=374 exact=1 MAE=7.19251337e-07 MSE=7.19251337e-13
+i6 level -1.0 n=5306 acc=1.0000
+i6 level -0.5 n=5405 acc=1.0000
+i6 level 0.0 n=5358 acc=1.0000
+i6 level 0.5 n=4928 acc=1.0000
+i6 level 1.0 n=5297 acc=1.0000
+skipped=3359 mislabelled_dropped=347 n_overall=26294 n_step=95746 master=20261126
+delta per algorithm (i6 - best_alu):

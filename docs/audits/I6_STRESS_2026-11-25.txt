@@ -1,0 +1,534 @@
+# Full report from the 2026-11-25 randomized I6 stress sweep.
+# The original aggregate continuous metrics were formatted to six decimal
+# places and therefore appear as 0.000000 below. They are rounded values, not
+# literal zeros. The per-condition matrix retains higher precision; weighted
+# reaggregation gives overall MAE 4.03859251e-7 / MSE 4.03859251e-13 and
+# local-step MAE 6.90580078e-7 / MSE 6.90580078e-13.
+# The summary includes 348 nonempty condition slices and all 12 I3 comparisons.
+
+models i6=generation_1/I6/models_verified/alu_algebra.lancius built 2026-11-25 11:02:58 (137896 bytes) | musd=generation_1/I6/corpus_verified/mu_sd.txt
+overall_i6 1.0000 per_step_i6 1.0000
+i6_MAE 0.000000 i6_MSE 0.000000
+i6_continuous_MAE 0.000000 i6_continuous_MSE 0.000000
+i6_per_step_continuous_MAE 0.000001 i6_per_step_continuous_MSE 0.000000
+target_MAE_1e-3 PASS target_MSE_1e-3 PASS
+target_continuous_MAE_1e-3 PASS target_continuous_MSE_1e-3 PASS
+target_per_step_continuous_MAE_1e-3 PASS target_per_step_continuous_MSE_1e-3 PASS
+condition_matrix label n MAE MSE
+condition family/algebra n=7278 MAE=3.97636713e-07 MSE=3.97636713e-13
+condition family/algebra/tier/base n=2685 MAE=3.93296089e-07 MSE=3.93296089e-13
+condition family/algebra/tier/big n=2534 MAE=3.95422257e-07 MSE=3.95422257e-13
+condition family/algebra/tier/neg n=2059 MAE=4.06022341e-07 MSE=4.06022341e-13
+condition family/calculus n=6631 MAE=3.94359825e-07 MSE=3.94359825e-13
+condition family/calculus/tier/base n=2395 MAE=4e-07 MSE=4e-13
+condition family/calculus/tier/big n=2311 MAE=3.94201644e-07 MSE=3.94201644e-13
+condition family/calculus/tier/neg n=1925 MAE=3.87532468e-07 MSE=3.87532468e-13
+condition family/linear_algebra n=6489 MAE=4.06688242e-07 MSE=4.06688242e-13
+condition family/linear_algebra/tier/base n=2192 MAE=4.0100365e-07 MSE=4.0100365e-13
+condition family/linear_algebra/tier/big n=2202 MAE=4.10081744e-07 MSE=4.10081744e-13
+condition family/linear_algebra/tier/neg n=2095 MAE=4.09069212e-07 MSE=4.09069212e-13
+condition family/number_theory n=6032 MAE=4.18766578e-07 MSE=4.18766578e-13
+condition family/number_theory/tier/base n=2509 MAE=4.04543643e-07 MSE=4.04543643e-13
+condition family/number_theory/tier/big n=2156 MAE=4.23469388e-07 MSE=4.23469388e-13
+condition family/number_theory/tier/neg n=1367 MAE=4.37454279e-07 MSE=4.37454279e-13
+condition level/-1.0 n=5366 MAE=1e-06 MSE=1e-12
+condition level/-0.5 n=5205 MAE=0 MSE=0
+condition level/0.0 n=5412 MAE=1.49948336e-27 MSE=8.78643982e-54
+condition level/0.5 n=5139 MAE=0 MSE=0
+condition level/1.0 n=5308 MAE=1e-06 MSE=1e-12
+condition tier/base n=9781 MAE=3.99550148e-07 MSE=3.99550148e-13
+condition tier/big n=9203 MAE=4.05193959e-07 MSE=4.05193959e-13
+condition tier/neg n=7446 MAE=4.07869997e-07 MSE=4.07869997e-13
+condition algorithm/arithmetic_series n=200 MAE=3.8e-07 MSE=3.8e-13
+condition algorithm/binomial_expand n=110 MAE=3.90909091e-07 MSE=3.90909091e-13
+condition algorithm/chain_rule n=200 MAE=3.45e-07 MSE=3.45e-13
+condition algorithm/definite_integral n=200 MAE=4.5e-07 MSE=4.5e-13
+condition algorithm/difference_of_squares n=200 MAE=3.55e-07 MSE=3.55e-13
+condition algorithm/dot_product_3d n=200 MAE=4.1e-07 MSE=4.1e-13
+condition algorithm/euclid_gcd n=200 MAE=3.85e-07 MSE=3.85e-13
+condition algorithm/gauss_2x2 n=200 MAE=3.3e-07 MSE=3.3e-13
+condition algorithm/geometric_series n=199 MAE=3.81909548e-07 MSE=3.81909548e-13
+condition algorithm/linear_solve n=200 MAE=3.75e-07 MSE=3.75e-13
+condition algorithm/matrix_det_2x2 n=200 MAE=3.5e-07 MSE=3.5e-13
+condition algorithm/mod_pow_fast n=182 MAE=4.17582418e-07 MSE=4.17582418e-13
+condition algorithm/perfect_square_trinomial n=200 MAE=4.05e-07 MSE=4.05e-13
+condition algorithm/power_rule n=200 MAE=3.7e-07 MSE=3.7e-13
+condition algorithm/product_rule n=200 MAE=4.4e-07 MSE=4.4e-13
+condition algorithm/quadratic_formula n=200 MAE=4.75e-07 MSE=4.75e-13
+condition algorithm/quotient_rule n=200 MAE=3.15e-07 MSE=3.15e-13
+condition algorithm/slope_from_points n=200 MAE=4.4e-07 MSE=4.4e-13
+condition algorithm/substitution_system n=200 MAE=4.45e-07 MSE=4.45e-13
+condition algorithm/sum_of_cubes n=200 MAE=4e-07 MSE=4e-13
+condition algorithm/sum_of_squares n=200 MAE=3.7e-07 MSE=3.7e-13
+condition algorithm/difference_of_cubes n=200 MAE=3.75e-07 MSE=3.75e-13
+condition algorithm/cube_of_binomial n=200 MAE=4.4e-07 MSE=4.4e-13
+condition algorithm/telescoping_series n=107 MAE=4.11214953e-07 MSE=4.11214953e-13
+condition algorithm/log_product n=200 MAE=3.95e-07 MSE=3.95e-13
+condition algorithm/modular_inverse n=200 MAE=4.35e-07 MSE=4.35e-13
+condition algorithm/matrix_trace_product n=200 MAE=3.95e-07 MSE=3.95e-13
+condition algorithm/vieta_cubic n=200 MAE=3.95e-07 MSE=3.95e-13
+condition algorithm/factorial_recurrence n=105 MAE=4.57142857e-07 MSE=4.57142857e-13
+condition algorithm/fibonacci_iter n=88 MAE=3.40909091e-07 MSE=3.40909091e-13
+condition algorithm/harmonic_partial n=119 MAE=3.69747899e-07 MSE=3.69747899e-13
+condition algorithm/horner_eval n=200 MAE=3.5e-07 MSE=3.5e-13
+condition algorithm/sum_fourth_powers n=200 MAE=4.15e-07 MSE=4.15e-13
+condition algorithm/nested_radical n=200 MAE=3.9e-07 MSE=3.9e-13
+condition algorithm/completing_square n=200 MAE=3.9e-07 MSE=3.9e-13
+condition algorithm/quartic_horner n=200 MAE=3.65e-07 MSE=3.65e-13
+condition algorithm/partial_fractions n=200 MAE=3.7e-07 MSE=3.7e-13
+condition algorithm/cauchy_identity n=200 MAE=3.45e-07 MSE=3.45e-13
+condition algorithm/pell_check n=200 MAE=4.05e-07 MSE=4.05e-13
+condition algorithm/rational_root n=200 MAE=4.2e-07 MSE=4.2e-13
+condition algorithm/power_difference n=200 MAE=4.3e-07 MSE=4.3e-13
+condition algorithm/binomial_coeff n=200 MAE=4.1e-07 MSE=4.1e-13
+condition algorithm/linear_recurrence n=200 MAE=4.05e-07 MSE=4.05e-13
+condition algorithm/contfrac_2 n=200 MAE=4e-07 MSE=4e-13
+condition algorithm/sum_odd n=130 MAE=3.92307692e-07 MSE=3.92307692e-13
+condition algorithm/triangular_verify n=153 MAE=4.50980392e-07 MSE=4.50980392e-13
+condition algorithm/binary_value n=140 MAE=4.28571429e-07 MSE=4.28571429e-13
+condition algorithm/gcd_three n=200 MAE=4.4e-07 MSE=4.4e-13
+condition algorithm/lcm_pair n=200 MAE=4e-07 MSE=4e-13
+condition algorithm/second_derivative n=200 MAE=3.95e-07 MSE=3.95e-13
+condition algorithm/implicit_circle n=200 MAE=3.6e-07 MSE=3.6e-13
+condition algorithm/lhopital_poly n=200 MAE=3.45e-07 MSE=3.45e-13
+condition algorithm/riemann_mid2 n=200 MAE=3.9e-07 MSE=3.9e-13
+condition algorithm/trapezoid_linear n=200 MAE=4e-07 MSE=4e-13
+condition algorithm/usub_linear n=200 MAE=3.4e-07 MSE=3.4e-13
+condition algorithm/average_linear n=200 MAE=3.45e-07 MSE=3.45e-13
+condition algorithm/tangent_point n=200 MAE=4e-07 MSE=4e-13
+condition algorithm/concavity_quad n=200 MAE=4.35e-07 MSE=4.35e-13
+condition algorithm/inflection_cubic n=200 MAE=3.75e-07 MSE=3.75e-13
+condition algorithm/definite_quad n=200 MAE=4.35e-07 MSE=4.35e-13
+condition algorithm/ftc_check n=200 MAE=3.3e-07 MSE=3.3e-13
+condition algorithm/monotonic_quad n=200 MAE=3.85e-07 MSE=3.85e-13
+condition algorithm/shadow_rates n=200 MAE=4.65e-07 MSE=4.65e-13
+condition algorithm/chain_poly n=200 MAE=4.75e-07 MSE=4.75e-13
+condition algorithm/taylor_linear n=200 MAE=4.15e-07 MSE=4.15e-13
+condition algorithm/inverse_slope n=200 MAE=3.9e-07 MSE=3.9e-13
+condition algorithm/mat_add n=200 MAE=4.4e-07 MSE=4.4e-13
+condition algorithm/scalar_mult n=200 MAE=4.4e-07 MSE=4.4e-13
+condition algorithm/inverse_2x2 n=200 MAE=3.45e-07 MSE=3.45e-13
+condition algorithm/eigen_sym n=200 MAE=4.25e-07 MSE=4.25e-13
+condition algorithm/cramer_2x2 n=200 MAE=3.8e-07 MSE=3.8e-13
+condition algorithm/outer_trace n=200 MAE=3.55e-07 MSE=3.55e-13
+condition algorithm/mat_square n=200 MAE=4.25e-07 MSE=4.25e-13
+condition algorithm/cross_2d n=166 MAE=4.45783133e-07 MSE=4.45783133e-13
+condition algorithm/project_axis n=200 MAE=4.1e-07 MSE=4.1e-13
+condition algorithm/rotate_twice n=200 MAE=3.85e-07 MSE=3.85e-13
+condition algorithm/gram_det n=200 MAE=4.4e-07 MSE=4.4e-13
+condition algorithm/nilpotent_sq n=200 MAE=3.8e-07 MSE=3.8e-13
+condition algorithm/idempotent_tr n=200 MAE=4.1e-07 MSE=4.1e-13
+condition algorithm/commutator_trace n=200 MAE=4e-07 MSE=4e-13
+condition algorithm/det_product n=200 MAE=4.3e-07 MSE=4.3e-13
+condition algorithm/hadamard_trace n=161 MAE=5.2173913e-07 MSE=5.2173913e-13
+condition algorithm/diag_trace n=162 MAE=5.61728395e-07 MSE=5.61728395e-13
+condition algorithm/euler_phi n=158 MAE=5.18987342e-07 MSE=5.18987342e-13
+condition algorithm/sigma_small n=132 MAE=3.93939394e-07 MSE=3.93939394e-13
+condition algorithm/digital_root n=126 MAE=3.33333333e-07 MSE=3.33333333e-13
+condition algorithm/collatz_5 n=200 MAE=3.8e-07 MSE=3.8e-13
+condition algorithm/bezout_witness n=190 MAE=4.31578947e-07 MSE=4.31578947e-13
+condition algorithm/crt_verify n=200 MAE=3.8e-07 MSE=3.8e-13
+condition algorithm/legendre_euler n=154 MAE=4.87012987e-07 MSE=4.87012987e-13
+condition algorithm/repunit_mod n=141 MAE=4.60992908e-07 MSE=4.60992908e-13
+condition algorithm/triangular_mod n=200 MAE=3.9e-07 MSE=3.9e-13
+condition algorithm/prime_divisor n=200 MAE=4.35e-07 MSE=4.35e-13
+condition algorithm/square_part n=200 MAE=3.45e-07 MSE=3.45e-13
+condition algorithm/multiple_six n=200 MAE=4.35e-07 MSE=4.35e-13
+condition algorithm/power_two n=200 MAE=4.65e-07 MSE=4.65e-13
+condition algorithm/divisor_count n=158 MAE=4.6835443e-07 MSE=4.6835443e-13
+condition algorithm/mult_order n=200 MAE=4e-07 MSE=4e-13
+condition algorithm/fermat_little n=158 MAE=5.88607595e-07 MSE=5.88607595e-13
+condition algorithm/wilson_check n=101 MAE=4.25742574e-07 MSE=4.25742574e-13
+condition algorithm/am_gm_two n=135 MAE=3.7037037e-07 MSE=3.7037037e-13
+condition algorithm/abs_linear n=88 MAE=3.97727273e-07 MSE=3.97727273e-13
+condition algorithm/expo_laws n=80 MAE=4e-07 MSE=4e-13
+condition algorithm/log2_pow2 n=121 MAE=4.13223141e-07 MSE=4.13223141e-13
+condition algorithm/geometric_mean_pair n=131 MAE=3.89312977e-07 MSE=3.89312977e-13
+condition algorithm/gauss_pairing n=137 MAE=4.01459854e-07 MSE=4.01459854e-13
+condition algorithm/ratio_share n=138 MAE=3.84057971e-07 MSE=3.84057971e-13
+condition algorithm/percentage_pair n=200 MAE=4.1e-07 MSE=4.1e-13
+condition algorithm/composition_affine n=200 MAE=4e-07 MSE=4e-13
+condition algorithm/weighted_average n=200 MAE=4.45e-07 MSE=4.45e-13
+condition algorithm/inv_function_eval n=200 MAE=3.65e-07 MSE=3.65e-13
+condition algorithm/digit_sum_base n=97 MAE=4.63917526e-07 MSE=4.63917526e-13
+condition algorithm/median_five n=169 MAE=4.14201183e-07 MSE=4.14201183e-13
+condition algorithm/sum_first_odds n=143 MAE=3.56643357e-07 MSE=3.56643357e-13
+condition algorithm/tangent_line_quad n=200 MAE=4.05e-07 MSE=4.05e-13
+condition algorithm/secant_poly_slope n=200 MAE=3.4e-07 MSE=3.4e-13
+condition algorithm/power_rule_integrate n=200 MAE=4.2e-07 MSE=4.2e-13
+condition algorithm/newton_sqrt_step n=138 MAE=3.91304348e-07 MSE=3.91304348e-13
+condition algorithm/euler_method_linear n=200 MAE=4.1e-07 MSE=4.1e-13
+condition algorithm/simpson_quadratic n=200 MAE=3.95e-07 MSE=3.95e-13
+condition algorithm/mvt_quadratic n=134 MAE=3.88059702e-07 MSE=3.88059702e-13
+condition algorithm/critical_cubic n=78 MAE=3.46153846e-07 MSE=3.46153846e-13
+condition algorithm/asymptote_oblique n=177 MAE=4.12429379e-07 MSE=4.12429379e-13
+condition algorithm/area_under_linear n=133 MAE=5.26315789e-07 MSE=5.2631579e-13
+condition algorithm/second_diff_central n=200 MAE=4e-07 MSE=4e-13
+condition algorithm/rolle_check n=145 MAE=3.93103448e-07 MSE=3.93103448e-13
+condition algorithm/det_3x3_cofactor n=200 MAE=3.7e-07 MSE=3.7e-13
+condition algorithm/matvec_3 n=200 MAE=3.3e-07 MSE=3.3e-13
+condition algorithm/row_reduce_rank2 n=200 MAE=4.3e-07 MSE=4.3e-13
+condition algorithm/trace_frobenius2 n=200 MAE=3.6e-07 MSE=3.6e-13
+condition algorithm/inverse_mult_identity2 n=200 MAE=4.15e-07 MSE=4.15e-13
+condition algorithm/dep_pair_cross n=200 MAE=4.35e-07 MSE=4.35e-13
+condition algorithm/diagonal_eigencheck n=200 MAE=4.2e-07 MSE=4.2e-13
+condition algorithm/proj_pyth n=200 MAE=4.05e-07 MSE=4.05e-13
+condition algorithm/area_parallelogram2 n=200 MAE=3.9e-07 MSE=3.9e-13
+condition algorithm/affine_point n=200 MAE=4.35e-07 MSE=4.35e-13
+condition algorithm/matrix_sym_part n=200 MAE=4e-07 MSE=4e-13
+condition algorithm/vector_angle_cossq n=200 MAE=4.1e-07 MSE=4.1e-13
+condition algorithm/prime_factor_small n=105 MAE=3.9047619e-07 MSE=3.9047619e-13
+condition algorithm/perfect_square_check n=149 MAE=3.3557047e-07 MSE=3.3557047e-13
+condition algorithm/tribonacci_general n=142 MAE=4.36619718e-07 MSE=4.36619718e-13
+condition algorithm/digit_flipper n=91 MAE=4.17582418e-07 MSE=4.17582418e-13
+condition algorithm/divisor_sq_two_primes n=49 MAE=3.87755102e-07 MSE=3.87755102e-13
+condition algorithm/twin_prime_screen n=26 MAE=5e-07 MSE=5e-13
+condition algorithm/popcount_halve n=121 MAE=4.21487603e-07 MSE=4.21487603e-13
+condition algorithm/prob_urn n=146 MAE=3.28767123e-07 MSE=3.28767123e-13
+condition algorithm/bayes_two_events n=140 MAE=3.78571429e-07 MSE=3.78571429e-13
+condition algorithm/pyth_triple_verify n=131 MAE=4.1221374e-07 MSE=4.1221374e-13
+condition algorithm/catalan_small n=72 MAE=5e-07 MSE=5e-13
+condition algorithm/pascal_row_mult n=74 MAE=4.18918919e-07 MSE=4.18918919e-13
+condition step/family/algebra n=30486 MAE=7.02486387e-07 MSE=7.02486387e-13
+condition step/family/algebra/tier/base n=11339 MAE=7.00767263e-07 MSE=7.00767263e-13
+condition step/family/algebra/tier/big n=11210 MAE=7.02676182e-07 MSE=7.02676182e-13
+condition step/family/algebra/tier/neg n=7937 MAE=7.0467431e-07 MSE=7.0467431e-13
+condition step/family/calculus n=23143 MAE=6.8439701e-07 MSE=6.8439701e-13
+condition step/family/calculus/tier/base n=8454 MAE=6.85474332e-07 MSE=6.85474332e-13
+condition step/family/calculus/tier/big n=8436 MAE=6.88715031e-07 MSE=6.88715031e-13
+condition step/family/calculus/tier/neg n=6253 MAE=6.77114985e-07 MSE=6.77114985e-13
+condition step/family/linear_algebra n=21889 MAE=6.82032071e-07 MSE=6.82032071e-13
+condition step/family/linear_algebra/tier/base n=7309 MAE=6.76152688e-07 MSE=6.76152689e-13
+condition step/family/linear_algebra/tier/big n=7577 MAE=6.92358453e-07 MSE=6.92358453e-13
+condition step/family/linear_algebra/tier/neg n=7003 MAE=6.76995573e-07 MSE=6.76995573e-13
+condition step/family/number_theory n=20969 MAE=6.89017121e-07 MSE=6.89017121e-13
+condition step/family/number_theory/tier/base n=9565 MAE=6.92315734e-07 MSE=6.92315734e-13
+condition step/family/number_theory/tier/big n=8412 MAE=7.01616738e-07 MSE=7.01616738e-13
+condition step/family/number_theory/tier/neg n=2992 MAE=6.43048128e-07 MSE=6.43048128e-13
+condition step/level/-1.0 n=19392 MAE=1e-06 MSE=1e-12
+condition step/level/-0.5 n=5205 MAE=0 MSE=0
+condition step/level/0.0 n=19511 MAE=2.066167e-22 MSE=5.55218415e-43
+condition step/level/0.5 n=5139 MAE=0 MSE=0
+condition step/level/1.0 n=47240 MAE=1e-06 MSE=1e-12
+condition step/tier/base n=36667 MAE=6.9013009e-07 MSE=6.9013009e-13
+condition step/tier/big n=35635 MAE=6.96927178e-07 MSE=6.96927178e-13
+condition step/tier/neg n=24185 MAE=6.81910275e-07 MSE=6.81910275e-13
+condition step/algorithm/arithmetic_series n=1000 MAE=7.28e-07 MSE=7.28e-13
+condition step/algorithm/binomial_expand n=734 MAE=7.73841962e-07 MSE=7.73841962e-13
+condition step/algorithm/chain_rule n=600 MAE=6.28333333e-07 MSE=6.28333333e-13
+condition step/algorithm/definite_integral n=1000 MAE=7.58e-07 MSE=7.58e-13
+condition step/algorithm/difference_of_squares n=600 MAE=6.45e-07 MSE=6.45e-13
+condition step/algorithm/dot_product_3d n=800 MAE=6.9125e-07 MSE=6.9125e-13
+condition step/algorithm/euclid_gcd n=1235 MAE=7.34412955e-07 MSE=7.34412956e-13
+condition step/algorithm/gauss_2x2 n=1000 MAE=6.5e-07 MSE=6.5e-13
+condition step/algorithm/geometric_series n=995 MAE=7.03517588e-07 MSE=7.03517588e-13
+condition step/algorithm/linear_solve n=600 MAE=6.51666667e-07 MSE=6.51666667e-13
+condition step/algorithm/matrix_det_2x2 n=600 MAE=6.83333333e-07 MSE=6.83333333e-13
+condition step/algorithm/mod_pow_fast n=979 MAE=7.19101124e-07 MSE=7.19101124e-13
+condition step/algorithm/perfect_square_trinomial n=600 MAE=6.58333333e-07 MSE=6.58333333e-13
+condition step/algorithm/power_rule n=600 MAE=6.56666667e-07 MSE=6.56666667e-13
+condition step/algorithm/product_rule n=1000 MAE=7.36e-07 MSE=7.36e-13
+condition step/algorithm/quadratic_formula n=800 MAE=7.9e-07 MSE=7.9e-13
+condition step/algorithm/quotient_rule n=1000 MAE=7.03e-07 MSE=7.03e-13
+condition step/algorithm/slope_from_points n=800 MAE=6.9875e-07 MSE=6.9875e-13
+condition step/algorithm/substitution_system n=800 MAE=7.2625e-07 MSE=7.2625e-13
+condition step/algorithm/sum_of_cubes n=600 MAE=6.7e-07 MSE=6.7e-13
+condition step/algorithm/sum_of_squares n=800 MAE=6.775e-07 MSE=6.775e-13
+condition step/algorithm/difference_of_cubes n=600 MAE=6.65e-07 MSE=6.65e-13
+condition step/algorithm/cube_of_binomial n=1000 MAE=7.44e-07 MSE=7.44e-13
+condition step/algorithm/telescoping_series n=677 MAE=7.16395864e-07 MSE=7.16395864e-13
+condition step/algorithm/log_product n=800 MAE=7.1e-07 MSE=7.1e-13
+condition step/algorithm/modular_inverse n=400 MAE=5.975e-07 MSE=5.975e-13
+condition step/algorithm/matrix_trace_product n=600 MAE=6.65e-07 MSE=6.65e-13
+condition step/algorithm/vieta_cubic n=600 MAE=6.78333333e-07 MSE=6.78333333e-13
+condition step/algorithm/factorial_recurrence n=584 MAE=7.38013699e-07 MSE=7.38013699e-13
+condition step/algorithm/fibonacci_iter n=607 MAE=7.18286656e-07 MSE=7.18286656e-13
+condition step/algorithm/harmonic_partial n=732 MAE=7.14480874e-07 MSE=7.14480874e-13
+condition step/algorithm/horner_eval n=600 MAE=6.3e-07 MSE=6.3e-13
+condition step/algorithm/sum_fourth_powers n=1000 MAE=7.27e-07 MSE=7.27e-13
+condition step/algorithm/nested_radical n=600 MAE=6.63333333e-07 MSE=6.63333333e-13
+condition step/algorithm/completing_square n=600 MAE=6.3e-07 MSE=6.3e-13
+condition step/algorithm/quartic_horner n=600 MAE=6.28333333e-07 MSE=6.28333333e-13
+condition step/algorithm/partial_fractions n=800 MAE=6.5125e-07 MSE=6.5125e-13
+condition step/algorithm/cauchy_identity n=800 MAE=6.825e-07 MSE=6.825e-13
+condition step/algorithm/pell_check n=600 MAE=6.38333333e-07 MSE=6.38333333e-13
+condition step/algorithm/rational_root n=400 MAE=5.95e-07 MSE=5.95e-13
+condition step/algorithm/power_difference n=1000 MAE=7.22e-07 MSE=7.22e-13
+condition step/algorithm/binomial_coeff n=400 MAE=6.15e-07 MSE=6.15e-13
+condition step/algorithm/linear_recurrence n=600 MAE=6.75e-07 MSE=6.75e-13
+condition step/algorithm/contfrac_2 n=400 MAE=5.975e-07 MSE=5.975e-13
+condition step/algorithm/sum_odd n=856 MAE=7.34813084e-07 MSE=7.34813084e-13
+condition step/algorithm/triangular_verify n=726 MAE=7.10743802e-07 MSE=7.10743802e-13
+condition step/algorithm/binary_value n=932 MAE=7.59656652e-07 MSE=7.59656652e-13
+condition step/algorithm/gcd_three n=400 MAE=6.275e-07 MSE=6.275e-13
+condition step/algorithm/lcm_pair n=600 MAE=6.5e-07 MSE=6.5e-13
+condition step/algorithm/second_derivative n=400 MAE=6.175e-07 MSE=6.175e-13
+condition step/algorithm/implicit_circle n=600 MAE=6.33333333e-07 MSE=6.33333333e-13
+condition step/algorithm/lhopital_poly n=400 MAE=5.45e-07 MSE=5.45e-13
+condition step/algorithm/riemann_mid2 n=600 MAE=6.43333333e-07 MSE=6.43333333e-13
+condition step/algorithm/trapezoid_linear n=600 MAE=6.73333333e-07 MSE=6.73333333e-13
+condition step/algorithm/usub_linear n=400 MAE=5.55e-07 MSE=5.55e-13
+condition step/algorithm/average_linear n=400 MAE=5.6e-07 MSE=5.6e-13
+condition step/algorithm/tangent_point n=600 MAE=6.7e-07 MSE=6.7e-13
+condition step/algorithm/concavity_quad n=400 MAE=6.425e-07 MSE=6.425e-13
+condition step/algorithm/inflection_cubic n=400 MAE=5.925e-07 MSE=5.925e-13
+condition step/algorithm/definite_quad n=800 MAE=7.275e-07 MSE=7.275e-13
+condition step/algorithm/ftc_check n=600 MAE=6.43333333e-07 MSE=6.43333333e-13
+condition step/algorithm/monotonic_quad n=400 MAE=5.9e-07 MSE=5.9e-13
+condition step/algorithm/shadow_rates n=400 MAE=6.45e-07 MSE=6.45e-13
+condition step/algorithm/chain_poly n=400 MAE=6.425e-07 MSE=6.425e-13
+condition step/algorithm/taylor_linear n=400 MAE=5.8e-07 MSE=5.8e-13
+condition step/algorithm/inverse_slope n=400 MAE=6.025e-07 MSE=6.025e-13
+condition step/algorithm/mat_add n=400 MAE=6.15e-07 MSE=6.15e-13
+condition step/algorithm/scalar_mult n=400 MAE=6.25e-07 MSE=6.25e-13
+condition step/algorithm/inverse_2x2 n=600 MAE=6.18333333e-07 MSE=6.18333333e-13
+condition step/algorithm/eigen_sym n=600 MAE=7.08333333e-07 MSE=7.08333333e-13
+condition step/algorithm/cramer_2x2 n=600 MAE=6.36666667e-07 MSE=6.36666667e-13
+condition step/algorithm/outer_trace n=400 MAE=5.65e-07 MSE=5.65e-13
+condition step/algorithm/mat_square n=400 MAE=6.35e-07 MSE=6.35e-13
+condition step/algorithm/cross_2d n=166 MAE=4.45783133e-07 MSE=4.45783133e-13
+condition step/algorithm/project_axis n=400 MAE=5.85e-07 MSE=5.85e-13
+condition step/algorithm/rotate_twice n=800 MAE=7.225e-07 MSE=7.225e-13
+condition step/algorithm/gram_det n=600 MAE=6.96666667e-07 MSE=6.96666667e-13
+condition step/algorithm/nilpotent_sq n=400 MAE=5.85e-07 MSE=5.85e-13
+condition step/algorithm/idempotent_tr n=400 MAE=6.075e-07 MSE=6.075e-13
+condition step/algorithm/commutator_trace n=600 MAE=6.2e-07 MSE=6.2e-13
+condition step/algorithm/det_product n=600 MAE=6.7e-07 MSE=6.7e-13
+condition step/algorithm/hadamard_trace n=161 MAE=5.2173913e-07 MSE=5.2173913e-13
+condition step/algorithm/diag_trace n=162 MAE=5.61728395e-07 MSE=5.61728395e-13
+condition step/algorithm/euler_phi n=158 MAE=5.18987342e-07 MSE=5.18987342e-13
+condition step/algorithm/sigma_small n=944 MAE=7.31991525e-07 MSE=7.31991525e-13
+condition step/algorithm/digital_root n=252 MAE=5.71428571e-07 MSE=5.71428571e-13
+condition step/algorithm/collatz_5 n=1000 MAE=7.24e-07 MSE=7.24e-13
+condition step/algorithm/bezout_witness n=349 MAE=5.98853868e-07 MSE=5.98853868e-13
+condition step/algorithm/crt_verify n=400 MAE=5.975e-07 MSE=5.975e-13
+condition step/algorithm/legendre_euler n=154 MAE=4.87012987e-07 MSE=4.87012987e-13
+condition step/algorithm/repunit_mod n=282 MAE=6.34751773e-07 MSE=6.34751773e-13
+condition step/algorithm/triangular_mod n=400 MAE=5.925e-07 MSE=5.925e-13
+condition step/algorithm/prime_divisor n=400 MAE=6.3e-07 MSE=6.3e-13
+condition step/algorithm/square_part n=400 MAE=5.675e-07 MSE=5.675e-13
+condition step/algorithm/multiple_six n=400 MAE=6.3e-07 MSE=6.3e-13
+condition step/algorithm/power_two n=400 MAE=6.425e-07 MSE=6.425e-13
+condition step/algorithm/divisor_count n=158 MAE=4.6835443e-07 MSE=4.6835443e-13
+condition step/algorithm/mult_order n=400 MAE=5.875e-07 MSE=5.875e-13
+condition step/algorithm/fermat_little n=158 MAE=5.88607595e-07 MSE=5.88607595e-13
+condition step/algorithm/wilson_check n=101 MAE=4.25742574e-07 MSE=4.25742574e-13
+condition step/algorithm/am_gm_two n=675 MAE=7.25925926e-07 MSE=7.25925926e-13
+condition step/algorithm/abs_linear n=352 MAE=6.44886364e-07 MSE=6.44886364e-13
+condition step/algorithm/expo_laws n=320 MAE=6.71875e-07 MSE=6.71875e-13
+condition step/algorithm/log2_pow2 n=856 MAE=7.71028037e-07 MSE=7.71028037e-13
+condition step/algorithm/geometric_mean_pair n=655 MAE=7.19083969e-07 MSE=7.1908397e-13
+condition step/algorithm/gauss_pairing n=685 MAE=6.87591241e-07 MSE=6.87591241e-13
+condition step/algorithm/ratio_share n=690 MAE=6.97101449e-07 MSE=6.97101449e-13
+condition step/algorithm/percentage_pair n=600 MAE=6.76666667e-07 MSE=6.76666667e-13
+condition step/algorithm/composition_affine n=1000 MAE=7.16e-07 MSE=7.16e-13
+condition step/algorithm/weighted_average n=800 MAE=7.525e-07 MSE=7.525e-13
+condition step/algorithm/inv_function_eval n=800 MAE=6.95e-07 MSE=6.95e-13
+condition step/algorithm/digit_sum_base n=582 MAE=7.3024055e-07 MSE=7.3024055e-13
+condition step/algorithm/median_five n=2028 MAE=7.77613412e-07 MSE=7.77613412e-13
+condition step/algorithm/sum_first_odds n=858 MAE=6.42191142e-07 MSE=6.42191142e-13
+condition step/algorithm/tangent_line_quad n=800 MAE=6.9e-07 MSE=6.9e-13
+condition step/algorithm/secant_poly_slope n=800 MAE=6.7375e-07 MSE=6.7375e-13
+condition step/algorithm/power_rule_integrate n=800 MAE=6.7875e-07 MSE=6.7875e-13
+condition step/algorithm/newton_sqrt_step n=552 MAE=6.90217391e-07 MSE=6.90217391e-13
+condition step/algorithm/euler_method_linear n=800 MAE=7.25e-07 MSE=7.25e-13
+condition step/algorithm/simpson_quadratic n=1400 MAE=7.59285714e-07 MSE=7.59285714e-13
+condition step/algorithm/mvt_quadratic n=804 MAE=7.54975124e-07 MSE=7.54975124e-13
+condition step/algorithm/critical_cubic n=546 MAE=6.75824176e-07 MSE=6.75824176e-13
+condition step/algorithm/asymptote_oblique n=708 MAE=7.47175141e-07 MSE=7.47175141e-13
+condition step/algorithm/area_under_linear n=399 MAE=7.66917293e-07 MSE=7.66917293e-13
+condition step/algorithm/second_diff_central n=1000 MAE=7.24e-07 MSE=7.24e-13
+condition step/algorithm/rolle_check n=725 MAE=6.91034483e-07 MSE=6.91034483e-13
+condition step/algorithm/det_3x3_cofactor n=1400 MAE=7.17142857e-07 MSE=7.17142857e-13
+condition step/algorithm/matvec_3 n=600 MAE=6.3e-07 MSE=6.3e-13
+condition step/algorithm/row_reduce_rank2 n=1000 MAE=7.54e-07 MSE=7.54e-13
+condition step/algorithm/trace_frobenius2 n=1000 MAE=7.12e-07 MSE=7.12e-13
+condition step/algorithm/inverse_mult_identity2 n=1000 MAE=7.03e-07 MSE=7.03e-13
+condition step/algorithm/dep_pair_cross n=800 MAE=7.125e-07 MSE=7.125e-13
+condition step/algorithm/diagonal_eigencheck n=800 MAE=7.125e-07 MSE=7.125e-13
+condition step/algorithm/proj_pyth n=1000 MAE=7.13e-07 MSE=7.13e-13
+condition step/algorithm/area_parallelogram2 n=600 MAE=6.56666667e-07 MSE=6.56666667e-13
+condition step/algorithm/affine_point n=1200 MAE=7.80833333e-07 MSE=7.80833333e-13
+condition step/algorithm/matrix_sym_part n=1000 MAE=7.12e-07 MSE=7.12e-13
+condition step/algorithm/vector_angle_cossq n=800 MAE=7.325e-07 MSE=7.325e-13
+condition step/algorithm/prime_factor_small n=861 MAE=7.65389082e-07 MSE=7.65389083e-13
+condition step/algorithm/perfect_square_check n=447 MAE=6.48769575e-07 MSE=6.48769575e-13
+condition step/algorithm/tribonacci_general n=852 MAE=7.41784038e-07 MSE=7.41784038e-13
+condition step/algorithm/digit_flipper n=546 MAE=6.83150183e-07 MSE=6.83150183e-13
+condition step/algorithm/divisor_sq_two_primes n=343 MAE=7.90087464e-07 MSE=7.90087464e-13
+condition step/algorithm/twin_prime_screen n=130 MAE=7.15384615e-07 MSE=7.15384615e-13
+condition step/algorithm/popcount_halve n=1331 MAE=7.89631856e-07 MSE=7.89631856e-13
+condition step/algorithm/prob_urn n=584 MAE=6.47260274e-07 MSE=6.47260274e-13
+condition step/algorithm/bayes_two_events n=560 MAE=6.89285714e-07 MSE=6.89285714e-13
+condition step/algorithm/pyth_triple_verify n=786 MAE=7.49363868e-07 MSE=7.49363868e-13
+condition step/algorithm/catalan_small n=334 MAE=7.1257485e-07 MSE=7.1257485e-13
+condition step/algorithm/pascal_row_mult n=376 MAE=7.20744681e-07 MSE=7.20744681e-13
+alu_00 overall 0.9891 per_step 0.9950 MAE 0.012297 MSE 0.016950
+alu_01 overall 0.9911 per_step 0.9960 MAE 0.010026 MSE 0.013564
+alu_02 overall 0.9891 per_step 0.9950 MAE 0.012297 MSE 0.016950
+alu_03 overall 0.9891 per_step 0.9950 MAE 0.012297 MSE 0.016950
+alu_04 overall 0.9891 per_step 0.9950 MAE 0.012297 MSE 0.016950
+alu_05 overall 0.9891 per_step 0.9950 MAE 0.012297 MSE 0.016950
+alu_06 overall 0.9891 per_step 0.9950 MAE 0.012297 MSE 0.016950
+alu_07 overall 0.9891 per_step 0.9950 MAE 0.012297 MSE 0.016950
+alu_08 overall 0.9891 per_step 0.9950 MAE 0.012297 MSE 0.016950
+alu_09 overall 0.9891 per_step 0.9950 MAE 0.012297 MSE 0.016950
+alu_10 overall 0.9891 per_step 0.9950 MAE 0.012297 MSE 0.016950
+alu_11 overall 0.9891 per_step 0.9950 MAE 0.012297 MSE 0.016950
+i6 level -1.0 n=5366 acc=1.0000
+i6 level -0.5 n=5205 acc=1.0000
+i6 level 0.0 n=5412 acc=1.0000
+i6 level 0.5 n=5139 acc=1.0000
+i6 level 1.0 n=5308 acc=1.0000
+skipped=3219 mislabelled_dropped=351 n_overall=26430 n_step=96487 master=20261125
+delta per algorithm (i6 - best_alu):
+  arithmetic_series i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  chain_rule i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  difference_of_squares i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  dot_product_3d i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  gauss_2x2 i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  linear_solve i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  matrix_det_2x2 i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  perfect_square_trinomial i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  power_rule i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  product_rule i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  quadratic_formula i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  slope_from_points i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  substitution_system i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  sum_of_cubes i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  sum_of_squares i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  difference_of_cubes i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  cube_of_binomial i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  log_product i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  modular_inverse i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  vieta_cubic i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  fibonacci_iter i6 1.0000 best_alu 1.0000 delta +0.0000 (n=88)
+  horner_eval i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  sum_fourth_powers i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  nested_radical i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  quartic_horner i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  cauchy_identity i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  pell_check i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  rational_root i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  binomial_coeff i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  linear_recurrence i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  contfrac_2 i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  binary_value i6 1.0000 best_alu 1.0000 delta +0.0000 (n=140)
+  gcd_three i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  lcm_pair i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  implicit_circle i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  lhopital_poly i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  riemann_mid2 i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  trapezoid_linear i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  usub_linear i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  average_linear i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  concavity_quad i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  inflection_cubic i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  ftc_check i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  monotonic_quad i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  shadow_rates i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  taylor_linear i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  mat_add i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  scalar_mult i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  eigen_sym i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  cramer_2x2 i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  outer_trace i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  mat_square i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  project_axis i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  rotate_twice i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  gram_det i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  nilpotent_sq i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  idempotent_tr i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  det_product i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  hadamard_trace i6 1.0000 best_alu 1.0000 delta +0.0000 (n=161)
+  diag_trace i6 1.0000 best_alu 1.0000 delta +0.0000 (n=162)
+  sigma_small i6 1.0000 best_alu 1.0000 delta +0.0000 (n=132)
+  digital_root i6 1.0000 best_alu 1.0000 delta +0.0000 (n=126)
+  collatz_5 i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  bezout_witness i6 1.0000 best_alu 1.0000 delta +0.0000 (n=190)
+  crt_verify i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  repunit_mod i6 1.0000 best_alu 1.0000 delta +0.0000 (n=141)
+  triangular_mod i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  prime_divisor i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  square_part i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  multiple_six i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  power_two i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  mult_order i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  fermat_little i6 1.0000 best_alu 1.0000 delta +0.0000 (n=158)
+  am_gm_two i6 1.0000 best_alu 1.0000 delta +0.0000 (n=135)
+  abs_linear i6 1.0000 best_alu 1.0000 delta +0.0000 (n=88)
+  expo_laws i6 1.0000 best_alu 1.0000 delta +0.0000 (n=80)
+  geometric_mean_pair i6 1.0000 best_alu 1.0000 delta +0.0000 (n=131)
+  gauss_pairing i6 1.0000 best_alu 1.0000 delta +0.0000 (n=137)
+  ratio_share i6 1.0000 best_alu 1.0000 delta +0.0000 (n=138)
+  percentage_pair i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  composition_affine i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  weighted_average i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  inv_function_eval i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  digit_sum_base i6 1.0000 best_alu 1.0000 delta +0.0000 (n=97)
+  sum_first_odds i6 1.0000 best_alu 1.0000 delta +0.0000 (n=143)
+  tangent_line_quad i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  secant_poly_slope i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  newton_sqrt_step i6 1.0000 best_alu 1.0000 delta +0.0000 (n=138)
+  euler_method_linear i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  critical_cubic i6 1.0000 best_alu 1.0000 delta +0.0000 (n=78)
+  asymptote_oblique i6 1.0000 best_alu 1.0000 delta +0.0000 (n=177)
+  area_under_linear i6 1.0000 best_alu 1.0000 delta +0.0000 (n=133)
+  matvec_3 i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  row_reduce_rank2 i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  trace_frobenius2 i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  inverse_mult_identity2 i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  dep_pair_cross i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  proj_pyth i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  area_parallelogram2 i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  matrix_sym_part i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  vector_angle_cossq i6 1.0000 best_alu 1.0000 delta +0.0000 (n=200)
+  perfect_square_check i6 1.0000 best_alu 1.0000 delta +0.0000 (n=149)
+  tribonacci_general i6 1.0000 best_alu 1.0000 delta +0.0000 (n=142)
+  divisor_sq_two_primes i6 1.0000 best_alu 1.0000 delta +0.0000 (n=49)
+  twin_prime_screen i6 1.0000 best_alu 1.0000 delta +0.0000 (n=26)
+  prob_urn i6 1.0000 best_alu 1.0000 delta +0.0000 (n=146)
+  bayes_two_events i6 1.0000 best_alu 1.0000 delta +0.0000 (n=140)
+  catalan_small i6 1.0000 best_alu 1.0000 delta +0.0000 (n=72)
+  pascal_row_mult i6 1.0000 best_alu 1.0000 delta +0.0000 (n=74)
+  matrix_trace_product i6 1.0000 best_alu 0.9950 delta +0.0050 (n=200)
+  completing_square i6 1.0000 best_alu 0.9950 delta +0.0050 (n=200)
+  commutator_trace i6 1.0000 best_alu 0.9950 delta +0.0050 (n=200)
+  diagonal_eigencheck i6 1.0000 best_alu 0.9950 delta +0.0050 (n=200)
+  affine_point i6 1.0000 best_alu 0.9950 delta +0.0050 (n=200)
+  legendre_euler i6 1.0000 best_alu 0.9935 delta +0.0065 (n=154)
+  rolle_check i6 1.0000 best_alu 0.9931 delta +0.0069 (n=145)
+  quotient_rule i6 1.0000 best_alu 0.9900 delta +0.0100 (n=200)
+  tangent_point i6 1.0000 best_alu 0.9900 delta +0.0100 (n=200)
+  definite_quad i6 1.0000 best_alu 0.9900 delta +0.0100 (n=200)
+  digit_flipper i6 1.0000 best_alu 0.9890 delta +0.0110 (n=91)
+  cross_2d i6 1.0000 best_alu 0.9880 delta +0.0120 (n=166)
+  triangular_verify i6 1.0000 best_alu 0.9869 delta +0.0131 (n=153)
+  euclid_gcd i6 1.0000 best_alu 0.9850 delta +0.0150 (n=200)
+  second_derivative i6 1.0000 best_alu 0.9850 delta +0.0150 (n=200)
+  second_diff_central i6 1.0000 best_alu 0.9850 delta +0.0150 (n=200)
+  harmonic_partial i6 1.0000 best_alu 0.9832 delta +0.0168 (n=119)
+  telescoping_series i6 1.0000 best_alu 0.9813 delta +0.0187 (n=107)
+  factorial_recurrence i6 1.0000 best_alu 0.9810 delta +0.0190 (n=105)
+  prime_factor_small i6 1.0000 best_alu 0.9810 delta +0.0190 (n=105)
+  definite_integral i6 1.0000 best_alu 0.9800 delta +0.0200 (n=200)
+  geometric_series i6 1.0000 best_alu 0.9799 delta +0.0201 (n=199)
+  mod_pow_fast i6 1.0000 best_alu 0.9780 delta +0.0220 (n=182)
+  chain_poly i6 1.0000 best_alu 0.9750 delta +0.0250 (n=200)
+  det_3x3_cofactor i6 1.0000 best_alu 0.9750 delta +0.0250 (n=200)
+  divisor_count i6 1.0000 best_alu 0.9684 delta +0.0316 (n=158)
+  power_difference i6 1.0000 best_alu 0.9650 delta +0.0350 (n=200)
+  inverse_2x2 i6 1.0000 best_alu 0.9650 delta +0.0350 (n=200)
+  power_rule_integrate i6 1.0000 best_alu 0.9550 delta +0.0450 (n=200)
+  sum_odd i6 1.0000 best_alu 0.9538 delta +0.0462 (n=130)
+  inverse_slope i6 1.0000 best_alu 0.9500 delta +0.0500 (n=200)
+  mvt_quadratic i6 1.0000 best_alu 0.9403 delta +0.0597 (n=134)
+  euler_phi i6 1.0000 best_alu 0.9367 delta +0.0633 (n=158)
+  binomial_expand i6 1.0000 best_alu 0.9273 delta +0.0727 (n=110)
+  median_five i6 1.0000 best_alu 0.9231 delta +0.0769 (n=169)
+  log2_pow2 i6 1.0000 best_alu 0.9174 delta +0.0826 (n=121)
+  popcount_halve i6 1.0000 best_alu 0.9174 delta +0.0826 (n=121)
+  wilson_check i6 1.0000 best_alu 0.9109 delta +0.0891 (n=101)
+  partial_fractions i6 1.0000 best_alu 0.9100 delta +0.0900 (n=200)
+  simpson_quadratic i6 1.0000 best_alu 0.8800 delta +0.1200 (n=200)
+  pyth_triple_verify i6 1.0000 best_alu 0.8779 delta +0.1221 (n=131)

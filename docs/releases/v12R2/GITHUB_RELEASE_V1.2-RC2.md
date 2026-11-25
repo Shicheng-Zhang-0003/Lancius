@@ -38,26 +38,30 @@ which would have printed a plausible number rather than failing:
    Diverged to NaN inside one epoch.
 2. `softmax_ce` returned mean·log p — the **negative** of cross-entropy — so a
    working run reported −1.04.
-3. The graph's MSE VJP is `(2/pe)(z−T)`; CE gives `(1/rows)(z−T)`. The
-   relationship is the constant `2/NCLASS`, not `2/pe`.
+3. The graph's mean-element MSE VJP is `(2/(rows*NCLASS))(z−T)`; mean-row
+   softmax CE gives `((sum(T)*softmax(z))-T)/rows`, reducing to
+   `(softmax(z)-T)/rows` for one-hot targets. No constant converts these
+   gradients. The `NCLASS/2` factor only rescales the MSE residual update to
+   `1/rows`; it does not make that update a CE gradient.
 4. The baseline evaluated `(model_t){0}` with NULL `W1/b1/W2/b2` — segfault;
    and one `metrics_t` was reused across splits, so `train-acc` printed test
    accuracy.
 
 ## Gradients verified independently
 
-`ref_prm.c` is a pure-C trainer with hand-derived CE backprop and no framework
-anywhere in it, mirroring every hyperparameter, the RNG stream, the He init and
-the effective step. It reaches **0.4959** against the framework's **0.4957**,
-trajectories tracking. The self-contained gradient check pins the graph's own
-mean-MSE objective at **9.5e-09**.
+At RC2, `ref_prm.c` was a pure-C trainer with hand-derived CE backprop and no
+framework. Its near-identical **0.4959** vs **0.4957** accuracy tracked the
+framework's shared MSE-step defect; it did not validate CE-gradient parity.
+The historical self-contained gradient check pinned that graph's mean-MSE
+objective at **9.5e-09**. The current PRM sources both optimize CE, but their
+post-change parity run has not been recorded.
 
 Getting there cost three false alarms, **two of which were my harness rather
 than the framework** — the exact failure the external-oracle discipline exists to
 catch, reproduced from the inside. `MSE_BWD` was exact to `0e+00` in isolation
 and a hand-derived CE gradient matched central differences to all printed
-digits; the residual came from converting mean-MSE to CE with the wrong
-prefactor (twice) and from an error metric dividing by gradients at the `1e-12`
+digits; the residual came from incorrectly treating the mean-MSE residual as
+a CE gradient and from an error metric dividing by gradients at the `1e-12`
 level where a central difference is pure float noise.
 
 ## What this model cannot do — a proof, not a measurement
@@ -128,8 +132,8 @@ validation split carved from **train**; test touched once. Gradient check
 **8.9e-08**.
 
 ```
-overall    n=1574  exact=0.9377  within1=0.9752  macroF1=0.6385  MAE=0.0562  kappa=0.9218
-per-step   n=6764  exact=0.9808  within1=0.9871  macroF1=0.6499  MAE=0.0203  kappa=0.9708
+overall    n=1574  exact=0.9377  within1=0.9752  macroF1=0.6385  MAE=0.0562  kappa=withdrawn
+per-step   n=6764  exact=0.9808  within1=0.9871  macroF1=0.6499  MAE=0.0203  kappa=withdrawn
 ```
 
 Two corrections to how those figures must be read. The `macroF1` column is
@@ -182,9 +186,9 @@ their reference logits to **≤ 6.7e-16**.
 
 | H | test exact (mean ± sd) | range | kappa |
 |---|---|---|---|
-| 64 | 0.9070 ± 0.0388 | [0.8793, 0.9619] | 0.8815 ± 0.0501 |
-| **96** | **0.9290 ± 0.0170** | [0.9053, 0.9441] | **0.9107 ± 0.0216** |
-| 128 | 0.9183 ± 0.0280 | [0.8793, 0.9435] | 0.8973 ± 0.0354 |
+| 64 | 0.9070 ± 0.0388 | [0.8793, 0.9619] | withdrawn |
+| **96** | **0.9290 ± 0.0170** | [0.9053, 0.9441] | withdrawn |
+| 128 | 0.9183 ± 0.0280 | [0.8793, 0.9435] | withdrawn |
 
 All nine: **0.9181 ± 0.0306**. Chance is 0.200. **Ship H=96** — best mean *and*
 lowest variance; H=64 has the worst mean and the widest spread.

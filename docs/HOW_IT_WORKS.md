@@ -259,12 +259,15 @@ Three things to know:
   `lancius_lr_warmup_cosine`. The model-side loop applies harvested gradients;
   the framework does not own the training loop.
 
-A recurring and non-obvious fact when building an objective out of existing
-ops: `MSE_BWD` emits `(2/pe) * g * (p - t)`. For a loss of `mean((logits -
-onehot)^2)` over `pe` elements that is exactly the softmax cross-entropy
-gradient times the constant `2/NCLASS` — so the same graph trains a softmax
-classifier without a cross-entropy op, provided the learning rate accounts for
-that factor.
+`MSE_BWD` emits `(2/pe) * g * (p - t)`. For logits `z`, target row `y`,
+batch size `B`, and class count `C`, mean squared error has gradient
+`2*(z-y)/(B*C)`. Mean softmax cross-entropy has gradient
+`((sum(y)*softmax(z))-y)/B`, which simplifies to
+`(softmax(z)-y)/B` for normalized targets. These are different objectives and
+no constant learning-rate factor makes their gradients equal. A trainer using
+MSE on logits is a valid regression-style objective, but it must be reported
+and checked as MSE; classification cross-entropy requires the softmax
+cross-entropy op.
 
 ---
 
@@ -375,8 +378,10 @@ features.
   `check-physics` is the exception that proves the rule is a choice: it needs
   only python3's standard library, because its reference is the standard.
 - **`data_vec/` and `temp/`** are generated and gitignored. Trained models in
-  `data_vec/` are therefore not in the tree; the `V1.2-RC2` release carries them
-  as artifacts.
+  `data_vec/` are therefore not in the tree; model lineage artifacts are
+  distributed through the GitHub release pages where attached (see
+  `docs/releases/v12R2/`), and the I6 family checkpoints are reproducible
+  from `generation_1/I6/corpus_clean/`.
 
 For the PRM800K verifier stack built on this framework, and specifically what
 it does **not** establish, see `docs/DESPOT_TRUTH_V2.md` §18.

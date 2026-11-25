@@ -1,10 +1,19 @@
 # Lancius v12R2 Scope — Development Milestone (R2 phase)
 
-Internal: `v12R2` · Public github tag: `V1.2RC2` (internal code stays `vXYRZ`;
-public tags read `VX.YRCZ`; github tags/releases only).
+Internal: `v12R2` · Current public github tag: `V1.2-RC3.4` (RC3.x development
+line; base tag `V1.2-RC3`; internal code stays `vXYRZ`; public tags use the
+`V1.2-RC3.x` form).
 
 Previous milestone: v12R1 / V1.2RC1 (hardening plus numerical correctness,
 all gates green, no false-green).
+
+Status at `V1.2-RC3.4`: R2-1..R2-9 are landed and gated; I6 has four compact
+family verifiers, an algorithm-held-out corpus, and an expanded stress audit.
+RC3.3's earlier metric claims were withdrawn; RC3.4 reports independent
+continuous MAE/MSE. The v2 model format and stable C ABI remain unchanged,
+while this point corrects training/runtime numerical behavior and removes
+obsolete external data integration. I6 classifies generated checker
+features; it does not establish free-form math solving.
 
 ## R2 mandate
 
@@ -12,12 +21,12 @@ v12R1 proved Lancius computes honestly. v12R2 proves Lancius can **learn**:
 every role below must stand up as an independent subsystem with its own
 gate. R3 freezes and hardens; v12S (public `V1.2`) ships.
 
-Target class: mute-mathematician micromodels below 100M parameters that
-decide mathematical input with precision rivaling 400B-class models — by
-exact computation, checkable reasoning steps, and deterministic execution,
-not by fluency. No language generation: the model never speaks, it scores.
-A mute mathematician that solves olympiad/millennium problems outranks a
-fluent speaker that cannot solve.
+Target: build bounded mathematical components under 100M parameters that
+work with exact computation, checkable derivations, and deterministic
+execution. Compare each supported task on a fixed external benchmark; do not
+claim parity with a larger model without same-task evidence. No language
+generation is shipped in this line: these models score and verify, they do
+not produce natural-language solutions.
 
 Language generation is scrapped in v12R2: `generate_text`/`run_llm`
 deleted, CLI `generate` fails loud pointing to `eval`, no streaming

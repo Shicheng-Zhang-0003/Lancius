@@ -1,0 +1,41 @@
+expert,row_type,true_class,n,correct,recall_pct,precision_pct,f1_pct
+algebra,overall,-1.0 plain false,150005,150005,100.0,100.0,100.0
+algebra,overall,-0.5 probably false,150005,150005,100.0,100.0,100.0
+algebra,overall,0.0 undecidable,150006,150006,100.0,100.0,100.0
+algebra,overall,+0.5 mostly true,141523,141523,100.0,100.0,100.0
+algebra,overall,+1.0 plain true,150005,150005,100.0,100.0,100.0
+algebra,local-step,-1.0 plain false,558784,558784,100.0,100.0,100.0
+algebra,local-step,-0.5 probably false,150005,150005,100.0,100.0,100.0
+algebra,local-step,0.0 undecidable,558787,558787,100.0,100.0,100.0
+algebra,local-step,+0.5 mostly true,141523,141523,100.0,100.0,100.0
+algebra,local-step,+1.0 plain true,1376342,1376342,100.0,100.0,100.0
+calculus,overall,-1.0 plain false,150005,150005,100.0,100.0,100.0
+calculus,overall,-0.5 probably false,150005,150005,100.0,100.0,100.0
+calculus,overall,0.0 undecidable,150006,150006,100.0,100.0,100.0
+calculus,overall,+0.5 mostly true,141523,141523,100.0,100.0,100.0
+calculus,overall,+1.0 plain true,150005,150005,100.0,100.0,100.0
+calculus,local-step,-1.0 plain false,558784,558784,100.0,100.0,100.0
+calculus,local-step,-0.5 probably false,150005,150005,100.0,100.0,100.0
+calculus,local-step,0.0 undecidable,558787,558787,100.0,100.0,100.0
+calculus,local-step,+0.5 mostly true,141523,141523,100.0,100.0,100.0
+calculus,local-step,+1.0 plain true,1376342,1376342,100.0,100.0,100.0
+linear_algebra,overall,-1.0 plain false,150005,150005,100.0,100.0,100.0
+linear_algebra,overall,-0.5 probably false,150005,150005,100.0,100.0,100.0
+linear_algebra,overall,0.0 undecidable,150006,150006,100.0,100.0,100.0
+linear_algebra,overall,+0.5 mostly true,141523,141523,100.0,100.0,100.0
+linear_algebra,overall,+1.0 plain true,150005,150005,100.0,100.0,100.0
+linear_algebra,local-step,-1.0 plain false,558784,558784,100.0,100.0,100.0
+linear_algebra,local-step,-0.5 probably false,150005,150005,100.0,100.0,100.0
+linear_algebra,local-step,0.0 undecidable,558787,558787,100.0,100.0,100.0
+linear_algebra,local-step,+0.5 mostly true,141523,141523,100.0,100.0,100.0
+linear_algebra,local-step,+1.0 plain true,1376342,1376342,100.0,100.0,100.0
+number_theory,overall,-1.0 plain false,150005,150005,100.0,100.0,100.0
+number_theory,overall,-0.5 probably false,150005,150005,100.0,100.0,100.0
+number_theory,overall,0.0 undecidable,150006,150006,100.0,100.0,100.0
+number_theory,overall,+0.5 mostly true,141523,141523,100.0,100.0,100.0
+number_theory,overall,+1.0 plain true,150005,150005,100.0,100.0,100.0
+number_theory,local-step,-1.0 plain false,558784,558784,100.0,100.0,100.0
+number_theory,local-step,-0.5 probably false,150005,150005,100.0,100.0,100.0
+number_theory,local-step,0.0 undecidable,558787,558787,100.0,100.0,100.0
+number_theory,local-step,+0.5 mostly true,141523,141523,100.0,100.0,100.0
+number_theory,local-step,+1.0 plain true,1376342,1376342,100.0,100.0,100.0

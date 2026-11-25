@@ -7,9 +7,9 @@
 > canonical guide to how a model is defined, processed, executed, trained and
 > proved correct — pipeline stage by stage, the operation set and its
 > conventions, and the verification discipline.
-> **Internal milestone:** `v12R2`
-> **Public release:** `V1.2RC3`
-> **Status:** Development milestone (R2 — second v12 milestone)
+> **Internal milestone:** `v12R2` (point release `v12R2.4`)
+> **Public release:** `V1.2-RC3.4`
+> **Status:** Development release; RC3.4 publishes the compact I6 verifier family and its reproducibility bundle
 
 Lancius is a lightweight C machine-learning compiler and runtime focused on
 bare-metal inference, static graph execution, memory planning, and low-level
@@ -27,6 +27,15 @@ formula-by-formula audit of every numeric path, with each confirmed defect
 fixed and re-proven by independent execution. Hardening batches V4 and V5
 extended this to threadpool, IR, examples, and Python tooling (38 defects
 total).
+
+The RC3.x point releases are model and dataset iterations. `V1.2-RC3.4` is
+the current point release. It publishes four compact I6 family verifiers,
+algorithm-held-out metrics, a 150-algorithm crossed stress audit, and the
+training corpus and checkpoints. The earlier RC3.3 sub-millilevel claims
+remain withdrawn: they used argmax labels for MAE and `MAE²` for MSE. RC3.4
+computes continuous MAE and per-row MSE independently. Its 100% stress
+accuracy applies to the generated checker-feature verdict task, not general
+math solving; see `generation_1/I6/README.md` for scope and limits.
 <!-- /SECTION:HEADER -->
 
 <!-- SECTION:RELEASE_IDENTITY -->
@@ -34,7 +43,7 @@ total).
 
 | Internal Version | Public Version       | Release Type      |
 |------------------|----------------------|-------------------|
-| `v12R2`          | `V1.2RC3.3`      | Development Milestone    |
+| `v12R2.4` (base `v12R2`) | `V1.2-RC3.4` | Development Milestone (RC3.x point release) |
 
 Lancius uses the following internal milestone progression:
 
@@ -56,12 +65,13 @@ in R-series numbering), built on the `v11S` stable baseline via `v12R1`.
 > This is a development milestone.
 > Binary compatibility is guaranteed for v2 models written by v11S+.
 
-**RC3.x model line (starts at `V1.2-RC3.3`).** Point releases on this cycle
-are **model, dataset and fabric iterations** cut from an unchanged `v12R2`
-codebase — no format break, no stable-API change, no numerical behaviour
-change; `src/` is frozen at the RC3 line for them. The rules and per-release
-asset provenance live in `MANIFEST.md` and
-`docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.1.md`.
+**RC3.x model line (starts at `V1.2-RC3.1`; current point `V1.2-RC3.4`).**
+Point releases on this cycle update model, dataset, and training/runtime
+behavior. RC3.4 has no model-format or stable-API break, but corrects training
+losses, clipping, and numerical edge cases in `src/`. The rules and
+per-release asset provenance live in `MANIFEST.md` and
+the release notes under `docs/releases/v12R2/`
+(`GITHUB_RELEASE_V1.2-RC3.4.md` is current).
 <!-- /SECTION:RELEASE_IDENTITY -->
 
 <!-- SECTION:HIGHLIGHTS -->
@@ -105,6 +115,40 @@ CIFAR-10 `[-1,1]` normalization matching PyTorch, He init on MNIST,
 identity-based parameter binding, per-batch grad zeroing, `1/R`
 cross-entropy scale, identity-tracked eval logits. Details in
 `CHANGELOG.md`.
+
+### I6 Verifier (historical RC3.3 release)
+
+The I6 lineage (`I1 → I2 → I3 → I6`) keeps the proven
+`65 → 4096 → 2560 → 5` verifier shape (10,771,461 parameters), warm-starts
+from the I3 ALU pool, and trains four family experts with fused
+cross-entropy, persistent graphs, and hard-negative mining. The cleaned
+150-algorithm corpus has no unrealizable labels, feature 57 is `n_wrong`,
+and the verdict is continuous (expected level under the 5-class softmax,
+clipped to `(-1+1e-6, 1-1e-6)`; `-2` remains the non-logic fault sentinel).
+
+The old MAEs were computed from argmax classes, not the continuous expected
+level. The old MSE values were `MAE²`, not mean squared per-row errors. Both
+claims are withdrawn. A direct saved-artifact audit across two evaluation
+paths found continuous MAE ranges of 0.252607–0.258127 (algebra),
+0.005315–0.010808 (calculus), 0.003623–0.012003 (linear algebra), and
+0.417701–0.420918 (number theory). Every audited value misses `1e-3`.
+Continuous MSE for those saved artifacts has not been re-established. The
+trainer now measures expected-level MAE and true per-row MSE. The RC3.4
+replacement model and its evaluation are described next. See
+`generation_1/I6/README.md` and `I6_TRAINING_STATUS.md` for the release audit.
+
+### I6 Flagship Verifiers (V1.2-RC3.4)
+
+RC3.4 publishes four fresh 65 → 128 → 64 → 5 family experts (17,029
+parameters each; 68,116 across the four exports). The 233,381-row corpus
+holds out whole algorithms and has zero feature-rule mismatches. Every expert
+passes the held-out overall and local-step MAE and independently computed
+per-row MSE gates below `1e-3`. In the expanded sweep, each expert matched
+all 741,544 overall labels and 2,785,441 local-step labels; all 68,056
+condition slices were exact. This measures the generated checker-feature
+verdict task, not free-form math solving. Full metrics, source, checkpoints,
+corpus, and case-level audit outputs are linked in `generation_1/I6/README.md`
+and the RC3.4 release.
 
 ### API and Harness Honesty
 
@@ -212,7 +256,6 @@ Lancius is primarily built with GNU Make.
 - GNU Make
 - OpenMP support
 - Linux x86_64 is the primary supported environment
-- libcurl + zlib headers for the 3463-LDFD submodule (`libcurl4-openssl-dev zlib1g-dev`; ML runtime builds without them, `ldfd-test` SKIPs honestly)
 - Python3 + NumPy for `make check-oracle` (hard requirement: `kernel_oracle.py`/`graph_oracle.py` import NumPy at module scope); PyTorch CPU for the full 276/276 evidence (`pip install --index-url https://download.pytorch.org/whl/cpu torch`; conv/math/trainlib layers have no non-circular NumPy fallback)
 
 On Debian/Ubuntu-like systems:
@@ -224,7 +267,7 @@ pip install --index-url https://download.pytorch.org/whl/cpu torch
 
 ### Build with Make
 
-From inside the `v12R2/` directory:
+From the repository root:
 
 ```bash
 make clean
@@ -495,7 +538,7 @@ The following table describes the current status of major subsystems.
 | Area | Status | Notes |
 |---|---|---|
 | Stress testing | Available | `tools/run_stress.sh` sweeps `fuzz_lancius` seeds, repeats the deterministic suites to catch cross-invocation state leaks, enforces a per-case timeout, and treats "prints FAIL but exits 0" as a failure. Results under `stress-logs/` |
-| Dataset acquisition | Development | `tools/data/manage_datasets.py` fetches through the 3463-LDFD submodule when `libsnapshot.so` is present (streaming gzip + tar, atomic land, HTTP>=400 as error), else the hardened urllib path. `manage_datasets.py status` reports which is live |
+| Dataset acquisition | Development | `tools/data/manage_datasets.py` downloads datasets with capped Python URL reads and contained archive extraction |
 | Core tensor ops | Development | Add/Sub/Mul (N-dim broadcast-correct), MatMul, ReLU, Softmax (zero-sum guarded), Sum, Broadcast, Transpose |
 | Vision ops | Development | Conv2D, MaxPool2D, Flatten, fused Conv2D+ReLU; `FLATTEN`/`RESHAPE` verify element equality |
 | Training ops | Development | N-dim broadcast reduction (`SUM_AXIS_ND`) with an exact VJP proven against central differences, batched-matmul/GELU/LayerNorm/RMSNorm backward incl. gamma/beta (finite-diff ~1e-9..1e-11), global-norm clip, XOR convergence + checkpoint-resume gates; attention/GQA/SwiGLU/RoPE backward staged (fail loud) |
@@ -511,6 +554,10 @@ The following table describes the current status of major subsystems.
 | GPU acceleration | Not supported | CPU-only runtime |
 | Dynamic shapes | Not supported | Static graph execution only |
 | Micromodels | Development | Mute-mathematician target <100M params: `train_micromodel` + `eval_verifier` + train-lib + sandbox gates |
+
+The historical RC3.3 I6 verifier used 65 → 4096 → 2560 → 5. RC3.4 publishes
+four 65 → 128 → 64 → 5 experts and the held-out continuous MAE/MSE and
+expanded stress results described above.
 
 > v12R2 targets a mute mathematician (<100M, scores never speaks), not fluency.
 <!-- /SECTION:FEATURE_STATUS -->
@@ -626,23 +673,23 @@ Each document owns one thing; start here, then follow pointers:
 - `CHANGELOG.md` — per-batch fix history (the only fix list)
 - `KNOWN_LIMITATIONS.md` — binding boundaries (the only contract)
 - `MANIFEST.md` — compatibility contract (the only compat statement)
+- `I6_TRAINING_STATUS.md` — I6 training record and completion snapshot
+- `generation_1/I6/README.md` — I6 model card, architecture, corpus,
+  training and evaluation instructions
 - `docs/DESPOT_TRUTH_V2.md` — audit proofs incl. V3/V4/V5/V6 addenda
 - `docs/ARCHITECTURE.md` — subsystem contracts and pipeline
-- `3463-LDFD/readme.md` — Live Data Feeding Framework (submodule): its own
-  status banner is the only truth about what is built there
-- `3463-LDFD/tests/` — 4 dependency-free suites plus a loopback fetch suite
-- `243-BDC/README.md` — Invasion–Ignition Loop (Idea1) + LDFD demo tracks +
-  cloned Lancius generations 1I4 (fire-risk predictive MLP) and 1I5 (generic
-  decision-surface trainer / rules engine); Idea1 causal-language rule (PDF
-  Sec 26) applies to all artifacts in this folder
 - `docs/v12R2_SCOPE.md` — current-milestone scope (binding for v12R2)
 - `docs/releases/v12R1/GITHUB_RELEASE_v12R1.md` — v12R1 release notes
 - `docs/releases/v11S/GITHUB_RELEASE_v11S.md` — v11S release notes
 - `docs/releases/v10S/RELEASE_NOTES_v10S.md` — historical v10S notes
-- `docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.1.md` — current release notes
-  (the RC3.x model line); `GITHUB_RELEASE_V1.2-RC3.md` is the previous point
-  (trained models are attached to the GitHub release page — `*.lancius` is
-  gitignored, so release assets are the only model distribution)
+- `docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.4.md` — current release notes
+  (the RC3.x model line); `GITHUB_RELEASE_V1.2-RC3.3.md`,
+  `GITHUB_RELEASE_V1.2-RC3.2.md` and
+  `GITHUB_RELEASE_V1.2-RC3.1.md` are the previous points, and
+  `GITHUB_RELEASE_V1.2-RC3.md` is the base. Trained models are distributed
+  through the GitHub release pages where attached; `*.lancius` is gitignored,
+  and the RC3.4 I6 experts, checkpoints, training corpus, and full stress
+  manifests are attached to the release; generated outputs remain gitignored
 - `docs/v11A3_SCOPE.md`, `docs/v11A2_SCOPE.md`, `docs/v11A1_SCOPE.md` — frozen history
 - `docs/v11A1_MODEL_FORMAT.md`, `docs/v11A1_OPS.md` — historical direction
   (bannered as superseded; do not quote for v12R1 behavior)
@@ -673,24 +720,26 @@ For public GitHub releases, internal milestones are mapped as follows:
 | `v11A3`            | `V1.1-AlphaRC3`      | Freeze, hardening, and bug hunting   |
 | `v11S`             | `V1.1`               | Stable release                       |
 | `v12R1`            | `V1.2RC1`            | Previous development milestone: hardening plus numerical correctness |
-| `v12R2`            | `V1.2RC3`            | Current development milestone (R2 phase: mute mathematician learns) |
-| `v12R2.1`          | `V1.2RC3.1`          | First point release: model/dataset/fabric iterations |
+| `v12R2`            | `V1.2RC3`            | Base development milestone (R2 phase: mute mathematician learns) |
+| `v12R2.1`          | `V1.2RC3.1`          | First point release: model/dataset/fabric iterations; I3 + I4 assets |
 | `v12R2.2`          | `V1.2RC3.2`          | Second point release: I6 flagship verifier lands, I5 rules engine |
-| `v12R2.3`          | `V1.2RC3.3`          | Third point release: corpus label-noise floor removed, n_wrong feature, continuous verdict, all 4 family experts MAE < 1e-3 |
+| `v12R2.3`          | `V1.2-RC3.3`          | Historical point release: corpus label-noise floor removed; prior I6 metric headline withdrawn after audit |
+| `v12R2.4`          | `V1.2-RC3.4`          | Current point release: compact I6 family experts, corrected trainer numerics, 150-algorithm expanded stress bundle |
 
 ### Current Milestone
 
 This release is:
 
 ```text
-v12R2
+v12R2.4  (public V1.2-RC3.4)
 ```
 
 Its theme is:
 
-> Mute mathematician learns: v12R1 honesty kept, plus train-lib,
-> char-v1 encoder, micromodel bridge, verifier eval, sandbox caps,
-> CLI eval — scores, never speaks.
+> Mute mathematician learns: v12R1 honesty kept, plus corrected training
+> numerics and the compact I6 verifier family. I6 scores generated
+> checker-derived verdict features; it does not parse or solve free-form math.
+> RC3.4 publishes its models, checkpoints, corpus, and full stress audit.
 
 Previous milestone: v12R1 / V1.2RC1 (hardening plus numerical correctness).
 Stable baseline: v11S / V1.1.

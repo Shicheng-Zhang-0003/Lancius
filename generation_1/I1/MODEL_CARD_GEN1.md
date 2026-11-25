@@ -84,8 +84,9 @@ sweep at batch 1024 (41 steps), validation exact / MAE:
 The corrected run at **LR=0.002** reaches **val-exact 0.9489 in a single
 epoch** — 41 steps — against the shipped trainer's **0.7201 in its first epoch**
 and **0.8957 after 5 epochs / 961 steps**. Test metrics at that epoch:
-overall exact **0.9497**, within1 0.9793, macro-F1 0.6433, MAE 0.0408,
-kappa 0.9370.
+overall exact **0.9497**, within1 0.9793, macro-F1 0.6433, MAE 0.0408.
+The reported kappa is withdrawn: the trainer used predicted-class counts for
+both Cohen-kappa marginals.
 
 ### The `+0.5` class is where verification actually fails
 
@@ -117,7 +118,9 @@ above report the **recomputed** values: overall 0.6172 -> **0.8941** and
 per-step 0.6329 -> **0.9275** for the same confusion matrices. The defect was
 present in `train_verifier5.c`, `train_gen1.c` and `tools/prm/ref_prm.c` and
 absent from `train_prm_verifier.c`; it read ~0.667 for a near-perfect model
-where the matrix implied ~0.997. Accuracy, MAE and kappa were unaffected.
+where the matrix implied ~0.997. Accuracy and MAE were unaffected by that
+macro-F1 defect. The trainer's separate kappa output is withdrawn because its
+expected-agreement calculation used the predicted marginals twice.
 
 ## Limits (carry over from the 5-level stack, still true at 10M)
 

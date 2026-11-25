@@ -1,49 +1,63 @@
 # Lancius Compatibility Manifest
 
-## Dataset acquisition (3463-LDFD submodule)
+## V1.2-RC3.4 compatibility and assets (2026-11-25)
 
-- `3463-LDFD/` is a git submodule
-  (`Lancius-Live-Data-Feeding-Framework`, branch `main`). It is a separate
-  component with its own makefile and dependencies (libcurl, zlib); it is
-  NOT folded into `make all`, so the ML runtime still builds on a machine
-  without libcurl headers.
-- Dataset acquisition is additive and optional. With `libsnapshot.so`
-  present, `manage_datasets.py download` fetches through LDFD (streaming
-  gzip inflate, tar extraction, atomic land, HTTP >= 400 treated as an
-  error). Without it, the pre-existing hardened urllib path runs instead.
-  `tools/data/manage_datasets.py status` reports which is active; behaviour of the
-  command is identical either way.
-- No model-format change, no operator change, no ABI change. `lancius_*`
-  stable API, the v2 format, and CRC32 integrity are untouched.
-- Gating: `make check` gains `ldfd-test`, which runs the four
-  dependency-free LDFD suites and the Python bridge audit. Absent
-  dependencies produce a printed SKIP, not a pass.
-- Not yet covered by LDFD: parquet (MATH, miniF2F, ProofWriter) and the
-  RuleTaker git clone remain Python-side. Kafka/S3/HTTP sinks, websocket
-  and SSE sources, checkpointing, and schema registry remain roadmap.
+RC3.4 keeps the v2 model-file format and stable C ABI. It corrects training
+and numerical behavior, so retrained weights and loss trajectories may
+change. The new I6 family experts use a separate seven-predicate semantic
+feature contract and their own train-only normalizer; do not use the RC3.3 or
+I1–I3 feature meanings/scalers with these weights. The GitHub release
+attaches all four exports, checkpoints, logs, the exact corpus and normalizer,
+and the expanded scenario/step audit bundle. Per-release provenance is in
+`docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.4.md`.
 
-## V1.2RC3.1 model-release line (2026-10-24)
+## Dataset acquisition
 
-RC3.1 and later RC3.x points are **model/dataset/fabric iterations** cut
-from an unchanged `v12R2` codebase: no format break, no API change, no
-numerical behaviour change, so the contract below is untouched by them.
-The code edits RC3.1 carries are composition layer only (I2 Python path
-locator, operator-CLI binary resolution, example-binary BINS registration,
-and documentation drift in `generation_1/`); `src/` is untouched. Assets
-live on the GitHub release page; provenance in
-`docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.1.md`.
+`tools/data/manage_datasets.py` downloads datasets with Python's URL, gzip,
+tar, and zip libraries. Downloaded payloads have size caps, and archive
+members are checked before extraction. Dataset tooling is independent of the
+C runtime build; it does not change the model format or C ABI.
+
+## RC3.x model-release line (V1.2-RC3.1 → V1.2-RC3.4, 2026-10-24 → 2026-11-25)
+
+RC3.x points are development releases. RC3.4 corrects training/runtime
+numerics in `src/` but does not change the v2 serialization format or stable
+C ABI. Its I6 models have a new feature/scaler contract. The current point is
+`V1.2-RC3.4`.
+
+Per-release provenance:
+
+- `V1.2-RC3.1` — I3 verifier and I4 fire-risk assets attached to the GitHub
+  release page; provenance in
+  `docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.1.md`.
+- `V1.2-RC3.2` — I6 trainer/corpus/eval tooling and the I5 rules engine enter
+  the tree; generated corpora and checkpoints stay gitignored. Release notes
+  in `docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.2.md`.
+- `V1.2-RC3.3` — I6 corpus label-noise floor removed, feature 57 becomes
+  `n_wrong`, the verdict becomes continuous, and all four I6 family experts
+  are trained and exported. The family checkpoints are reproducible from
+  `generation_1/I6/corpus_clean/`; release notes in
+  `docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.3.md`.
+- `V1.2-RC3.4` — compact sparse-schema family experts, algorithm-held-out
+  evaluation, independently computed continuous MAE/MSE, expanded
+  150-algorithm stress audit, trainer numerical fixes, and removal of the
+  obsolete external dataset bridge. Complete I6 reproducibility assets are
+  attached to the release; release notes in
+  `docs/releases/v12R2/GITHUB_RELEASE_V1.2-RC3.4.md`.
+
+Assets, when attached, live on the GitHub release page; provenance and
+per-file hashes live in the release notes for that point.
 
 ## v12R2 Milestone (development, current) + v12R1 baseline (2026-09-21) + despot truth V2/V3 (2026-09-28) + hardening V4 (2026-09-28) + V5 (2026-09-30) + despot audit V6 (2026-10-01) + despot audit V7 (2026-10-03) + despot audit V9 (2026-10-09) + despot audit V10 (2026-10-11)
 
 v12R2 is the second development milestone of the v12 cycle, not a stable
-release. Public github tag: `V1.2-RC3` (release title `V1.2RC3`; CMake/pkg-config
-`1.2.0` is the same line: `1.2.0` + milestone `v12R2` == public `V1.2RC3` dev).
+release. Base public github tag: `V1.2-RC3`; the current point release is
+`V1.2-RC3.4` (CMake/pkg-config `1.2.0` remains the same development line).
 RC3 adds the unified trainer (`examples/train_verifier.c`, fused softmax
 cross-entropy behind a persistent training graph, checkpoint/resume, corpus.hdr
 contract, row-agnostic export) and ships its trained models as GitHub release
 assets — the shapes are unchanged from RC2, so every RC2 model still loads.
-It inherits the v11S contract and the v12R1/V1.2RC1 additions below, plus R2-1..R2-6 (train-lib, char-v1, micromodel, eval_verifier, sandbox, CLI eval) and despot audit V7 error-channel + grad-shape + per-channel honesty fixes + V9 math/programming/operational truth (13 defects) + V10 substrate truth (physics gate, FP32 matmul loop order, pool thread budget, softmax-bwd oracle). Enumeration in `CHANGELOG.md`; proofs in `docs/HOW_IT_WORKS.md          # concrete mechanics: pipeline, ops, training, verification
-docs/DESPOT_TRUTH_V2.md` §12-13, §20:
+It inherits the v11S contract and the v12R1/V1.2RC1 additions below, plus R2-1..R2-6 (train-lib, char-v1, micromodel, eval_verifier, sandbox, CLI eval) and despot audit V7 error-channel + grad-shape + per-channel honesty fixes + V9 math/programming/operational truth (13 defects) + V10 substrate truth (physics gate, FP32 matmul loop order, pool thread budget, softmax-bwd oracle). Enumeration in `CHANGELOG.md`; proofs in `docs/HOW_IT_WORKS.md` (concrete mechanics: pipeline, ops, training, verification) and `docs/DESPOT_TRUTH_V2.md` §12-13, §20:
 
 - v2 model format unchanged: files written by v11S+ load with mandatory
   CRC32 body integrity (`LANCIUS_ALLOW_LEGACY_UNVERIFIED=1` opts into
@@ -89,7 +103,7 @@ enumeration in `CHANGELOG.md` (queue use-before-init, IR NULLs→errors,
 optimizer mask, dequant scale, CE R/C, 32B split, silent lib, examples,
 converter 1s).
 
-R3 training-wrap (in progress) — additive correctness: SUM_AXIS_ND (42),
+R3 training-wrap (landed; verified in V7) — additive correctness: SUM_AXIS_ND (42),
 TRANSPOSE_BATCHED (43), norm/activation _BWD (44..49); old files load
 identically (ids appended), new-op files require a new loader; v1 loader
 rejects new ids like all post-v11S ops.

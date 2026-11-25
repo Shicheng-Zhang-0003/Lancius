@@ -75,8 +75,8 @@ Full-scale run, `data_vec/v5` (20 algorithms, 41,689 rows), 65→4096→2560→5
 Held-out test split, best snapshot restored (never touched during training):
 
 ```
-overall    n=1574   exact=0.9968  within1=0.9987  macroF1=0.9968  MAE=0.0029  kappa=0.9960
-per-step   n=6764   exact=0.9999  within1=1.0000  macroF1=0.9996  MAE=0.0001  kappa=0.9998
+overall    n=1574   exact=0.9968  within1=0.9987  macroF1=0.9968  MAE=0.0029  kappa=withdrawn
+per-step   n=6764   exact=0.9999  within1=1.0000  macroF1=0.9996  MAE=0.0001  kappa=withdrawn
 ```
 
 The same LR that required the `lr_eff` rescue under the MSE step anneals

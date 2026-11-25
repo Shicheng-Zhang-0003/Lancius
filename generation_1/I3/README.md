@@ -34,8 +34,9 @@ selected epoch 2 on validation (val exact=0.9740)
 
 Held-out test (n=3,588 overall / 16,722 per-step rows):
 
-* overall: exact 0.9741, within1 0.9797, macroF1 0.9736, MAE 0.0249, kappa 0.9675
-* per-step: exact 0.9940, kappa 0.9909
+* overall: exact 0.9741, within1 0.9797, macroF1 0.9736, MAE 0.0249
+* per-step: exact 0.9940
+* kappa: withdrawn; the trainer used predicted-class counts for both expected-agreement marginals
 * export: temp/i3-runs/i3_alu_00.lancius (86,173,352 bytes, fixed batch), round-trip reload max|diff| = 5.773e-15
 
 ## The head-to-head that matters — run_big_i3.py

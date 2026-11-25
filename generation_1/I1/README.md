@@ -40,12 +40,15 @@ the model identity into `results_big/big_summary.txt`.
   run with the step-size defect still present.
 - `run_big.py`, fully randomized (1000 runs/algo, master 20261007): overall
   exact **`0.9356`** (86,087/92,015), per-step **`0.8979`** (258,084/287,446).
-- macro-F1 **`0.9903`** overall / `0.9948` per-step, MAE `0.0082` / `0.0017`,
-  kappa `0.9878` / `0.9970` — recomputed independently, because
+- macro-F1 **`0.9903`** overall / `0.9948` per-step, MAE `0.0082` / `0.0017`.
+  The C trainer's printed kappa is withdrawn because it used the predicted
+  marginal for both terms in expected agreement. An independently recomputed
+  kappa should be added only after confirming both confusion-matrix marginals.
+  The metrics above were also recomputed independently, because
   `train_gen1.c` printed 0.6623 / 0.6643 for these very confusion matrices
   (`fn` was accumulated without the `if(r!=c)` guard that `fp` had, so recall
-  read `tp/(tp+rowsum)` = 0.5 on a near-perfect model). Accuracy, MAE and
-  kappa were never affected by that defect.
+  read `tp/(tp+rowsum)` = 0.5 on a near-perfect model). Accuracy and MAE were
+  unaffected by that macro-F1 defect.
 - Per-class exact (overall, n=2366): `-1 1.000`, `-0.5 0.969`, `0 1.000`,
   `+0.5 0.974`, `+1 0.987`. Under the full randomized suite (92,015 rows) the
   weakest level is `-0.5` at 0.8660 and the weakest class moves again, so
