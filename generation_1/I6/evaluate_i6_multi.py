@@ -17,8 +17,9 @@ import argparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-MODELS_DIR = os.path.join(HERE, "models_clean")
-RESULTS_DIR = os.path.join(HERE, "results_big")
+MODELS_DIR = os.path.join(HERE, "models_verified")
+RESULTS_DIR = os.path.join(HERE, "results_verified")
+CORPUS_DIR = os.path.join(HERE, "corpus_verified")
 FAMILIES = ["algebra", "calculus", "linear_algebra", "number_theory"]
 
 
@@ -47,7 +48,7 @@ def wait_for_trainers(poll_interval=30):
     while True:
         running = []
         for fam in FAMILIES:
-            pids = find_pids(f"train_i6 generation_1/I6/corpus_clean/{fam}")
+            pids = find_pids(f"train_i6 {CORPUS_DIR}/{fam}")
             if pids:
                 running.append((fam, pids))
         if find_pids("orchestrate_i6.py"):
@@ -75,8 +76,10 @@ def run_multi_expert_eval(per_algo=1000, seed=20261026):
         str(seed),
         outdir,
         "--alu-pool", os.path.join(REPO, "generation_1", "I3", "alu_pool"),
-        "--musd", os.path.join(HERE, "gen1_mu_sd.txt"),
+        "--musd", os.path.join(CORPUS_DIR, "mu_sd.txt"),
+        "--i3-musd", os.path.join(REPO, "generation_1", "I3", "gen1_mu_sd.txt"),
         "--experts", MODELS_DIR,
+        "--strict-targets",
     ]
 
     print(f"[evaluate] Running multi-expert evaluation:")

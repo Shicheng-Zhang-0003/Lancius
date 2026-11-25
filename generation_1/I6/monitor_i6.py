@@ -13,8 +13,8 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-MODELS_DIR = os.path.join(HERE, "models_clean")
-CORPUS_DIR = os.path.join(HERE, "corpus_clean")
+MODELS_DIR = os.path.join(HERE, "models_verified")
+CORPUS_DIR = os.path.join(HERE, "corpus_verified")
 FAMILIES = ["algebra", "calculus", "linear_algebra", "number_theory"]
 
 
@@ -61,11 +61,11 @@ def main():
             try:
                 with open(log_path) as f:
                     content = f.read()
-                if "FINAL test" in content or "Target MAE" in content:
-                    status = "DONE"
-                elif "FATAL" in content:
+                if "Targets overall MAE/MSE < 1e-3: PASS/PASS; per-step MAE/MSE < 1e-3: PASS/PASS" in content:
+                    status = "PASS"
+                elif "Targets overall MAE/MSE < 1e-3:" in content or "FATAL" in content:
                     status = "FAILED"
-                elif "warm start loaded" in content:
+                elif "epoch" in content:
                     status = "STARTED (no progress yet)"
                 else:
                     status = "UNKNOWN"
@@ -90,7 +90,7 @@ def main():
         print("All trainers finished. Run evaluation:")
         print(f"  python3 {HERE}/run_big_i6.py 1000 \\")
         print(f"    {MODELS_DIR}/alu_algebra.lancius 20261026")
-        print(f"    --experts {MODELS_DIR}")
+        print(f"    --experts {MODELS_DIR} --strict-targets")
     else:
         print("Training in progress. Re-run this script to check again.")
 

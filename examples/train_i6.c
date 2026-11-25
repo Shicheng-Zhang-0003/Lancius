@@ -1,28 +1,30 @@
 /* Lancius I6 trainer -- flagship verifier lineage (I1 -> I2 -> I3 -> I6).
  *
- * Target: MAE(level) < 1e-3 and MSE(level) < 1e-3 on the 150-algorithm
- * verifier corpus, warm-started from the I3 ALU pool.
+ * Target: MAE(level) < 1e-3 and MSE(level) < 1e-3 on algorithm-held-out
+ * overall and per-step rows from the 150-algorithm verifier corpus.
  *
- * Architecture: 65 -> H1 -> H2 -> 5 (tanh/tanh), default H1=5120 H2=3072
- * (~16.2M params, ~1.5x the I3 trunk; still a micromodel -- well under the
- * 100M-element tensor cap and fast enough for the ALU bus).
+ * Architecture: 65 -> H1 -> H2 -> 5 (tanh/tanh), default H1=128 H2=64.
+ * A compact trunk makes algorithm-held-out experiments fast and repeatable.
  *
  * Loss: framework's fused softmax cross-entropy (lancius_cross_entropy),
- * exact VJP (softmax-y)/R. No MSE-on-logits, no lr_eff = LR*NCLASS/2 fudge.
+ * exact VJP ((sum(y)*softmax)-y)/R; normalized targets reduce to
+ * (softmax-y)/R. No MSE-on-logits, no lr_eff = LR*NCLASS/2 fudge.
  *
- * Warm start: --init-from <alu_X.lancius> loads the six param tensors from an
- * I3 ALU model (or any 65-in/5-out .lancius). Momentum starts at 0.
+ * Initialization: fresh Glorot weights. --init-from is rejected because I6's
+ * sparse semantic input schema and train-only normalizer are incompatible
+ * with the legacy I3 feature contract.
  *
  * Hard negative mining: after each epoch the model is run over the full
  * train corpus; misclassified rows are oversampled into the next epoch's
  * index pool at --hard-negative-frac (default 0.5 = half the next epoch is
- * rows the model currently gets wrong). This is what drives MAE from ~0.025
- * toward 1e-3: the model is forced to re-see its own errors.
+ * rows the model currently gets wrong). This makes the model revisit its
+ * current errors; target metrics must still be measured on held-out rows.
  *
  * LR schedule: warmup + cosine via lancius_lr_warmup_cosine
  *   (--warmup-frac 0 --lr-min 1 for constant LR).
  *
- * Checkpoint/resume: best.bin (selection on val exact + MAE tiebreak),
+ * Checkpoint/resume: best.bin (selection on the worst normalized validation
+ * MAE/MSE across overall and per-step rows),
  * last.bin each epoch, --resume restores weights, momentum, mu/sd, rng,
  * step count.
  *
@@ -48,13 +50,14 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <limits.h>
 #include <sys/stat.h>
 
 #include <lancius.h>
 #include <lancius/lancius_autodiff.h>
 #include <lancius/lancius_train.h>
 
-#define CKPT_MAGIC 0x4C564336u /* "LVC6" */
+#define CKPT_MAGIC 0x49364334u /* "I6C4": sparse semantic input schema */
 #define PI_2 3.14159265358979323846
 #define NCMAX 8
 
@@ -83,8 +86,9 @@ static double gauss_(void){
     return sqrt(-2.0*log(u1))*cos(2.0*PI_2*u2);
 }
 
-/* ---- configuration (I6 defaults: wider trunk, more epochs, CE loss) ---- */
-static size_t FEAT = 65, NCLASS = 5, H1 = 4096, H2 = 2560, BATCH = 256;
+/* ---- configuration (compact trunk, algorithm-held-out CE training) ---- */
+static size_t FEAT = 65, NCLASS = 5, H1 = 128, H2 = 64, BATCH = 256;
+/* I6 coordinate 57 is the binary any_wrong predicate. */
 static double LR = 0.0008, LR_MIN_FRAC = 0.01, MOM = 0.9, WD = 1e-4;
 static double CLIP = 5.0, EVAL_FRAC = 0.5, WARMUP_FRAC = 0.03, VALFRAC = 0.15;
 static int    EPOCHS = 20;
@@ -200,8 +204,9 @@ static void minit(model* m){
     m->gW3=(double*)xcalloc((size_t)H2*NCLASS,8,"gW3");m->gb3=(double*)xcalloc(NCLASS,8,"gb3");
     m->Xb=(double*)xcalloc(BATCH*FEAT,8,"Xb");
     m->Tb=(double*)xcalloc(BATCH*NCLASS,8,"Tb");
-    double s1=sqrt(2.0/(double)FEAT), s2=sqrt(2.0/(double)H1),
-           s3=sqrt(2.0/(double)H2);
+    double s1=sqrt(2.0/((double)FEAT+(double)H1));
+    double s2=sqrt(2.0/((double)H1+(double)H2));
+    double s3=sqrt(2.0/((double)H2+(double)NCLASS));
     for(size_t i=0;i<(size_t)FEAT*H1;i++)     m->W1[i]=gauss_()*s1;
     for(size_t i=0;i<(size_t)H1*H2;i++)       m->W2[i]=gauss_()*s2;
     for(size_t i=0;i<(size_t)H2*NCLASS;i++)   m->W3[i]=gauss_()*s3;
@@ -212,64 +217,6 @@ static void mfree(model* m){
     free(m->mW1);free(m->mb1);free(m->mW2);free(m->mb2);free(m->mW3);free(m->mb3);
     free(m->gW1);free(m->gb1);free(m->gW2);free(m->gb2);free(m->gW3);free(m->gb3);
     free(m->Xb);free(m->Tb);
-}
-
-/* warm start: load the six bound-param tensors from a .lancius (I3 ALU pool
- * or any 65-in/5-out model). Momentum starts at 0. */
-static int warm_start(model* m, const char* path){
-    lancius_graph* g = lancius_graph_load(path);
-    if (!g) {
-        fprintf(stderr, "warm start: cannot load %s: %s\n", path,
-                lancius_error_string(lancius_get_error()));
-        return -1;
-    }
-    lancius_node* found[6] = {0,0,0,0,0,0};
-    const struct { size_t a, b; int idx; } want[6] = {
-        {(size_t)FEAT, H1, 0}, {1, H1, 1}, {H1, H2, 2},
-        {1, H2, 3}, {H2, (size_t)NCLASS, 4}, {1, (size_t)NCLASS, 5},
-    };
-    int foundmask = 0;
-    for (uint32_t i = 0; i < g->node_count; i++) {
-        lancius_node* nd = g->nodes[i];
-        if (!nd || nd->op != LANCIUS_OP_INPUT || nd->ndim != 2) continue;
-        if (!nd->runtime_data) continue;
-        for (int k = 0; k < 6; k++) {
-            if (nd->shape[0] != want[k].a || nd->shape[1] != want[k].b) continue;
-            foundmask |= 1 << k;
-            found[k] = nd;
-        }
-    }
-    if (foundmask != 63) {
-        fprintf(stderr, "warm start: %s does not carry the six param shapes "
-                "(feat=%zu H1=%zu H2=%zu NCLASS=%zu); foundmask=%d\n",
-                path, FEAT, H1, H2, NCLASS, foundmask);
-        lancius_graph_destroy(g);
-        return -1;
-    }
-    memcpy(m->W1, found[0]->runtime_data, (size_t)FEAT*H1*sizeof(double));
-    memcpy(m->b1, found[1]->runtime_data, H1*sizeof(double));
-    memcpy(m->W2, found[2]->runtime_data, (size_t)H1*H2*sizeof(double));
-    memcpy(m->b2, found[3]->runtime_data, H2*sizeof(double));
-    memcpy(m->W3, found[4]->runtime_data, (size_t)H2*NCLASS*sizeof(double));
-    memcpy(m->b3, found[5]->runtime_data, NCLASS*sizeof(double));
-    double nrm[6] = {0,0,0,0,0,0};
-    for(size_t i=0;i<(size_t)FEAT*H1;i++) nrm[0]+=m->W1[i]*m->W1[i];
-    for(size_t i=0;i<H1;i++)        nrm[1]+=m->b1[i]*m->b1[i];
-    for(size_t i=0;i<(size_t)H1*H2;i++)     nrm[2]+=m->W2[i]*m->W2[i];
-    for(size_t i=0;i<H2;i++)        nrm[3]+=m->b2[i]*m->b2[i];
-    for(size_t i=0;i<(size_t)H2*NCLASS;i++) nrm[4]+=m->W3[i]*m->W3[i];
-    for(size_t i=0;i<NCLASS;i++)    nrm[5]+=m->b3[i]*m->b3[i];
-    printf("warm start loaded from %s\n", path);
-    printf("  ||W1||^2=%.6g ||b1||^2=%.6g ||W2||^2=%.6g ||b2||^2=%.6g "
-           "||W3||^2=%.6g ||b3||^2=%.6g\n",
-           nrm[0],nrm[1],nrm[2],nrm[3],nrm[4],nrm[5]);
-    lancius_graph_destroy(g);
-    if (!(nrm[1] > 0.0 || nrm[3] > 0.0 || nrm[5] > 0.0)) {
-        fprintf(stderr, "warm start: loaded biases are all zero -- "
-                "the weights did not arrive\n");
-        return -1;
-    }
-    return 0;
 }
 
 /* ---- persistent training graph (built once, buffers bound by pointer) ---- */
@@ -303,7 +250,7 @@ static void tgraph_build(model* m){
     lancius_node* h2=lancius_tanh(TG_FWD,lancius_add(TG_FWD,
         lancius_matmul(TG_FWD,h1,NW2),NB2));
     lancius_node* z3=lancius_add(TG_FWD,lancius_matmul(TG_FWD,h2,NW3),NB3);
-    /* Fused softmax cross-entropy (mean over rows). Exact VJP (softmax-y)/R. */
+    /* Fused softmax cross-entropy (mean over rows), with exact target-sum VJP. */
     NLOSS=lancius_cross_entropy(TG_FWD,z3,NT);
     if(!h1||!h2||!z3||!NLOSS) die("loss");
     TG = lancius_ir_autodiff(TG_FWD, NLOSS); if(!TG) die("autodiff");
@@ -326,9 +273,8 @@ static void grad_registry(model* m){
 }
 
 static double step_model(model* m){
-    /* Last batch is PADDED by replaying earlier rows (static graph needs
-     * fixed BATCH; padded rows contribute but shuffled order makes that
-     * harmless). Buffers were filled by the caller; execute fused fwd+bwd. */
+    /* The fixed-size graph uses replayed tail rows with weighted targets, so
+     * its mean loss and gradient equal the mean over the real tail rows. */
     lancius_arena_reset(ARENA);
     lancius_schedule_execute(BS, ARENA);
     if (lancius_get_error() != LANCIUS_ERROR_OK) {
@@ -359,10 +305,11 @@ static double step_model(model* m){
     return loss;
 }
 
-/* SGD with momentum + decoupled weight decay (pre-momentum). */
+/* SGDM with decoupled weight decay applied directly to parameters. */
 static void apply_step(model* m, double lr){
 #define UPD(W,M,G,N,WDV) do{ for(size_t i=0;i<(size_t)(N);i++){ \
-    double gi=(G)[i]+(WDV)*(W)[i]; (M)[i]=MOM*(M)[i]+gi; (W)[i]-=lr*(M)[i]; } }while(0)
+    (M)[i]=MOM*(M)[i]+(G)[i]; \
+    (W)[i]=(1.0-lr*(WDV))*(W)[i]-lr*(M)[i]; } }while(0)
     UPD(m->W1,m->mW1,m->gW1,(size_t)FEAT*H1,WD);
     UPD(m->b1,m->mb1,m->gb1,H1,0.0);
     UPD(m->W2,m->mW2,m->gW2,(size_t)H1*H2,WD);
@@ -410,12 +357,15 @@ static void fwd_logits(const model* m,const double* X,size_t n,double* z){
 /* ---- metrics (overall rows vs per-step rows split by S>0) ---- */
 typedef struct {
     size_t n, exact, within1;
-    double mae, macro_f1, kappa;
+    double mae, mse, macro_f1, kappa;
     long cm[NCMAX][NCMAX];
 } met;
 
 static void eval_split(met* mo, met* ms, const model* md,
-                       const double* X, const int* L, const int* S, size_t n){
+                       const double* X, const int* L, const int* S, size_t n,
+                       double logit_scale){
+    if (!(logit_scale > 0.0) || !isfinite(logit_scale))
+        die("logit scale must be finite and positive");
     double* z=(double*)malloc(n*NCLASS*sizeof(double));
     if(!z) die("eval z");
     fwd_logits(md,X,n,z);
@@ -428,13 +378,39 @@ static void eval_split(met* mo, met* ms, const model* md,
         m->cm[t][p]++;
         if(p==t) m->exact++;
         if((int)p==t || (p>t? p-t : t-p)<=1) m->within1++;
-        m->mae += fabs(LEVEL[p]-LEVEL[t]);
+        /* Match serving: continuous verdict is E[level | logits], not the
+         * argmax class level. Use max-subtracted softmax for stability. */
+        double mx = z[i*NCLASS] * logit_scale;
+        for(size_t c=1;c<NCLASS;c++) {
+            double scaled = z[i*NCLASS+c] * logit_scale;
+            if (!isfinite(scaled)) { free(z); die("non-finite scaled logit"); }
+            if(scaled>mx) mx=scaled;
+        }
+        double denom = 0.0, expected = 0.0;
+        for(size_t c=0;c<NCLASS;c++) {
+            double scaled = z[i*NCLASS+c] * logit_scale;
+            if (!isfinite(scaled)) { free(z); die("non-finite scaled logit"); }
+            double e = exp(scaled - mx);
+            denom += e;
+            expected += e * LEVEL[c];
+        }
+        if (!(denom > 0.0) || !isfinite(denom) || !isfinite(expected)) {
+            free(z);
+            die("non-finite softmax during continuous metric evaluation");
+        }
+        expected /= denom;
+        if (expected < -1.0 + 1e-6) expected = -1.0 + 1e-6;
+        if (expected >  1.0 - 1e-6) expected =  1.0 - 1e-6;
+        double err = expected - LEVEL[t];
+        m->mae += fabs(err);
+        m->mse += err * err;
         m->n++;
     }
     for (int which = 0; which < 2; which++){
         met* m = which ? ms : mo;
         if (!m->n) continue;
         m->mae /= (double)m->n;
+        m->mse /= (double)m->n;
         double f1=0;
         for(size_t c=0;c<NCLASS;c++){
             double tp=m->cm[c][c], fp=0, fn=0;
@@ -445,9 +421,12 @@ static void eval_split(met* mo, met* ms, const model* md,
         m->macro_f1=f1/(double)NCLASS;
         double po=(double)m->exact/(double)m->n, pe=0;
         for(size_t c=0;c<NCLASS;c++){
-            double rt=0, ct=0;
-            for(size_t r=0;r<NCLASS;r++){ rt+=m->cm[r][c]; ct+=m->cm[r][c]; }
-            pe += (rt>0)? (rt/(double)m->n)*(ct/(double)m->n) : 0.0;
+            double true_count=0, pred_count=0;
+            for(size_t r=0;r<NCLASS;r++) {
+                true_count += m->cm[c][r];
+                pred_count += m->cm[r][c];
+            }
+            pe += (true_count/(double)m->n)*(pred_count/(double)m->n);
         }
         m->kappa = (pe<1.0)? (po-pe)/(1.0-pe) : 0.0;
     }
@@ -607,7 +586,7 @@ static int verify_lancius(const char* path, const model* m,
     return (worst > 1e-12) ? -1 : 0;
 }
 
-/* ---- z-score normalization (train-only stats) ---- */
+/* ---- affine feature normalization (train-fit or pinned stats) ---- */
 static void zscore_fit(const corpus* tr, double* mu, double* sd){
     for(size_t k=0;k<FEAT;k++) mu[k]=0.0;
     for(size_t i=0;i<tr->n;i++)
@@ -696,6 +675,7 @@ int main(int argc, char** argv){
     const char* mu_sd_path = NULL;
     const char* save_dir = ".";
     int do_verify_rt = 0;
+    int strict_targets = 0;
     size_t lancius_rows = 1;
     size_t hdr_feat=0, hdr_nclass=0;
     size_t ntrain=0, nval=0, ntest=0;
@@ -718,6 +698,7 @@ int main(int argc, char** argv){
         else if (!strcmp(argv[i], "--export-lancius") && i+1 < argc) export_path=argv[++i];
         else if (!strcmp(argv[i], "--lancius-rows") && i+1 < argc) lancius_rows=(size_t)strtoul(argv[++i],NULL,10);
         else if (!strcmp(argv[i], "--verify-lancius")) do_verify_rt=1;
+        else if (!strcmp(argv[i], "--strict-targets")) strict_targets=1;
         else if (!strcmp(argv[i], "--resume") && i+1 < argc) resume_path=argv[++i];
         else if (!strcmp(argv[i], "--init-from") && i+1 < argc) init_from=argv[++i];
         else if (!strcmp(argv[i], "--mu-sd") && i+1 < argc) mu_sd_path=argv[++i];
@@ -742,17 +723,24 @@ int main(int argc, char** argv){
         "usage: train_i6 <dir> [H1 H2 EPOCHS BATCH]\n"
         "  [--seed N] [--lr L] [--lr-min frac] [--wd f] [--mom f] [--clip f]\n"
         "  [--warmup-frac f] [--eval-frac f]\n"
-        "  [--init-from PATH] [--mu-sd PATH]\n"
+        "  [--mu-sd PATH] [--init-from PATH rejected for I6 schema safety]\n"
         "  [--export-lancius PATH] [--lancius-rows N] [--verify-lancius]\n"
-        "  [--resume PATH] [--save-dir D]\n"
+        "  [--resume PATH] [--save-dir D] [--strict-targets]\n"
         "  [--hard-negative-frac f] [--hard-negative-start EPOCH]\n"
         "\n"
         "I6 trainer: 65 -> H1 -> H2 -> 5 verifier, CE loss, persistent graph,\n"
-        "warm start from I3 ALU pool, hard negative mining. Target MAE/MSE < 1e-3.\n");
+        "algorithm-held-out validation. Overall and per-step MAE/MSE target < 1e-3.\n");
+        return 2;
+    }
+    if (init_from) {
+        fprintf(stderr, "ERROR: --init-from is incompatible with I6's sparse "
+                "feature schema and train-only normalizer; train from fresh "
+                "initialization.\n");
         return 2;
     }
     if (NCLASS < 2 || NCLASS > NCMAX) die("train_i6 expects 2 <= NCLASS <= 8");
     if (FEAT == 0) die("FEAT must be > 0");
+    if (BATCH == 0 || EPOCHS <= 0) die("BATCH and EPOCHS must be positive");
 
     read_hdr(dir, &hdr_feat, &hdr_nclass, &ntrain, &nval, &ntest);
     if (!feat_cli)  FEAT = hdr_feat;
@@ -844,17 +832,20 @@ int main(int argc, char** argv){
         if(tr.S[i]==0) nover++;
     }
     if(!npos) die("train split has no positive rows");
-    size_t nfit = tr.n + npos*(POS_REPEAT-1) + nover*(OVERALL_REPEAT-1);
+    size_t nfit = tr.n;
+    if (npos && POS_REPEAT - 1 > (SIZE_MAX - nfit) / npos)
+        die("positive-repeat index count overflows size_t");
+    nfit += npos * (POS_REPEAT - 1);
+    if (nover && OVERALL_REPEAT - 1 > (SIZE_MAX - nfit) / nover)
+        die("overall-repeat index count overflows size_t");
+    nfit += nover * (OVERALL_REPEAT - 1);
     size_t* idx=(size_t*)xcalloc(nfit,sizeof(size_t),"idx");
     size_t nidx=0;
 
     model m; minit(&m);
-    if (init_from) {
-        if (warm_start(&m, init_from) != 0) die("warm start failed");
-    }
 
     /* Load checkpoint if resuming. */
-    long ckpt_step=0; double ckpt_best=1e9;
+    long ckpt_step=0; double ckpt_best=INFINITY;
     int has_ckpt = 0;
     char ckpt_last[1024]; snprintf(ckpt_last,sizeof ckpt_last,"%s/last.bin",save_dir);
     if (resume_path) {
@@ -865,6 +856,8 @@ int main(int argc, char** argv){
         /* Auto-resume from save_dir/last.bin if present. */
         if (load_state(ckpt_last, &m, mu, sd, &ckpt_step, &ckpt_best) == 0)
             has_ckpt = 1;
+        else
+            fprintf(stderr, "WARN: ignoring incompatible or unreadable %s\n", ckpt_last);
     }
 
     ARENA = lancius_arena_create(256u*1024u*1024u);
@@ -872,42 +865,56 @@ int main(int argc, char** argv){
     tgraph_build(&m);
     grad_registry(&m);
 
-    double best_score = ckpt_best;
-    size_t start_epoch = has_ckpt ? (size_t)(ckpt_step / ((nfit + BATCH - 1)/BATCH)) : 0;
-    if (start_epoch >= (size_t)EPOCHS) start_epoch = 0;
+    if (has_ckpt && (ckpt_step < 0 || !isfinite(ckpt_best)))
+        die("resume checkpoint has invalid step or best score");
+    double best_score = has_ckpt ? ckpt_best : INFINITY;
+    if (nfit == 0) die("training split is empty");
+    size_t steps_per_epoch = nfit / BATCH + (nfit % BATCH != 0);
+    if (steps_per_epoch == 0 || steps_per_epoch > (size_t)INT_MAX / (size_t)EPOCHS)
+        die("training schedule exceeds integer step range");
+    int total_steps = EPOCHS * (int)steps_per_epoch;
+    size_t start_epoch = has_ckpt ? (size_t)ckpt_step / steps_per_epoch : 0;
+    if (start_epoch > (size_t)EPOCHS) start_epoch = (size_t)EPOCHS;
 
     printf("================================================================\n");
     printf("  Lancius I6 decision-surface trainer  %zu -> %zu -> %zu -> %zu\n"
            "  (%.3fM params)  CE objective, persistent graph\n"
-           "  warm start: %s\n"
+           "  initialization: fresh Glorot weights\n"
            "  hard negative: frac=%.2f start_epoch=%d\n"
            "================================================================\n",
            FEAT, H1, H2, NCLASS, (double)nparams()/1e6,
-           init_from ? init_from : "(none, fresh init)",
            HARD_NEG_FRAC, HARD_NEG_START);
-
-    size_t steps_per_epoch = (nfit + BATCH - 1) / BATCH;
 
     for (int ep = (int)start_epoch; ep < EPOCHS; ep++) {
         /* Build this epoch's index pool (with hard negatives if enabled). */
         build_epoch_index(&m, &tr, idx, &nidx, ep+1);
         shuffle_idx(idx, nidx);
 
-        double epoch_loss = 0.0; size_t epoch_steps = 0;
-        for (size_t s = 0; s + BATCH <= nidx; s += BATCH) {
+        double epoch_loss_sum = 0.0; size_t epoch_rows = 0, epoch_steps = 0;
+        for (size_t s = 0; s < nidx; s += BATCH) {
+            size_t rows = nidx - s;
+            if (rows > BATCH) rows = BATCH;
             /* Fill batch buffers. */
             for (size_t i = 0; i < BATCH; i++) {
-                size_t ri = idx[s+i];
+                /* Replay the tail to fill the fixed graph batch, assigning
+                 * each copy 1/repeats of its row's weight. */
+                size_t copy = i % rows;
+                size_t repeats = BATCH / rows + (copy < BATCH % rows);
+                double row_weight = (double)BATCH /
+                                    ((double)rows * (double)repeats);
+                size_t ri = idx[s + copy];
                 memcpy(m.Xb + i*FEAT, tr.X + ri*FEAT, FEAT*sizeof(double));
-                for(size_t c=0;c<NCLASS;c++) m.Tb[i*NCLASS+c] = (tr.L[ri]==(int)c)?1.0:0.0;
+                for(size_t c=0;c<NCLASS;c++)
+                    m.Tb[i*NCLASS+c] = (tr.L[ri]==(int)c)?row_weight:0.0;
             }
             double loss = step_model(&m);
-            epoch_loss += loss;
+            epoch_loss_sum += loss * (double)rows;
+            epoch_rows += rows;
             epoch_steps++;
 
             /* LR schedule: warmup + cosine (step-based, not frac-based). */
-            int total_steps = (int)((size_t)EPOCHS * steps_per_epoch);
             int warmup_steps = (int)(WARMUP_FRAC * (double)total_steps);
+            if (g_step > (size_t)INT_MAX) die("global step exceeds scheduler range");
             double lr = lancius_lr_warmup_cosine((int)g_step, warmup_steps,
                                                  total_steps, LR, LR * LR_MIN_FRAC);
             apply_step(&m, lr);
@@ -915,53 +922,62 @@ int main(int argc, char** argv){
 
             if (epoch_steps % 100 == 0) {
                 printf("  epoch %d step %zu loss=%.6f lr=%.6g\n",
-                       ep+1, epoch_steps, loss/ (double)BATCH, lr);
+                       ep+1, epoch_steps, loss, lr);
             }
         }
-        epoch_loss /= (double)epoch_steps;
+        double epoch_loss = epoch_rows ? epoch_loss_sum / (double)epoch_rows : 0.0;
 
-        /* Evaluate on val and test. */
-        met mo, ms; eval_split(&mo, &ms, &m, va.X, va.L, va.S, va.n);
-        met to, ts; eval_split(&to, &ts, &m, te.X, te.L, te.S, te.n);
-
-        printf("epoch %2d/%d  train_loss=%.6f  "
-               "val exact=%.4f MAE=%.6f  test exact=%.4f MAE=%.6f\n",
+        /* Checkpoint selection uses validation only. The test split is read
+         * once after training, so it cannot steer epoch-by-epoch decisions. */
+        met mo, ms; eval_split(&mo, &ms, &m, va.X, va.L, va.S, va.n, 1.0);
+        printf("epoch %2d/%d train_loss=%.6f  "
+               "val overall exact=%.4f MAE=%.6g MSE=%.6g  "
+               "per-step exact=%.4f MAE=%.6g MSE=%.6g\n",
                ep+1, EPOCHS, epoch_loss,
-               mo.n?(double)mo.exact/(double)mo.n:0.0, mo.mae,
-               to.n?(double)to.exact/(double)to.n:0.0, to.mae);
+               mo.n?(double)mo.exact/(double)mo.n:0.0, mo.mae, mo.mse,
+               ms.n?(double)ms.exact/(double)ms.n:0.0, ms.mae, ms.mse);
 
-        /* Selection score: mean of val overall-exact and val per-step-exact,
-         * MAE tiebreak. */
-        double val_score = 0.0;
-        if (mo.n) val_score += (double)mo.exact/(double)mo.n;
-        if (ms.n) val_score += (double)ms.exact/(double)ms.n;
-        val_score /= 2.0;
-        double mae_penalty = mo.mae; /* lower is better */
-        double score = val_score - mae_penalty; /* combine: exact high, MAE low */
+        /* Minimize the worst of the four required validation measurements.
+         * Scale each metric by its 1e-3 target so no condition can hide behind
+         * a better score in another one. */
+        double score = 0.0;
+        int score_terms = 0;
+#define SCORE_METRIC(METRIC) do { \
+    if ((METRIC).n) { \
+        double q_ = (METRIC).mae / 1e-3; \
+        if (q_ > score) score = q_; \
+        q_ = (METRIC).mse / 1e-3; \
+        if (q_ > score) score = q_; \
+        score_terms++; \
+    } \
+} while (0)
+        SCORE_METRIC(mo);
+        SCORE_METRIC(ms);
+#undef SCORE_METRIC
+        if (!score_terms) die("validation split has no rows");
 
         char path_best[1024], path_last[1024];
         snprintf(path_best,sizeof path_best,"%s/best.bin",save_dir);
         snprintf(path_last,sizeof path_last,"%s/last.bin",save_dir);
 
         int improved = 0;
-        if (!has_ckpt || score > best_score + 1e-7 ||
-            (fabs(score - best_score) <= 1e-7 && mo.mae < ckpt_best - 1e-7)) {
+        if (score < best_score - 1e-7) {
             improved = 1;
             best_score = score;
         }
-        if (improved || ep == EPOCHS-1) {
+        if (improved) {
             if (save_state(path_best, &m, mu, sd, (long)g_step, best_score) != 0)
                 fprintf(stderr, "WARN: failed to save best.bin\n");
-            if (improved) printf("  -> new best (score=%.6f val_exact=%.4f val_MAE=%.6f)\n",
-                                 best_score,
-                                 mo.n?(double)mo.exact/(double)mo.n:0.0, mo.mae);
+            if (improved) printf("  -> new best (worst normalized val error=%.6g)\n",
+                                 best_score);
         }
         if (save_state(path_last, &m, mu, sd, (long)g_step, best_score) != 0)
             fprintf(stderr, "WARN: failed to save last.bin\n");
 
-        /* Fail-loud: if val MAE is not improving at all after hard negatives
-         * have had a chance, something is wrong. */
-        if (ep+1 >= HARD_NEG_START && mo.mae > 0.1 && ep+1 >= HARD_NEG_START+3) {
+        /* Warn if continuous validation MAE remains high after hard negatives
+         * have had time to affect the fit. */
+        if (HARD_NEG_FRAC > 0.0 && ep+1 >= HARD_NEG_START &&
+            mo.mae > 0.1 && ep+1 >= HARD_NEG_START+3) {
             fprintf(stderr, "WARN: val MAE still %.6f after hard-negative mining; "
                     "consider more data or a wider trunk\n", mo.mae);
         }
@@ -973,19 +989,61 @@ int main(int argc, char** argv){
         long st; double bs;
         if (load_state(path_best, &m, mu, sd, &st, &bs) == 0) {
             printf("loaded best.bin (step=%ld score=%.6f) for final eval\n", st, bs);
+        } else fprintf(stderr, "WARN: best.bin is incompatible or unreadable; evaluating current state\n");
+    }
+    /* Fit a single positive logit scale on validation only. This changes
+     * confidence, not the argmax class, and is folded into W3/b3 before export
+     * so the continuous readout measured here matches the deployed artifact. */
+    static const double calibration_scales[] = {
+        1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 512.0
+    };
+    double calibration_scale = 1.0;
+    double calibration_score = INFINITY;
+    met cmo, cms;
+    for(size_t i=0;i<sizeof calibration_scales/sizeof calibration_scales[0];i++) {
+        double scale = calibration_scales[i];
+        eval_split(&cmo, &cms, &m, va.X, va.L, va.S, va.n, scale);
+        double score = 0.0;
+#define CAL_SCORE(METRIC) do { \
+    if ((METRIC).n) { \
+        double q_ = (METRIC).mae; if (q_ > score) score = q_; \
+        q_ = (METRIC).mse; if (q_ > score) score = q_; \
+    } \
+} while (0)
+        CAL_SCORE(cmo);
+        CAL_SCORE(cms);
+#undef CAL_SCORE
+        if (score < calibration_score) {
+            calibration_score = score;
+            calibration_scale = scale;
         }
     }
-    met to, ts; eval_split(&to, &ts, &m, te.X, te.L, te.S, te.n);
+    for(size_t i=0;i<(size_t)H2*NCLASS;i++) m.W3[i] *= calibration_scale;
+    for(size_t i=0;i<NCLASS;i++) m.b3[i] *= calibration_scale;
+    eval_split(&cmo, &cms, &m, va.X, va.L, va.S, va.n, 1.0);
+    printf("VALIDATION calibration: logit_scale=%.6g overall MAE=%.9g MSE=%.9g "
+           "per-step MAE=%.9g MSE=%.9g\n",
+           calibration_scale, cmo.mae, cmo.mse, cms.mae, cms.mse);
+    met to, ts; eval_split(&to, &ts, &m, te.X, te.L, te.S, te.n, 1.0);
     printf("================================================================\n");
-    printf("FINAL test  exact=%.4f within1=%.4f macroF1=%.4f MAE=%.6f MSE=%.6f kappa=%.4f\n",
+    printf("FINAL test overall exact=%.4f within1=%.4f macroF1=%.4f "
+           "MAE=%.9g MSE=%.9g kappa=%.4f\n",
            to.n?(double)to.exact/(double)to.n:0.0,
            to.n?(double)to.within1/(double)to.n:0.0,
-           to.macro_f1, to.mae, to.mae*to.mae, to.kappa);
-    printf("FINAL per-step exact=%.4f MAE=%.6f\n",
-           ts.n?(double)ts.exact/(double)ts.n:0.0, ts.mae);
-    printf("Target MAE < 1e-3: %s   Target MSE < 1e-3: %s\n",
+           to.macro_f1, to.mae, to.mse, to.kappa);
+    printf("FINAL test per-step exact=%.4f within1=%.4f macroF1=%.4f "
+           "MAE=%.9g MSE=%.9g kappa=%.4f\n",
+           ts.n?(double)ts.exact/(double)ts.n:0.0,
+           ts.n?(double)ts.within1/(double)ts.n:0.0,
+           ts.macro_f1, ts.mae, ts.mse, ts.kappa);
+    int targets_pass = to.mae < 1e-3 && to.mse < 1e-3 &&
+                       ts.mae < 1e-3 && ts.mse < 1e-3;
+    printf("Targets overall MAE/MSE < 1e-3: %s/%s; "
+           "per-step MAE/MSE < 1e-3: %s/%s\n",
            to.mae < 1e-3 ? "PASS" : "FAIL",
-           to.mae*to.mae < 1e-3 ? "PASS" : "FAIL");
+           to.mse < 1e-3 ? "PASS" : "FAIL",
+           ts.mae < 1e-3 ? "PASS" : "FAIL",
+           ts.mse < 1e-3 ? "PASS" : "FAIL");
     printf("================================================================\n");
 
     if (export_path) {
@@ -1005,5 +1063,5 @@ int main(int argc, char** argv){
     free(idx);
     free(mu); free(sd);
     lancius_arena_destroy(ARENA);
-    return 0;
+    return strict_targets && !targets_pass ? 3 : 0;
 }

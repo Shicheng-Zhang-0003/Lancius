@@ -1,12 +1,13 @@
 """I6 paths — one place for repo resolution and import paths.
 
-I6 is the flagship verifier lineage (I1 -> I2 -> I3 -> I6), warm-started
-from the I3 ALU pool and trained to MAE/MSE < 1e-3 on the 150-algorithm
-corpus.
+I6 is the verifier research lineage (I1 -> I2 -> I3 -> I6). The current
+working-tree experiment trains from fresh initialization; I3 artifacts are
+comparison baselines only. Earlier MAE/MSE target claims were withdrawn.
 
-I6 shares the I3 pinned normalizer (gen1_mu_sd.txt) — the exact stats the
-I3 weights were fitted under. A refit from data_vec/v5 no longer reproduces
-those stats, so I6 MUST NOT refit from disk.
+I6 uses a sparse semantic schema at coordinates 50, 53, 55, 57, 59, 60,
+and 61. Its normalizer is fit on train algorithms and stored with its corpus.
+I1-I3 retain the full legacy mean_rel feature schema and their original
+normalizer.
 """
 import os, sys
 
@@ -27,11 +28,11 @@ I6 = os.path.join(GEN1, "I6")
 I3 = os.path.join(GEN1, "I3")
 I2 = os.path.join(GEN1, "I2")
 I1 = os.path.join(GEN1, "I1")
-CORPUS = os.path.join(I6, "corpus")
-MODELS = os.path.join(I6, "models")
-RESULTS = os.path.join(I6, "results_big")
-ALU_POOL = os.path.join(I3, "alu_pool")   # I3 ALU models: warm-start substrate
-MU_SD = os.path.join(I3, "gen1_mu_sd.txt") # pinned normalizer (shared with I3)
+CORPUS = os.path.join(I6, "corpus_verified")
+MODELS = os.path.join(I6, "models_verified")
+RESULTS = os.path.join(I6, "results_verified")
+ALU_POOL = os.path.join(I3, "alu_pool")   # I3 ALU models: comparison baselines
+MU_SD = os.path.join(CORPUS, "mu_sd.txt")  # I6 stats fit on train algorithms
 TOOLS_PRM = os.path.join(REPO, "tools", "prm")
 
 def find_lancius():
@@ -57,7 +58,7 @@ def alu_pool(n=12):
     return [os.path.join(ALU_POOL, "alu_%02d.lancius" % i) for i in range(n)]
 
 def read_musd(path=MU_SD):
-    """The pinned normalizer: MU/SD lines exactly as the trainers write them."""
+    """Read train-only I6 stats (or an explicitly supplied legacy file)."""
     mu, sd = [], []
     with open(path) as f:
         for line in f:

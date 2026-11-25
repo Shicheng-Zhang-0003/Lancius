@@ -134,11 +134,18 @@ def emit(algo, params, steps, rng, level, kind, acc, rep=None, struct=None):
     X, T, S, L, A = acc
     ai = ALL.index(algo)
     li = int(round((level + 1) * 2))
-    X.append(V.row_features(algo, chk, -1)); T.append(li)
+    overall = V.row_features_i6(algo, chk, -1)
+    if V.i6_label_from_features(overall) != li:
+        raise ValueError("overall target is not recoverable from I6 features")
+    X.append(overall); T.append(li)
     S.append(0); L.append(li); A.append(ai)
     for i in range(len(steps)):
-        X.append(V.row_features(algo, chk, i)); T.append(-1)
-        S.append(i + 1); L.append(V.step_label(level, kind, chk, i)); A.append(ai)
+        row = V.row_features_i6(algo, chk, i)
+        label = V.step_label(level, kind, chk, i)
+        if V.i6_label_from_features(row) != label:
+            raise ValueError("step target is not recoverable from I6 features")
+        X.append(row); T.append(-1)
+        S.append(i + 1); L.append(label); A.append(ai)
 
 def load_alu_models(alu_dir, max_alus=12):
     """Load I3 ALU .lancius models via bench_gen1 for hard-negative scoring."""
@@ -308,9 +315,47 @@ def generate(n_per_level, seed, out_dir, hard_neg=False, alu_pool=None,
                 per_regime[regime] += 1
                 per_algo[algo.name][0] += 1
 
-    idx = list(range(len(X)))
-    rng.shuffle(idx)
-    cut = int(0.8 * len(idx))
+    # Hold out whole algorithms so no algorithm contributes rows to both the
+    # training and evaluation splits. I6 is intended to generalize across the
+    # 150 algorithms, not memorize their repeated feature rows.
+    split_rng = random.Random(seed ^ 0x16A11D)
+    algo_ids = {fam: [i for i, a in enumerate(ALL) if a.family == fam]
+                for fam in sorted({a.family for a in ALL})}
+    algo_split = {}
+    for fam, ids in algo_ids.items():
+        split_rng.shuffle(ids)
+        ntest = max(1, int(round(len(ids) * 0.15)))
+        nval = max(1, int(round(len(ids) * 0.15)))
+        if ntest + nval >= len(ids):
+            ntest, nval = 1, 1
+        for ai in ids[:ntest]:
+            algo_split[ai] = "test"
+        for ai in ids[ntest:ntest + nval]:
+            algo_split[ai] = "val"
+        for ai in ids[ntest + nval:]:
+            algo_split[ai] = "train"
+
+    split_rows = {name: [] for name in ("train", "val", "test")}
+    for row, ai in enumerate(A):
+        split_rows[algo_split[ai]].append(row)
+    for rows in split_rows.values():
+        split_rng.shuffle(rows)
+
+    # The normalizer is fit only on train algorithms and travels with I6.
+    # I6 has a sparse semantic feature mask; its normalizer is independent of
+    # I1-I3's full legacy mean_rel schema.
+    train_rows = split_rows["train"]
+    mu = [0.0] * V.FEAT_DIM
+    sumsq = [0.0] * V.FEAT_DIM
+    for i in train_rows:
+        row = X[i]
+        for k, value in enumerate(row):
+            mu[k] += value
+            sumsq[k] += value * value
+    for k in range(V.FEAT_DIM):
+        mu[k] /= len(train_rows)
+        variance = max(0.0, sumsq[k] / len(train_rows) - mu[k] * mu[k])
+        sumsq[k] = variance ** 0.5 if variance > 1e-24 else 1.0
 
     def dump(name, ids):
         os.makedirs(out_dir, exist_ok=True)
@@ -322,11 +367,17 @@ def generate(n_per_level, seed, out_dir, hard_neg=False, alu_pool=None,
                 for i in ids:
                     f.write(_bin.pack("<i", arr[i]))
 
-    dump("train", idx[:cut])
-    dump("test", idx[cut:])
+    for name, rows in split_rows.items():
+        dump(name, rows)
     with open(os.path.join(out_dir, "corpus.hdr"), "w") as f:
-        f.write("FEAT %d\nNCLASS %d\nNTRAIN %d\nNTEST %d\n" %
-                (V.FEAT_DIM, V.NLEV, cut, len(X) - cut))
+        f.write("FEAT %d\nNCLASS %d\nNTRAIN %d\nNVAL %d\nNTEST %d\n" %
+                (V.FEAT_DIM, V.NLEV, len(split_rows["train"]),
+                 len(split_rows["val"]), len(split_rows["test"])))
+    with open(os.path.join(out_dir, "mu_sd.txt"), "w") as f:
+        for value in mu:
+            f.write("MU %.17g\n" % value)
+        for value in sumsq:
+            f.write("SD %.17g\n" % value)
     with open(os.path.join(out_dir, "algos.txt"), "w") as f:
         for a in ALL:
             f.write(a.name + "\n")
@@ -340,7 +391,14 @@ def generate(n_per_level, seed, out_dir, hard_neg=False, alu_pool=None,
         "families": fam_names,
         "feat_dim": V.FEAT_DIM, "n_levels": V.NLEV, "max_steps": V.MAX_STEPS,
         "levels": V.LEVELS, "n_rows": len(X),
-        "n_train": cut, "n_test": len(X) - cut,
+        "n_train": len(split_rows["train"]),
+        "n_val": len(split_rows["val"]),
+        "n_test": len(split_rows["test"]),
+        "algorithms_by_split": {
+            split: sorted(ALL[i].name for i, value in algo_split.items()
+                          if value == split)
+            for split in ("train", "val", "test")
+        },
         "rows_per_level": {str(k): v for k, v in per_level.items()},
         "rows_per_regime": per_regime,
         "n_edge_derivations": n_edge,
@@ -349,14 +407,24 @@ def generate(n_per_level, seed, out_dir, hard_neg=False, alu_pool=None,
         "regimes": REGIMES,
         "i3_new_algorithms": [a.name for a in EXT3_ALGOS],
         "hard_negative": hard_neg,
-        "note": "I6 corpus: 150 algos, expanded rows, hard-negative mining "
-                "against I3 ALU pool, deeper LONG derivations, rebalanced "
-                "regimes. Target MAE/MSE < 1e-3.",
+        "normalizer": "mu_sd.txt, fit on train algorithms only",
+        "i6_feature_schema": {
+            "50": "struct_ok", "53": "final_exact",
+            "55": "undecidable", "57": "any_wrong",
+            "59": "overall_row", "60": "final_step_row",
+            "61": "local_exact",
+            "all_other_coordinates": 0,
+        },
+        "split": "algorithm-held-out train/validation/test, stratified by family",
+        "note": "I6 corpus: 150 algorithms, expanded rows, deeper LONG "
+                "derivations, rebalanced regimes. Hard-negative mining is "
+                "optional. MAE and MSE are measured independently per row.",
     }
     with open(os.path.join(out_dir, "meta.json"), "w") as f:
         json.dump(meta, f, indent=2)
-    print("rows=%d train=%d test=%d edge_derivs=%d skipped_invalid=%d" %
-          (len(X), cut, len(X) - cut, n_edge, n_skipped))
+    print("rows=%d train=%d val=%d test=%d edge_derivs=%d skipped_invalid=%d" %
+          (len(X), len(split_rows["train"]), len(split_rows["val"]),
+           len(split_rows["test"]), n_edge, n_skipped))
     print("per_level=%s" % per_level)
     print("per_regime=%s" % per_regime)
     print("families=%s" % fam_names)
@@ -376,7 +444,7 @@ if __name__ == "__main__":
     ap.add_argument("--neg-per-alu", type=int, default=200,
                     help="hard-negative cells to mine per algorithm")
     args = ap.parse_args()
-    out = args.out_dir or os.path.join(HERE, "corpus")
+    out = args.out_dir or os.path.join(HERE, "corpus_verified")
     alu = args.alu_pool or os.path.join(I3DIR, "alu_pool")
     generate(args.n_per_level, args.seed, out,
              hard_neg=args.hard_neg, alu_pool=alu,

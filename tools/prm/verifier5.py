@@ -246,11 +246,10 @@ def check(algo, params, steps, rep, struct):
     undecidable = 1 if n_missing > 0 else 0
     max_rel = max([p["rel"] for p in present], default=1.0)
     mean_rel = (sum(p["rel"] for p in present) / len(present)) if present else 1.0
-    # A scale-free count of wrong steps.  mean_rel was the global summary in
-    # this slot, but it shrinks as 1/n_steps, so a single wrong step in a
-    # 12-step chain looked almost like a clean chain after normalization and
-    # the +0.5/+1 boundary landed between n=11 and n=12.  The count keeps the
-    # same "one step is off" signal at every chain length.
+    # Keep the integer count of wrong present steps alongside mean_rel.
+    # Unlike the average error magnitude, this does not dilute a single wrong
+    # step by 1/n_steps.  It is a count (so its range still depends on chain
+    # length), not a scale-free statistic.
     n_wrong = sum(1 for p in present if p["exact"] == 0)
 
     return {
@@ -276,7 +275,7 @@ def _log1p(x):
 FEAT_DIM = 4 * MAX_STEPS + 17
 
 
-def row_features(algo, chk, step_idx):
+def _row_features(algo, chk, step_idx, error_summary):
     """step_idx = -1 for the overall row, else the canonical step index."""
     f = [0.0] * FEAT_DIM
     o = 0
@@ -304,7 +303,7 @@ def row_features(algo, chk, step_idx):
         chk["final_rel"],
         float(chk["undecidable"]),
         chk["max_rel"],
-        float(chk["n_wrong"]),   # scale-free count; was mean_rel
+        error_summary,
         float(FAM_ID.get(algo.family, 0)),
         1.0 if step_idx < 0 else 0.0,
         float(step_idx),
@@ -312,6 +311,66 @@ def row_features(algo, chk, step_idx):
     ]
     f[o:o + len(g)] = g
     return f
+
+
+def row_features(algo, chk, step_idx):
+    """Legacy 65-feature schema used by the I1-I3 verifier checkpoints.
+
+    Keep this contract stable: coordinate 57 is mean relative error in those
+    models, and their first-layer weights and pinned normalizer were fitted to
+    that meaning.
+    """
+    return _row_features(algo, chk, step_idx, chk["mean_rel"])
+
+
+def row_features_i6(algo, chk, step_idx):
+    """Sparse I6 schema with only the semantic predicates used by its labels.
+
+    Coordinates 50, 53, 55, 57, 59, 60, and 61 hold structural validity,
+    final-step validity, undecidability, presence of any wrong step, overall
+    row, final-step row, and local-step validity. Every other coordinate is
+    zero. I1-I3 keep the full legacy feature schema from row_features().
+    """
+    full = _row_features(algo, chk, step_idx,
+                         float(chk["n_wrong"] > 0))
+    f = [0.0] * FEAT_DIM
+    for i in (50, 53, 55, 57, 59, 61):
+        f[i] = full[i]
+    f[57] = float(chk["n_wrong"] > 0)
+    f[60] = float(step_idx >= 0 and step_idx == len(chk["per_step"]) - 1)
+    return f
+
+
+def i6_label_from_features(row):
+    """Return the exact I6 class implied by the generated feature contract.
+
+    This is an audit oracle for synthetic I6 labels, not a replacement for a
+    learned model. The corpus generator must keep these feature predicates
+    sufficient for every emitted overall and per-step target.
+    """
+    if len(row) != FEAT_DIM:
+        raise ValueError("I6 feature row must have %d values" % FEAT_DIM)
+    struct_ok = float(row[50]) >= 0.5
+    final_exact = float(row[53]) >= 0.5
+    undecidable = float(row[55]) >= 0.5
+    n_wrong = float(row[57]) > 0.5
+    overall = float(row[59]) >= 0.5
+    if undecidable:
+        return 2
+    if not struct_ok:
+        return 0
+    if overall:
+        if not final_exact:
+            return 1
+        return 3 if n_wrong else 4
+
+    local_exact = float(row[61]) >= 0.5
+    is_final_step = float(row[60]) >= 0.5
+    if not final_exact:
+        return 1 if is_final_step and not local_exact else 4
+    if n_wrong and not local_exact:
+        return 3
+    return 4
 
 
 def step_label(level, kind, chk, step_idx):

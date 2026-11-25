@@ -12,7 +12,7 @@ Usage:
     python3 generation_1/I6/orchestrate_i6.py [--cores N] [--epochs N] [--lr L]
                                                [--parallel] [--skip-eval]
 
-Defaults match the planned configuration: 2 cores each, 20 epochs, lr 0.0008.
+Defaults: 2 cores each, 80 epochs, lr 0.003, compact 128x64 trunk.
 """
 
 import os
@@ -28,15 +28,14 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 
 FAMILIES = ["algebra", "calculus", "linear_algebra", "number_theory"]
 
-ARCH = "4096 2560 20 256"  # H1 H2 EPOCHS BATCH
+ARCH = "128 64 80 256"  # H1 H2 EPOCHS BATCH
 SEED = 20261026
-LR = 0.0008
-INIT_FROM = os.path.join(REPO, "generation_1", "I3", "alu_pool", "alu_01.lancius")
-MUSD = os.path.join(REPO, "generation_1", "I3", "gen1_mu_sd.txt")
+LR = 0.003
+MUSD = os.path.join(HERE, "corpus_verified", "mu_sd.txt")
 
-MODELS_DIR = os.path.join(HERE, "models_clean")
-RESULTS_DIR = os.path.join(HERE, "results_big")
-CORPUS_DIR = os.path.join(HERE, "corpus_clean")
+MODELS_DIR = os.path.join(HERE, "models_verified")
+RESULTS_DIR = os.path.join(HERE, "results_verified")
+CORPUS_DIR = os.path.join(HERE, "corpus_verified")
 
 
 def find_process(name):
@@ -72,14 +71,15 @@ def train_family(family, cores):
         *ARCH.split(),
         "--seed", str(SEED),
         "--lr", str(LR),
-        "--init-from", INIT_FROM,
         "--mu-sd", MUSD,
-        "--overall-repeat", "4",
+        "--overall-repeat", "2",
         "--pos-repeat", "1",
-        "--hard-negative-frac", "0.50",
+        "--hard-negative-frac", "0",
         "--hard-negative-start", "2",
+        "--lancius-rows", "128",
         "--export-lancius", model_out,
         "--verify-lancius",
+        "--strict-targets",
         "--save-dir", save_dir,
     ]
 
@@ -97,6 +97,7 @@ def train_family(family, cores):
 def wait_for_all(procs, poll_interval=30):
     """Wait for all training processes to finish."""
     procs = list(procs)  # copy
+    failures = []
     while procs:
         done = []
         for p, log_f in procs:
@@ -108,10 +109,13 @@ def wait_for_all(procs, poll_interval=30):
             log_f.close()
             status = "SUCCESS" if ret == 0 else f"FAILED (exit {ret})"
             print(f"[orchestrator] {p.pid} {status}", flush=True)
+            if ret != 0:
+                failures.append(p.pid)
         if procs:
             print(f"[orchestrator] {len(procs)} trainer(s) still running... "
                   f"next check in {poll_interval}s", flush=True)
             time.sleep(poll_interval)
+    return failures
 
 
 def run_evaluation(models_dir, alu_pool, musd, per_algo=1000):
@@ -129,7 +133,9 @@ def run_evaluation(models_dir, alu_pool, musd, per_algo=1000):
         outdir,
         "--alu-pool", alu_pool,
         "--musd", musd,
+        "--i3-musd", os.path.join(REPO, "generation_1", "I3", "gen1_mu_sd.txt"),
         "--experts", MODELS_DIR,
+        "--strict-targets",
     ]
 
     print(f"[orchestrator] Running multi-expert evaluation...")
@@ -153,8 +159,8 @@ def run_evaluation(models_dir, alu_pool, musd, per_algo=1000):
 def main():
     parser = argparse.ArgumentParser(description="Orchestrate I6 multi-expert training + evaluation")
     parser.add_argument("--cores", type=int, default=2, help="OpenMP threads per trainer")
-    parser.add_argument("--epochs", type=int, default=20, help="Epochs per trainer")
-    parser.add_argument("--lr", type=float, default=0.0008, help="Learning rate")
+    parser.add_argument("--epochs", type=int, default=80, help="Epochs per trainer")
+    parser.add_argument("--lr", type=float, default=0.003, help="Learning rate")
     parser.add_argument("--per-algo", type=int, default=1000, help="Runs per algo in eval")
     parser.add_argument("--parallel", action="store_true",
                         help="run all four trainers at once (default: sequential)")
@@ -163,8 +169,7 @@ def main():
     args = parser.parse_args()
 
     global ARCH, SEED, LR
-    ARCH = f"4096 2560 {args.epochs} 256"
-    SEED = SEED
+    ARCH = f"128 64 {args.epochs} 256"
     LR = args.lr
 
     print("=" * 60)
@@ -201,12 +206,13 @@ def main():
             p, log_f = train_family(fam, args.cores)
             procs.append((p, log_f))
             print(f"[orchestrator] {fam} trainer PID {p.pid} started", flush=True)
-        wait_for_all(procs, poll_interval=30)
+        failed_pids = wait_for_all(procs, poll_interval=30)
     else:
+        failed_pids = []
         for fam in FAMILIES:
             p, log_f = train_family(fam, args.cores)
             print(f"[orchestrator] {fam} trainer PID {p.pid} started", flush=True)
-            wait_for_all([(p, log_f)], poll_interval=30)
+            failed_pids.extend(wait_for_all([(p, log_f)], poll_interval=30))
 
     # Check for failures
     failed = []
@@ -218,8 +224,9 @@ def main():
             if "FATAL" in content or "Traceback" in content:
                 failed.append(fam)
 
-    if failed:
-        print(f"[ERROR] Training failed for: {', '.join(failed)}")
+    if failed or failed_pids:
+        print(f"[ERROR] Training or required targets failed for: "
+              f"{', '.join(failed)} (failed PIDs: {failed_pids})")
         return 1
 
     if args.skip_eval:
